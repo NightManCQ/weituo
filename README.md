@@ -5,6 +5,7 @@
 - 后端：[rust_houduan](./rust_houduan/)
 - 前端：[vue_qianduan](./vue_qianduan/)
 - 架构设计：[系统架构设计.md](./系统架构设计.md)
+- Linux 后端构建与部署：[rust_houduan/部署Linux服务.md](./rust_houduan/部署Linux服务.md)
 - Debian 服务模板：[部署/debian](./部署/debian/)
 
 ## 功能范围
