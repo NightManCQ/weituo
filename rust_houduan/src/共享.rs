@@ -131,6 +131,8 @@ pub(crate) struct 任务内容请求 {
     pub(crate) 截止时间: Option<DateTime<Utc>>,
     #[serde(rename = "location")]
     pub(crate) 位置: Option<任务位置>,
+    #[serde(rename = "reward_points", default)]
+    pub(crate) 报酬积分: Option<i64>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -167,6 +169,7 @@ pub(crate) struct 任务视图 {
     pub(crate) 创建时间: DateTime<Utc>,
     pub(crate) 版本号: i32,
     pub(crate) 位置: Option<任务位置>,
+    pub(crate) 报酬积分: Option<i64>,
 }
 
 #[derive(Deserialize)]
@@ -317,6 +320,7 @@ mod 响应字段测试 {
             创建时间: 时间,
             版本号: 1,
             位置: None,
+            报酬积分: Some(100),
         })
         .expect("任务响应应可序列化");
         校验字段(
@@ -332,6 +336,7 @@ mod 响应字段测试 {
                 "创建时间",
                 "版本号",
                 "位置",
+                "报酬积分",
             ],
         );
 

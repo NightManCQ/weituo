@@ -46,6 +46,9 @@ const emit = defineEmits<{
             <div class="task-meta">
               <span>发布者 {{ 任务项.发布者编号.slice(0, 8) }}</span>
               <span v-if="任务项.截止时间">截止 {{ 格式化日期(任务项.截止时间) }}</span>
+              <span class="task-reward">
+                {{ 任务项.报酬积分 !== null ? `${任务项.报酬积分} 积分报酬` : '历史委托无积分报酬' }}
+              </span>
             </div>
           </RouterLink>
           <div class="task-card-footer">

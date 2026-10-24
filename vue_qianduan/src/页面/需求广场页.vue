@@ -21,7 +21,7 @@ const emit = defineEmits<{
   登录: []
 }>()
 
-const 状态选项 = ['待接单', '已接单', '进行中', '已完成', '已取消', '已过期']
+const 状态选项 = ['待接单', '已接单', '进行中', '待验收', '已完成', '已取消', '已过期']
 </script>
 
 <template>
@@ -56,6 +56,9 @@ const 状态选项 = ['待接单', '已接单', '进行中', '已完成', '已�
           <div class="task-meta">
             <span>发布者 {{ 当前用户 && 任务项.发布者编号 === 当前用户.用户编号 ? '我' : 任务项.发布者编号.slice(0, 8) }}</span>
             <span v-if="任务项.截止时间">截止 {{ 格式化日期(任务项.截止时间) }}</span>
+            <span class="task-reward">
+              {{ 任务项.报酬积分 !== null ? `${任务项.报酬积分} 积分报酬` : '历史委托无积分报酬' }}
+            </span>
           </div>
         </RouterLink>
         <div class="task-card-footer">

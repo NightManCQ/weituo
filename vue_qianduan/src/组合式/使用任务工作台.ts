@@ -2,16 +2,18 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import mqtt, { type MqttClient } from 'mqtt'
 import { 请求异常, 发送请求 } from '../接口/请求'
 import { 生成唯一编号 } from '../领域/编号'
-import type { 认证结果, 聊天会话, 消息, 实时消息事件, 任务, 任务操作, 任务位置, 用户 } from '../领域/类型'
+import type { 认证结果, 聊天会话, 积分账户, 积分流水, 消息, 实时消息事件, 任务, 任务操作, 任务位置, 用户 } from '../领域/类型'
 
 type 认证表单 = { login_name: string; password: string; nickname: string }
 type 任务表单 = {
   title: string
   description: string
   deadline: string
+  reward_points: number
   位置: 任务位置 | null
 }
 type 任务操作项 = { key: 任务操作; label: string }
+type 发布反馈 = { 状态: 'idle' | 'submitting' | 'success' | 'error'; 消息: string }
 type 实时凭据 = { 消息地址: string; 消息令牌: string; 主题列表: string[] }
 type 待确认聊天消息 = { 任务编号: string; 客户端消息编号: string; 正文: string }
 
@@ -144,8 +146,12 @@ export function 使用任务工作台() {
     title: '',
     description: '',
     deadline: '',
+    reward_points: 0,
     位置: null,
   })
+  const 我的积分账户 = ref<积分账户 | null>(null)
+  const 我的积分流水 = ref<积分流水[]>([])
+  const 发布反馈状态 = ref<发布反馈>({ 状态: 'idle', 消息: '' })
   const 消息表单数据 = ref('')
   const 待确认消息 = ref<待确认聊天消息 | null>(null)
   const 正在发送聊天消息 = ref(false)
@@ -210,6 +216,24 @@ export function 使用任务工作台() {
       我的任务列表.value = await 请求<任务[]>('/my/tasks')
     } catch (原因) {
       错误信息.value = 原因 instanceof Error ? 原因.message : '我的委托加载失败'
+    }
+  }
+
+  async function 加载积分账户() {
+    if (!当前用户.value) {
+      我的积分账户.value = null
+      我的积分流水.value = []
+      return
+    }
+    try {
+      const [账户, 流水] = await Promise.all([
+        请求<积分账户>('/my/points'),
+        请求<积分流水[]>('/my/points/ledger?limit=30'),
+      ])
+      我的积分账户.value = 账户
+      我的积分流水.value = 流水
+    } catch (原因) {
+      错误信息.value = 原因 instanceof Error ? 原因.message : '积分账户加载失败'
     }
   }
 
@@ -381,6 +405,7 @@ export function 使用任务工作台() {
       localStorage.setItem(用户资料存储键, JSON.stringify(当前用户.value))
       await 加载任务()
       await 加载我的任务()
+      await 加载积分账户()
       await 加载聊天会话()
       await 连接实时服务()
     } catch (原因) {
@@ -398,6 +423,8 @@ export function 使用任务工作台() {
     令牌.value = ''
     当前用户.value = null
     我的任务列表.value = []
+    我的积分账户.value = null
+    我的积分流水.value = []
     聊天会话列表.value = []
     当前任务.value = null
     消息列表.value = []
@@ -409,6 +436,7 @@ export function 使用任务工作台() {
 
   async function 发布任务() {
     清除提示()
+    发布反馈状态.value = { 状态: 'submitting', 消息: '正在提交委托…' }
     正在处理.value = true
     try {
       const 幂等键 = 发布任务幂等键.value || 生成唯一编号()
@@ -419,6 +447,7 @@ export function 使用任务工作台() {
         body: JSON.stringify({
           title: 任务表单数据.value.title,
           description: 任务表单数据.value.description,
+          reward_points: 任务表单数据.value.reward_points,
           deadline: 任务表单数据.value.deadline
             ? new Date(任务表单数据.value.deadline).toISOString()
             : null,
@@ -438,14 +467,24 @@ export function 使用任务工作台() {
         }),
       })
       发布任务幂等键.value = null
-      任务表单数据.value = { title: '', description: '', deadline: '', 位置: null }
+      任务表单数据.value = {
+        title: '',
+        description: '',
+        deadline: '',
+        reward_points: 0,
+        位置: null,
+      }
+      发布反馈状态.value = { 状态: 'success', 消息: '委托发布成功，报酬积分已托管。' }
       提示信息.value = '委托已发布'
       await 加载任务()
       await 加载我的任务()
+      await 加载积分账户()
       await 加载聊天会话()
       await 连接实时服务()
     } catch (原因) {
-      错误信息.value = 原因 instanceof Error ? 原因.message : '发布失败'
+      const 错误 = 原因 instanceof Error ? 原因.message : '发布失败，请稍后重试'
+      发布反馈状态.value = { 状态: 'error', 消息: `委托发布失败：${错误}` }
+      错误信息.value = 错误
     } finally {
       正在处理.value = false
     }
@@ -453,6 +492,10 @@ export function 使用任务工作台() {
 
   async function 执行任务操作(任务项: 任务, 操作: 任务操作) {
     清除提示()
+    if (
+      操作 === 'accept-completion' &&
+      !window.confirm(`确认验收“${任务项.标题}”并向接单方发放 ${任务项.报酬积分 ?? 0} 积分？`)
+    ) return
     const 操作标识 = `${任务项.任务编号}/${操作}`
     const 幂等键 = 任务操作幂等键.get(操作标识) || 生成唯一编号()
     任务操作幂等键.set(操作标识, 幂等键)
@@ -463,9 +506,14 @@ export function 使用任务工作台() {
       })
       任务操作幂等键.delete(操作标识)
       当前任务.value = 已更新任务
-      提示信息.value = '委托状态已更新'
+      提示信息.value = 操作 === 'accept-completion'
+        ? '验收完成，积分已发放'
+        : 操作 === 'complete'
+          ? '已提交完成，等待委托方验收'
+          : '委托状态已更新'
       await 加载任务()
       await 加载我的任务()
+      await 加载积分账户()
       await 加载聊天会话()
       await 连接实时服务()
     } catch (原因) {
@@ -580,12 +628,18 @@ export function 使用任务工作台() {
     if (!当前用户.value) return []
     const 是发布者 = 任务项.发布者编号 === 当前用户.value.用户编号
     const 是接单者 = 任务项.接单者编号 === 当前用户.value.用户编号
-    if (任务项.任务状态 === '待接单') return 是发布者 ? [] : [{ key: 'claim', label: '接单' }]
+    if (任务项.任务状态 === '待接单') {
+      if (是发布者 || 任务项.报酬积分 === null) return []
+      return [{ key: 'claim', label: '接单' }]
+    }
     if (任务项.任务状态 === '已接单') {
       if (是接单者) return [{ key: 'start', label: '开始' }, { key: 'release', label: '释放' }]
       if (是发布者) return [{ key: 'cancel', label: '取消' }]
     }
     if (任务项.任务状态 === '进行中' && 是接单者) return [{ key: 'complete', label: '完成' }]
+    if (任务项.任务状态 === '待验收' && 是发布者) {
+      return [{ key: 'accept-completion', label: '验收并发放积分' }]
+    }
     return []
   }
 
@@ -601,6 +655,7 @@ export function 使用任务工作台() {
     await 加载任务()
     if (令牌.value && 当前用户.value) {
       await 加载我的任务()
+      await 加载积分账户()
       await 加载聊天会话()
       await 连接实时服务()
     }
@@ -616,6 +671,8 @@ export function 使用任务工作台() {
     当前用户,
     任务列表,
     我的任务列表,
+    我的积分账户,
+    我的积分流水,
     聊天会话列表,
     当前任务,
     当前委托详情,
@@ -629,6 +686,7 @@ export function 使用任务工作台() {
     是否注册,
     认证表单数据,
     任务表单数据,
+    发布反馈状态,
     消息表单数据,
     状态筛选,
     可见任务,
@@ -642,6 +700,7 @@ export function 使用任务工作台() {
     退出登录,
     加载任务,
     加载我的任务,
+    加载积分账户,
     加载委托详情,
     清除委托详情,
     加载聊天会话,

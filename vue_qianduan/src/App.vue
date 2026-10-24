@@ -25,6 +25,9 @@ const {
   是否注册,
   认证表单数据,
   任务表单数据,
+  发布反馈状态,
+  我的积分账户,
+  我的积分流水,
   消息表单数据,
   状态筛选,
   可以聊天,
@@ -36,6 +39,7 @@ const {
   退出登录,
   加载任务,
   加载我的任务,
+  加载积分账户,
   加载委托详情,
   清除委托详情,
   加载聊天会话,
@@ -100,6 +104,8 @@ const 页面属性 = computed<Record<string, unknown>>(() => {
       return {
         当前用户: 当前用户.value,
         任务表单数据: 任务表单数据.value,
+        积分账户: 我的积分账户.value,
+        发布反馈: 发布反馈状态.value,
         正在处理: 正在处理.value,
         on发布: 发布任务,
         on选择地址: () => router.push({ name: 'location' }),
@@ -160,11 +166,14 @@ const 页面属性 = computed<Record<string, unknown>>(() => {
     case 'profile':
       return {
         当前用户: 当前用户.value,
+        积分账户: 我的积分账户.value,
+        积分流水: 我的积分流水.value,
         正在处理: 正在处理.value,
         是否注册: 是否注册.value,
         认证表单数据: 认证表单数据.value,
         on登录: 提交认证,
         on退出登录: 退出登录,
+        on刷新积分: 加载积分账户,
         'on更新:是否注册': (值: boolean) => {
           是否注册.value = 值
         },
@@ -177,6 +186,7 @@ const 页面属性 = computed<Record<string, unknown>>(() => {
 watch(() => route.name, (路由名) => {
   if (路由名 === 'tasks' && 当前用户.value) void 加载我的任务()
   if (路由名 === 'messages' && 当前用户.value) void 加载聊天会话()
+  if (路由名 === 'publish' && 当前用户.value) void 加载积分账户()
 })
 
 watch(

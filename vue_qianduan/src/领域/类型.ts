@@ -27,6 +27,26 @@ export type 任务 = {
   创建时间: string
   版本号: number
   位置: 任务位置 | null
+  报酬积分: number | null
+}
+
+export type 积分账户 = {
+  可用积分: number
+  冻结积分: number
+  总积分: number
+}
+
+export type 积分流水 = {
+  流水编号: string
+  交易编号: string
+  交易类型: string
+  委托编号: string | null
+  说明: string
+  可用变动: number
+  冻结变动: number
+  可用余额: number
+  冻结余额: number
+  创建时间: string
 }
 
 export type 消息 = {
@@ -56,7 +76,7 @@ export type 认证结果 = {
   用户: 用户
 }
 
-export type 任务操作 = 'claim' | 'start' | 'complete' | 'cancel' | 'release'
+export type 任务操作 = 'claim' | 'start' | 'complete' | 'accept-completion' | 'cancel' | 'release'
 
 export type 实时消息事件 = {
   事件类型?: string

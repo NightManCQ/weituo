@@ -2,6 +2,8 @@
 mod 任务;
 #[path = "接口/实时.rs"]
 mod 实时;
+#[path = "接口/积分.rs"]
+pub(crate) mod 积分;
 #[path = "接口/管理.rs"]
 mod 管理;
 #[path = "接口/聊天.rs"]
@@ -47,8 +49,18 @@ pub(crate) async fn 启动(状态: 应用状态, 配置: 运行配置) -> Result
         .route("/api/v1/tasks/{id}/claim", post(任务::接取任务))
         .route("/api/v1/tasks/{id}/start", post(任务::开始任务))
         .route("/api/v1/tasks/{id}/complete", post(任务::完成任务))
+        .route(
+            "/api/v1/tasks/{id}/accept-completion",
+            post(任务::验收完成任务),
+        )
         .route("/api/v1/tasks/{id}/cancel", post(任务::取消任务))
         .route("/api/v1/tasks/{id}/release", post(任务::释放任务))
+        .route("/api/v1/my/points", get(积分::查询我的积分账户))
+        .route("/api/v1/my/points/ledger", get(积分::查询我的积分流水))
+        .route(
+            "/api/v1/admin/users/{id}/points",
+            post(积分::管理员发放积分),
+        )
         .route("/api/v1/tasks/{id}/messages", get(聊天::查询聊天消息))
         .route("/api/v1/realtime/credentials", post(实时::获取实时凭据))
         .route("/api/v1/admin/users/{id}/disable", post(管理::禁用用户))

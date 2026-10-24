@@ -97,6 +97,7 @@ async fn 处理过期任务(数据库: &PgPool) -> Result<()> {
         for 记录 in &记录集 {
             let 任务编号: Uuid = 记录.get("任务编号");
             let 发布者编号: Uuid = 记录.get("发布者编号");
+            crate::接口::积分::退款委托报酬(&mut 事务, 任务编号, None, None).await?;
             let 事件编号 = Uuid::new_v4();
             let 更新结果 = sqlx::query(
                 r#"UPDATE "任务"

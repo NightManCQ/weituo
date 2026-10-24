@@ -215,3 +215,37 @@ input::placeholder,textarea::placeholder{color:#a8b1ae}
   .map-address-status{grid-column:1}
   .publish-location{margin-top:15px}
 }
+.status-待验收{background:#fff4d9;color:#936319}
+.task-reward{color:#178064;font-weight:700}
+.commission-reward-panel{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;padding:16px 0;border-bottom:1px solid var(--line)}
+.commission-reward-panel>span{color:var(--muted);font-size:12px}
+.commission-reward-panel>strong{color:#178064;font-size:18px}
+.commission-reward-panel>small{flex-basis:100%;color:var(--muted);font-size:11px}
+.points-card{margin:22px 0;padding:18px;border:1px solid var(--line);border-radius:12px;background:#f9fbfa}
+.points-card-heading{display:flex;align-items:center;justify-content:space-between}
+.points-card-heading h3{margin:4px 0 0}
+.points-balance{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:16px 0}
+.points-balance>div{display:grid;gap:5px}
+.points-balance span,.points-note,.points-ledger-row small{color:var(--muted);font-size:11px}
+.points-balance strong{font-size:18px;color:#178064}
+.points-note{line-height:1.6}
+.points-ledger{margin-top:18px}
+.points-ledger h4{margin:0 0 8px;font-size:12px}
+.points-ledger-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid var(--line)}
+.points-ledger-row>div{display:grid;gap:4px;min-width:0}
+.points-ledger-row strong{font-size:11px;overflow-wrap:anywhere}
+.points-ledger-row small{overflow-wrap:anywhere}
+.points-ledger-row>span{font-size:13px;font-weight:700}
+.points-positive{color:#178064}
+.points-negative{color:#a76b23}
+.publish-feedback{margin:12px 0 0;padding:10px 12px;border-radius:8px;font-size:12px;line-height:1.5}
+.publish-feedback-submitting{background:#fff8e8;color:#805c1b}
+.publish-feedback-success{background:#edf6f1;color:#18785f}
+.publish-feedback-error,.publish-balance-warning{color:#a2463e}
+.publish-feedback-error{background:#fff0ee}
+.publish-balance-warning{font-size:11px}
+@media(max-width:680px){
+  .points-card{padding:14px}
+  .points-balance{gap:6px}
+  .points-balance strong{font-size:15px}
+}

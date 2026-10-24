@@ -24,6 +24,9 @@ pub(crate) fn 计算任务状态(
             Ok(("进行中", 接单者, "task.started"))
         }
         "complete" if 原状态 == "进行中" && 接单者 == Some(操作者) => {
+            Ok(("待验收", 接单者, "task.completion_submitted"))
+        }
+        "accept-completion" if 原状态 == "待验收" && 发布者 == 操作者 => {
             Ok(("已完成", 接单者, "task.completed"))
         }
         "cancel" if 发布者 == 操作者 && ["待接单", "已接单"].contains(&原状态) => {
@@ -38,6 +41,9 @@ pub(crate) fn 计算任务状态(
         "start" | "complete" | "release" if 接单者 != Some(操作者) => Err(
             任务状态错误::禁止操作("只有当前接单者可以执行此操作"),
         ),
+        "accept-completion" if 发布者 != 操作者 => {
+            Err(任务状态错误::禁止操作("只有发布者可以验收委托"))
+        }
         "cancel" if 发布者 != 操作者 => {
             Err(任务状态错误::禁止操作("只有发布者可以取消任务"))
         }
@@ -85,6 +91,10 @@ mod 测试 {
         );
         assert_eq!(
             计算任务状态("complete", "进行中", 发布者, Some(接单者), 接单者).unwrap(),
+            ("待验收", Some(接单者), "task.completion_submitted")
+        );
+        assert_eq!(
+            计算任务状态("accept-completion", "待验收", 发布者, Some(接单者), 发布者).unwrap(),
             ("已完成", Some(接单者), "task.completed")
         );
     }
@@ -105,5 +115,9 @@ mod 测试 {
             计算任务状态("cancel", "进行中", 发布者, Some(接单者), 发布者),
             Err(任务状态错误::状态不允许(_))
         ));
+        assert_eq!(
+            计算任务状态("accept-completion", "待验收", 发布者, Some(接单者), 接单者),
+            Err(任务状态错误::禁止操作("只有发布者可以验收委托"))
+        );
     }
 }

@@ -11,7 +11,8 @@
 
 - 账号注册/登录、Argon2id 密码摘要、2 小时 Bearer 访问令牌。
 - 普通用户、运营员、管理员角色；运营员/管理员可以停用或恢复账号。
-- 任务发布、浏览、接单、开始、完成、取消、接单者释放；任务状态用数据库行锁串行化。
+- 委托发布、浏览、接单、开始、提交完成、委托方验收并结算、取消、接单者释放；状态与积分账务使用同一数据库事务和行锁。
+- 内部积分账户、可用/冻结余额、追加式交易流水；发布委托时托管积分，验收后发给接单者，取消或过期时退回发布者。
 - 任务参与者的持久聊天、幂等客户端消息编号、REST 历史补拉。
 - 消息页展示按任务区分的联系人会话及最近一条消息；进入独立聊天页后先通过 REST 加载历史，新消息由前端发布 MQTT 请求、worker 异步校验任务参与权限并写入数据库，再通过 MQTT 广播，前端只将监听到的已验证消息渲染到聊天记录。
 - 中文 PostgreSQL 业务表/字段。
@@ -19,7 +20,7 @@
 - Vue 任务工作台和 MQTT.js 实时订阅。Broker JWT 包含用户可订阅的任务主题 ACL，权限范围最多返回最近 100 个相关任务。
 - Vue 前端使用固定底部导航拆分为“任务、需求广场、发布需求、消息、我”；任务页默认打开，展示登录用户已接取的任务，个人页提供账号登录/注册和退出，聊天集中在消息页。
 
-首期未包含付款结算、管理员界面、文件附件、邮件/短信、刷新令牌、生产级速率限制与账号找回。部署前应按实际业务补充这些能力和相应测试。
+积分仅为站内记账单位，不可提现或用户间自由转让。新账号的初始积分为 0；运营员/管理员通过审计接口发放积分。历史委托的报酬为空且不可接单；新委托报酬要求为 1 至 1,000,000,000 的整数积分。系统不包含外部支付、管理员界面、文件附件、邮件/短信、刷新令牌、生产级速率限制与账号找回。部署前应按实际业务补充这些能力和相应测试。
 
 ## Rust 后端代码分层
 
@@ -34,6 +35,11 @@
 - [接口/](./rust_houduan/src/接口)：认证、任务、聊天、实时凭据、管理接口。
 - `GET /api/v1/my/tasks`：需要登录，返回当前用户已接取的任务列表。
 - `GET /api/v1/my/conversations`：需要登录，返回当前用户参与且已有聊天记录的会话、联系人和最近消息摘要。
+- `GET /api/v1/my/points`：需要登录，返回当前用户可用、冻结和总积分。
+- `GET /api/v1/my/points/ledger?limit=50`：需要登录，返回最近积分流水及交易后余额。
+- `POST /api/v1/admin/users/{id}/points`：运营员/管理员发放整数积分；需要 `Idempotency-Key`，请求体为 `{"amount": 100, "description": "..."}`，会记录操作审计。
+- `POST /api/v1/tasks/{id}/complete`：接单者提交完成，委托进入“待验收”。
+- `POST /api/v1/tasks/{id}/accept-completion`：发布者验收并发放已托管报酬，委托进入“已完成”。
 - [领域/任务状态.rs](./rust_houduan/src/领域/任务状态.rs)：纯任务状态转换规则及领域单元测试。
 - [工作者.rs](./rust_houduan/src/工作者.rs)：Apalis 调度、事务发件箱、过期任务、MQTT 聊天请求消费/校验和消息事件发布。
 
@@ -132,14 +138,18 @@ Get-Process -Id $owner
 | POST | `/api/v1/tasks/{id}/claim` | 是 |
 | POST | `/api/v1/tasks/{id}/start` | 是 |
 | POST | `/api/v1/tasks/{id}/complete` | 是 |
+| POST | `/api/v1/tasks/{id}/accept-completion` | 是；发布者验收并发放积分 |
 | POST | `/api/v1/tasks/{id}/cancel` | 是 |
 | POST | `/api/v1/tasks/{id}/release` | 是 |
 | GET | `/api/v1/tasks/{id}/messages` | 是；仅任务参与者，读取聊天历史 |
 | GET | `/api/v1/my/tasks` | 是；查询当前用户已接取的任务 |
 | GET | `/api/v1/my/conversations` | 是；查询当前用户的聊天会话 |
+| GET | `/api/v1/my/points` | 是；查询积分账户余额 |
+| GET | `/api/v1/my/points/ledger` | 是；查询积分流水 |
 | POST | `/api/v1/realtime/credentials` | 是 |
 | POST | `/api/v1/admin/users/{id}/disable` | 运营员/管理员 |
 | POST | `/api/v1/admin/users/{id}/enable` | 运营员/管理员 |
+| POST | `/api/v1/admin/users/{id}/points` | 运营员/管理员；审计发放积分 |
 
 注册用户默认只有“普通用户”角色。首次创建管理员后，应由数据库管理员在受控 SQL 会话中授予角色（不要将管理员密码或服务器凭证写进代码）：
 

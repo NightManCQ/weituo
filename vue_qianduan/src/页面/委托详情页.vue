@@ -58,6 +58,14 @@ function 委托地址(委托: 任务) {
         <p class="commission-detail-description">{{ 委托详情.描述 || '委托方暂未提供补充说明。' }}</p>
       </section>
 
+      <section class="commission-reward-panel">
+        <span>委托报酬</span>
+        <strong>{{ 委托详情.报酬积分 !== null ? `${委托详情.报酬积分} 积分` : '历史委托未设置积分报酬' }}</strong>
+        <small v-if="委托详情.报酬积分 !== null">
+          报酬已托管，接单方提交完成后由委托方验收并发放。
+        </small>
+      </section>
+
       <dl class="commission-detail-facts">
         <div><dt>委托方</dt><dd>{{ 委托详情.发布者编号 }}</dd></div>
         <div><dt>接单方</dt><dd>{{ 委托详情.接单者编号 || '暂未有人接单' }}</dd></div>

@@ -151,6 +151,7 @@ pub(super) async fn 注册用户(
     .bind(编号)
     .execute(&mut *事务)
     .await?;
+    crate::接口::积分::确保用户积分账户(&mut 事务, 编号).await?;
     事务.commit().await?;
     let 用户 = 用户视图 {
         用户编号: 记录.get("用户编号"),

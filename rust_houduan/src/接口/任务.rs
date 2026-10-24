@@ -10,11 +10,12 @@ use sqlx::postgres::types::PgPoint;
 use uuid::Uuid;
 
 use super::提取幂等键;
+use super::积分;
 use crate::共享::*;
 use crate::领域::{任务状态错误, 计算任务状态};
 
 const 任务视图字段: &str = r#""任务编号", "发布者编号", "接单者编号", "标题", "描述",
-    "任务状态", "截止时间", "创建时间", "版本号", "经纬", "国", "省", "市", "县", "镇", "村", "地址""#;
+    "任务状态", "截止时间", "创建时间", "版本号", "经纬", "国", "省", "市", "县", "镇", "村", "地址", "报酬积分""#;
 
 // Only fixed SQL templates and the constant column list are interpolated here.
 fn 任务记录查询(模板: &str) -> sqlx::AssertSqlSafe<String> {
@@ -49,6 +50,7 @@ async fn 为用户发布任务(
     let 标题 = 事件内容.标题.trim();
     let 描述 = 事件内容.描述.trim();
     校验任务内容(标题, 描述, 事件内容.截止时间)?;
+    let 报酬积分 = 校验新委托报酬(事件内容.报酬积分)?;
     let 位置 = 校验任务位置(事件内容.位置)?;
     let 编号 = Uuid::new_v4();
     let mut 事务 = 状态.数据库.begin().await?;
@@ -85,8 +87,8 @@ async fn 为用户发布任务(
     let 记录 = sqlx::query(任务记录查询(
         r#"INSERT INTO "任务"
            ("任务编号", "发布者编号", "标题", "描述", "任务状态", "截止时间",
-            "经纬", "国", "省", "市", "县", "镇", "村", "地址")
-           VALUES ($1, $2, $3, $4, '待接单', $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            "经纬", "国", "省", "市", "县", "镇", "村", "地址", "报酬积分")
+           VALUES ($1, $2, $3, $4, '待接单', $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
            RETURNING {任务视图字段}"#,
     ))
     .bind(编号)
@@ -102,8 +104,10 @@ async fn 为用户发布任务(
     .bind(位置.as_ref().and_then(|值| 值.镇.clone()))
     .bind(位置.as_ref().and_then(|值| 值.村.clone()))
     .bind(位置.as_ref().and_then(|值| 值.地址.clone()))
+    .bind(报酬积分)
     .fetch_one(&mut *事务)
     .await?;
+    积分::创建委托报酬托管(&mut 事务, 编号, 用户.编号, 报酬积分, 用户.编号, &幂等键).await?;
     let 任务 = 映射任务记录(&记录);
     let 事件编号 = Uuid::new_v4();
     let 事件 = json!({
@@ -156,6 +160,23 @@ fn 校验任务内容(
     Ok(())
 }
 
+fn 校验报酬积分(报酬积分: Option<i64>) -> Result<(), 应用错误> {
+    if 报酬积分.is_some_and(|积分| !(1..=积分::单笔积分上限).contains(&积分)) {
+        return Err(应用错误::请求错误(format!(
+            "委托报酬需为 1 至 {} 的整数积分",
+            积分::单笔积分上限
+        )));
+    }
+    Ok(())
+}
+
+fn 校验新委托报酬(报酬积分: Option<i64>) -> Result<i64, 应用错误> {
+    let 报酬积分 =
+        报酬积分.ok_or_else(|| 应用错误::请求错误("发布委托必须设置积分报酬".into()))?;
+    校验报酬积分(Some(报酬积分))?;
+    Ok(报酬积分)
+}
+
 fn 校验任务位置(
     mut 位置: Option<任务位置>
 ) -> Result<Option<任务位置>, 应用错误> {
@@ -200,7 +221,16 @@ pub(super) async fn 查询任务列表(
     Query(查询条件): Query<任务列表查询>,
 ) -> Result<Json<Vec<任务视图>>, 应用错误> {
     if 查询条件.状态.as_ref().is_some_and(|状态值| {
-        !["待接单", "已接单", "进行中", "已完成", "已取消", "已过期"].contains(&状态值.as_str())
+        ![
+            "待接单",
+            "已接单",
+            "进行中",
+            "待验收",
+            "已完成",
+            "已取消",
+            "已过期",
+        ]
+        .contains(&状态值.as_str())
     }) {
         return Err(应用错误::请求错误("任务状态无效".into()));
     }
@@ -264,6 +294,7 @@ fn 映射任务记录(记录: &sqlx::postgres::PgRow) -> 任务视图 {
         截止时间: 记录.get("截止时间"),
         创建时间: 记录.get("创建时间"),
         版本号: 记录.get("版本号"),
+        报酬积分: 记录.get("报酬积分"),
         位置: 经纬.map(|经纬| 任务位置 {
             经度: 经纬.x,
             纬度: 经纬.y,
@@ -308,6 +339,7 @@ async fn 修改用户任务(
     let 标题 = 内容.标题.trim();
     let 描述 = 内容.描述.trim();
     校验任务内容(标题, 描述, 内容.截止时间)?;
+    校验报酬积分(内容.报酬积分)?;
     let 位置 = 校验任务位置(内容.位置)?;
     let 经纬 = 位置.as_ref().map(|位置| PgPoint {
         x: 位置.经度,
@@ -320,7 +352,7 @@ async fn 修改用户任务(
         .execute(&mut *事务)
         .await?;
     let 当前记录 = sqlx::query(
-        r#"SELECT "发布者编号", "任务状态"
+        r#"SELECT "发布者编号", "任务状态", "报酬积分"
            FROM "任务" WHERE "任务编号" = $1 FOR UPDATE"#,
     )
     .bind(任务编号)
@@ -357,8 +389,22 @@ async fn 修改用户任务(
         ));
     }
     let 当前状态: String = 当前记录.get("任务状态");
+    let 当前报酬: Option<i64> = 当前记录.get("报酬积分");
     if 当前状态 != "待接单" {
         return Err(应用错误::冲突("只有待接单任务可以修改".into()));
+    }
+    let 新报酬 = 内容.报酬积分.or(当前报酬);
+    if let Some(报酬) = 新报酬 {
+        积分::调整委托报酬(
+            &mut 事务,
+            任务编号,
+            用户.编号,
+            当前报酬,
+            Some(报酬),
+            用户.编号,
+            &幂等键,
+        )
+        .await?;
     }
 
     let 记录 = sqlx::query(任务记录查询(
@@ -366,6 +412,7 @@ async fn 修改用户任务(
                   "标题" = $2, "描述" = $3, "截止时间" = $4,
                   "经纬" = $5, "国" = $6, "省" = $7, "市" = $8,
                   "县" = $9, "镇" = $10, "村" = $11, "地址" = $12,
+                  "报酬积分" = $13,
                   "版本号" = "版本号" + 1, "更新时间" = now()
            WHERE "任务编号" = $1
            RETURNING {任务视图字段}"#,
@@ -382,6 +429,7 @@ async fn 修改用户任务(
     .bind(位置.as_ref().and_then(|值| 值.镇.clone()))
     .bind(位置.as_ref().and_then(|值| 值.村.clone()))
     .bind(位置.as_ref().and_then(|值| 值.地址.clone()))
+    .bind(新报酬)
     .fetch_one(&mut *事务)
     .await?;
     let 任务 = 映射任务记录(&记录);
@@ -432,7 +480,7 @@ async fn 流转任务状态(
         .execute(&mut *事务)
         .await?;
     let 当前记录 = sqlx::query(
-        r#"SELECT "发布者编号", "接单者编号", "任务状态"
+        r#"SELECT "发布者编号", "接单者编号", "任务状态", "截止时间"
            FROM "任务" WHERE "任务编号" = $1 FOR UPDATE"#,
     )
     .bind(任务编号)
@@ -442,7 +490,8 @@ async fn 流转任务状态(
     let 预期事件类型 = match 操作 {
         "claim" => "task.claimed",
         "start" => "task.started",
-        "complete" => "task.completed",
+        "complete" => "task.completion_submitted",
+        "accept-completion" => "task.completed",
         "cancel" => "task.cancelled",
         "release" => "task.released",
         _ => return Err(应用错误::请求错误("未知任务操作".into())),
@@ -470,6 +519,15 @@ async fn 流转任务状态(
         事务.commit().await?;
         return Ok(Json(映射任务记录(&记录)));
     }
+    if 操作 == "claim"
+        && 当前记录
+            .get::<Option<chrono::DateTime<Utc>>, _>("截止时间")
+            .is_some_and(|截止时间| 截止时间 <= Utc::now())
+    {
+        return Err(应用错误::冲突(
+            "该委托已超过截止时间，不能接单".into(),
+        ));
+    }
     let 发布者: Uuid = 当前记录.get("发布者编号");
     let 接单者: Option<Uuid> = 当前记录.get("接单者编号");
     let 原任务状态: String = 当前记录.get("任务状态");
@@ -480,6 +538,38 @@ async fn 流转任务状态(
                 应用错误::冲突(format!("当前状态“{状态}”不允许此操作"))
             }
         })?;
+    match 操作 {
+        "claim" => {
+            let 报酬状态 = sqlx::query(
+                r#"SELECT "结算状态" FROM "委托报酬"
+                   WHERE "委托编号" = $1 FOR UPDATE"#,
+            )
+            .bind(任务编号)
+            .fetch_optional(&mut *事务)
+            .await?;
+            let Some(报酬状态) = 报酬状态 else {
+                return Err(应用错误::冲突(
+                    "该历史委托没有积分报酬，暂不可接单".into(),
+                ));
+            };
+            if 报酬状态.get::<String, _>("结算状态") != "托管中" {
+                return Err(应用错误::冲突("该委托报酬未处于托管状态".into()));
+            }
+        }
+        "complete" => 积分::提交委托报酬验收(&mut 事务, 任务编号).await?,
+        "accept-completion" => {
+            积分::发放委托报酬(
+                &mut 事务,
+                任务编号,
+                接单者.ok_or_else(|| 应用错误::冲突("委托尚无接单者".into()))?,
+                用户.编号,
+                &幂等键,
+            )
+            .await?
+        }
+        "cancel" => 积分::退款委托报酬(&mut 事务, 任务编号, Some(用户.编号), Some(&幂等键)).await?,
+        _ => {}
+    }
     let 记录 = sqlx::query(任务记录查询(
         r#"UPDATE "任务" SET "任务状态" = $2, "接单者编号" = $3,
                   "接单时间" = CASE WHEN $2 = '已接单' THEN now()
@@ -573,6 +663,20 @@ pub(super) async fn 完成任务(
     流转任务状态(&s, 用户, 编号, "complete", 键).await
 }
 
+pub(super) async fn 验收完成任务(
+    State(s): State<应用状态>,
+    Path(编号): Path<Uuid>,
+    请求: axum::http::Request<axum::body::Body>,
+) -> Result<Json<任务视图>, 应用错误> {
+    let 用户 = 请求
+        .extensions()
+        .get::<当前用户>()
+        .cloned()
+        .ok_or_else(|| 应用错误::未授权("请先登录".into()))?;
+    let 键 = 提取幂等键(请求.headers())?;
+    流转任务状态(&s, 用户, 编号, "accept-completion", 键).await
+}
+
 pub(super) async fn 取消任务(
     State(s): State<应用状态>,
     Path(编号): Path<Uuid>,
@@ -664,5 +768,23 @@ mod 位置校验测试 {
         .expect("位置应保留");
         assert_eq!(位置.国.as_deref(), Some("中国"));
         assert_eq!(位置.地址, None);
+    }
+
+    #[test]
+    fn 新委托报酬必须为正整数且不超过上限() {
+        assert_eq!(校验新委托报酬(Some(1)).unwrap(), 1);
+        assert_eq!(
+            校验新委托报酬(Some(积分::单笔积分上限)).unwrap(),
+            积分::单笔积分上限
+        );
+        assert!(matches!(校验新委托报酬(None), Err(应用错误::请求错误(_))));
+        assert!(matches!(
+            校验新委托报酬(Some(0)),
+            Err(应用错误::请求错误(_))
+        ));
+        assert!(matches!(
+            校验新委托报酬(Some(积分::单笔积分上限 + 1)),
+            Err(应用错误::请求错误(_))
+        ));
     }
 }

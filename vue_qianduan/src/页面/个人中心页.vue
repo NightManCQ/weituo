@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import type { 用户 } from '../领域/类型'
+import type { 积分账户, 积分流水, 用户 } from '../领域/类型'
 
 type 认证表单 = { login_name: string; password: string; nickname: string }
 
 defineProps<{
   当前用户: 用户 | null
+  积分账户: 积分账户 | null
+  积分流水: 积分流水[]
   正在处理: boolean
   是否注册: boolean
   认证表单数据: 认证表单
@@ -14,6 +16,7 @@ const emit = defineEmits<{
   登录: []
   退出登录: []
   '更新:是否注册': [是否注册: boolean]
+  刷新积分: []
 }>()
 </script>
 
@@ -30,6 +33,35 @@ const emit = defineEmits<{
         <div><dt>登录名</dt><dd>{{ 当前用户.登录名 }}</dd></div>
         <div><dt>用户编号</dt><dd>{{ 当前用户.用户编号 }}</dd></div>
       </dl>
+      <section class="points-card">
+        <div class="points-card-heading">
+          <div><div class="section-eyebrow">内部积分</div><h3>我的积分</h3></div>
+          <button class="button button-quiet" type="button" @click="emit('刷新积分')">刷新</button>
+        </div>
+        <div class="points-balance">
+          <div><span>可用积分</span><strong>{{ 积分账户?.可用积分 ?? '—' }}</strong></div>
+          <div><span>托管中</span><strong>{{ 积分账户?.冻结积分 ?? '—' }}</strong></div>
+          <div><span>总积分</span><strong>{{ 积分账户?.总积分 ?? '—' }}</strong></div>
+        </div>
+        <p class="muted points-note">积分不可提现或用户间自由转让。发布委托时会冻结报酬；委托方验收后发放。</p>
+        <div v-if="积分流水.length" class="points-ledger">
+          <h4>最近积分流水</h4>
+          <div v-for="流水 in 积分流水" :key="流水.流水编号" class="points-ledger-row">
+            <div>
+              <strong>{{ 流水.说明 || 流水.交易类型 }}</strong>
+              <small>{{ 流水.交易类型 }} · {{ new Date(流水.创建时间).toLocaleString('zh-CN') }}</small>
+              <small>
+                可用 {{ 流水.可用变动 > 0 ? '+' : '' }}{{ 流水.可用变动 }}
+                · 冻结 {{ 流水.冻结变动 > 0 ? '+' : '' }}{{ 流水.冻结变动 }}
+              </small>
+            </div>
+            <span :class="{ 'points-positive': 流水.可用变动 > 0, 'points-negative': 流水.可用变动 < 0 }">
+              {{ 流水.可用变动 > 0 ? '+' : '' }}{{ 流水.可用变动 }}
+            </span>
+          </div>
+        </div>
+        <p v-else class="muted points-note">暂无积分流水。如需发放积分，请联系运营员或管理员。</p>
+      </section>
       <button class="button button-outline" @click="emit('退出登录')">退出登录</button>
     </section>
     <form v-else class="auth-card profile-auth-card" @submit.prevent="emit('登录')">

@@ -1,16 +1,24 @@
 <script setup lang="ts">
-import type { 任务位置 } from '../领域/类型'
+import type { 积分账户, 任务位置 } from '../领域/类型'
 
 type 任务表单 = {
   title: string
   description: string
   deadline: string
+  reward_points: number
   位置: 任务位置 | null
+}
+
+type 发布反馈 = {
+  状态: 'idle' | 'submitting' | 'success' | 'error'
+  消息: string
 }
 
 defineProps<{
   当前用户: { 昵称: string } | null
   任务表单数据: 任务表单
+  积分账户: 积分账户 | null
+  发布反馈: 发布反馈
   正在处理: boolean
 }>()
 
@@ -45,6 +53,27 @@ function 地址摘要(位置: 任务位置) {
           <label class="wide-field">委托标题<input v-model.trim="任务表单数据.title" required maxlength="120" placeholder="例如：帮忙整理一份活动方案" /></label>
           <label class="wide-field">委托说明<textarea v-model.trim="任务表单数据.description" rows="5" maxlength="10000" placeholder="补充背景、交付内容或其他要求…"></textarea></label>
           <label>截止时间（可选）<input v-model="任务表单数据.deadline" type="datetime-local" /></label>
+          <label>
+            委托报酬（积分）
+            <input
+              v-model.number="任务表单数据.reward_points"
+              type="number"
+              min="1"
+              max="1000000000"
+              step="1"
+              required
+            />
+            <small class="muted">
+              可用 {{ 积分账户?.可用积分 ?? 0 }} 积分；发布后托管，验收完成后发给接单方。
+            </small>
+            <small
+              v-if="积分账户 && 任务表单数据.reward_points > 积分账户.可用积分"
+              class="publish-balance-warning"
+            >
+              可用积分不足（还差 {{ 任务表单数据.reward_points - 积分账户.可用积分 }} 积分）。
+              仍可提交，服务器会校验并显示失败原因。
+            </small>
+          </label>
           <div class="wide-field publish-location">
             <span>委托地址（可选）</span>
             <div v-if="任务表单数据.位置" class="publish-location-selected">
@@ -73,10 +102,23 @@ function 地址摘要(位置: 任务位置) {
         </div>
         <div class="form-footer">
           <span>发布人：{{ 当前用户.昵称 }}</span>
-          <button class="button button-primary" :disabled="正在处理 || !任务表单数据.title.trim()">
+          <button
+            class="button button-primary"
+            :disabled="正在处理 || !任务表单数据.title.trim() ||
+              !Number.isInteger(任务表单数据.reward_points) ||
+              任务表单数据.reward_points < 1 ||
+              任务表单数据.reward_points > 1000000000"
+          >
             {{ 正在处理 ? '正在发布…' : '发布委托 ↗' }}
           </button>
         </div>
+        <p
+          v-if="发布反馈.状态 !== 'idle'"
+          class="publish-feedback"
+          :class="`publish-feedback-${发布反馈.状态}`"
+          :role="发布反馈.状态 === 'error' ? 'alert' : 'status'"
+          aria-live="polite"
+        >{{ 发布反馈.消息 }}</p>
       </form>
     </template>
     <div v-else class="empty-state access-prompt">
