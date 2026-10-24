@@ -1,0 +1,27 @@
+services:
+  renwu-emqx:
+    image: emqx/emqx:5.7.2
+    container_name: renwu-emqx
+    restart: unless-stopped
+    ports:
+      - "192.168.1.107:1884:1883"
+      - "192.168.1.107:8085:8083"
+      - "127.0.0.1:18084:18083"
+    environment:
+      EMQX_DASHBOARD__DEFAULT_PASSWORD: ${EMQX_DASHBOARD_PASSWORD:?Set EMQX_DASHBOARD_PASSWORD}
+      EMQX_NODE__COOKIE: ${EMQX_NODE_COOKIE:?Set EMQX_NODE_COOKIE}
+      EMQX_AUTHENTICATION__1__MECHANISM: jwt
+      EMQX_AUTHENTICATION__1__FROM: password
+      EMQX_AUTHENTICATION__1__USE_JWKS: "false"
+      EMQX_AUTHENTICATION__1__ALGORITHM: hmac-based
+      EMQX_AUTHENTICATION__1__SECRET: ${MQTT_JWT_SECRET:?Set MQTT_JWT_SECRET}
+      EMQX_AUTHENTICATION__1__SECRET_BASE64_ENCODED: "false"
+      EMQX_AUTHORIZATION__NO_MATCH: deny
+    volumes:
+      - renwu-emqx-data:/opt/emqx/data
+      - renwu-emqx-log:/opt/emqx/log
+      - ./emqx_acl.conf:/opt/emqx/etc/acl.conf:ro
+
+volumes:
+  renwu-emqx-data:
+  renwu-emqx-log:
