@@ -20,6 +20,7 @@ use uuid::Uuid;
 pub(crate) struct 应用状态 {
     pub(crate) 数据库: PgPool,
     pub(crate) 令牌密钥: String,
+    pub(crate) 消息代理: 消息发布器,
     pub(crate) 高德客户端: reqwest::Client,
     pub(crate) 高德安全密钥: Option<String>,
 }
@@ -172,7 +173,7 @@ pub(crate) struct 任务视图 {
     pub(crate) 报酬积分: Option<i64>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub(crate) struct 任务列表查询 {
     #[serde(rename = "status")]
     pub(crate) 状态: Option<String>,

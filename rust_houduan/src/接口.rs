@@ -1,11 +1,17 @@
 #[path = "接口/任务.rs"]
 mod 任务;
+#[path = "接口/好友.rs"]
+mod 好友;
 #[path = "接口/实时.rs"]
 mod 实时;
+#[path = "接口/消息.rs"]
+mod 消息;
 #[path = "接口/积分.rs"]
 pub(crate) mod 积分;
 #[path = "接口/管理.rs"]
 mod 管理;
+#[path = "接口/群聊.rs"]
+mod 群聊;
 #[path = "接口/聊天.rs"]
 pub(crate) mod 聊天;
 #[path = "接口/认证.rs"]
@@ -15,13 +21,14 @@ use anyhow::{Context, Result};
 use axum::{
     Json, Router,
     body::Body,
-    extract::{OriginalUri, Path, State},
+    extract::{OriginalUri, Path, Request, State},
     http::{HeaderMap, header},
     middleware,
-    response::Response,
-    routing::{get, post},
+    response::{IntoResponse, Response},
+    routing::{delete, get, post},
 };
 use serde::Serialize;
+use serde_json::Value;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing::info;
 
@@ -35,12 +42,68 @@ pub(crate) async fn 启动(状态: 应用状态, 配置: 运行配置) -> Result
         .route("/_AMapService/{*path}", get(代理高德地图服务))
         .route("/api/v1/auth/register", post(认证::注册用户))
         .route("/api/v1/auth/login", post(认证::登录用户))
+        .route("/api/v1/groups", post(群聊::创建群组))
+        .route("/api/v1/my/groups", get(群聊::查询我的群组))
+        .route("/api/v1/my/group-invitations", get(群聊::查询群邀请))
+        .route("/api/v1/groups/{group_id}", get(群聊::查询群详情))
+        .route(
+            "/api/v1/groups/{group_id}/invitations",
+            post(群聊::邀请群成员),
+        )
+        .route(
+            "/api/v1/group-invitations/{invitation_id}/accept",
+            post(群聊::接受群邀请),
+        )
+        .route(
+            "/api/v1/group-invitations/{invitation_id}/reject",
+            post(群聊::拒绝群邀请),
+        )
+        .route(
+            "/api/v1/groups/{group_id}/members/{user_id}",
+            delete(群聊::移除群成员),
+        )
+        .route("/api/v1/groups/{group_id}/leave", delete(群聊::退出群组))
+        .route(
+            "/api/v1/groups/{group_id}/messages",
+            get(群聊::查询群消息).post(群聊::发送群消息),
+        )
         .route(
             "/api/v1/tasks",
             get(任务::查询任务列表).post(任务::发布任务),
         )
         .route("/api/v1/my/tasks", get(任务::查询我的已接任务))
+        .route(
+            "/api/v1/tasks/{task_id}/group-chat",
+            get(群聊::查询委托群组),
+        )
         .route("/api/v1/my/conversations", get(聊天::查询我的聊天会话))
+        .route(
+            "/api/v1/my/message-conversations",
+            get(消息::查询我的消息会话),
+        )
+        .route("/api/v1/my/friends", get(好友::查询我的好友))
+        .route(
+            "/api/v1/my/friend-conversations",
+            get(好友::查询好友聊天会话),
+        )
+        .route("/api/v1/my/friends/search", get(好友::搜索用户))
+        .route("/api/v1/my/friends/{friend_id}", delete(好友::删除好友))
+        .route(
+            "/api/v1/my/friends/{friend_id}/messages",
+            get(好友::查询私聊消息).post(好友::发送私聊消息),
+        )
+        .route(
+            "/api/v1/my/friend-requests",
+            get(好友::查询收到的好友申请).post(好友::创建好友申请),
+        )
+        .route(
+            "/api/v1/my/friend-requests/{request_id}/accept",
+            post(好友::同意好友申请),
+        )
+        .route(
+            "/api/v1/my/friend-requests/{request_id}/reject",
+            post(好友::拒绝好友申请),
+        )
         .route(
             "/api/v1/tasks/{id}",
             get(任务::查询委托).put(任务::修改任务),
@@ -61,7 +124,10 @@ pub(crate) async fn 启动(状态: 应用状态, 配置: 运行配置) -> Result
             "/api/v1/admin/users/{id}/points",
             post(积分::管理员发放积分),
         )
-        .route("/api/v1/tasks/{id}/messages", get(聊天::查询聊天消息))
+        .route(
+            "/api/v1/tasks/{id}/messages",
+            get(聊天::查询聊天消息).post(聊天::发送任务聊天消息),
+        )
         .route("/api/v1/realtime/credentials", post(实时::获取实时凭据))
         .route("/api/v1/admin/users/{id}/disable", post(管理::禁用用户))
         .route("/api/v1/admin/users/{id}/enable", post(管理::启用用户))
@@ -69,6 +135,7 @@ pub(crate) async fn 启动(状态: 应用状态, 配置: 运行配置) -> Result
             状态.clone(),
             认证::验证可选身份,
         ))
+        .layer(middleware::from_fn(统一_json响应))
         .layer(
             CorsLayer::new()
                 .allow_origin(跨域来源)
@@ -76,6 +143,7 @@ pub(crate) async fn 启动(状态: 应用状态, 配置: 运行配置) -> Result
                     axum::http::Method::GET,
                     axum::http::Method::POST,
                     axum::http::Method::PUT,
+                    axum::http::Method::DELETE,
                     axum::http::Method::OPTIONS,
                 ])
                 .allow_headers([
@@ -105,11 +173,120 @@ struct 健康响应 {
     状态: &'static str,
 }
 
+#[derive(Serialize)]
+struct 统一响应 {
+    状态码: u16,
+    消息: String,
+    数据: Value,
+}
+
+fn 统一响应内容(状态码: axum::http::StatusCode, 原始数据: Value) -> 统一响应 {
+    let 成功 = 状态码.is_success();
+    let 消息 = if 成功 {
+        match 状态码 {
+            axum::http::StatusCode::CREATED => "创建成功".to_owned(),
+            axum::http::StatusCode::ACCEPTED => "请求已接受".to_owned(),
+            axum::http::StatusCode::NO_CONTENT => "无内容".to_owned(),
+            _ => String::new(),
+        }
+    } else {
+        原始数据["消息"]
+            .as_str()
+            .map(str::to_owned)
+            .or_else(|| 原始数据.as_str().map(str::to_owned))
+            .or_else(|| 状态码.canonical_reason().map(str::to_owned))
+            .unwrap_or_else(|| "请求失败".to_owned())
+    };
+    统一响应 {
+        状态码: 状态码.as_u16(),
+        消息,
+        数据: if 成功 { 原始数据 } else { Value::Null },
+    }
+}
+
+fn 构建统一响应(状态码: axum::http::StatusCode, 原始数据: Value) -> Response {
+    let mut 响应 = Json(统一响应内容(状态码, 原始数据)).into_response();
+    *响应.status_mut() = 状态码;
+    响应
+}
+
+async fn 统一_json响应(请求: Request, 后续处理: middleware::Next) -> Response {
+    let 路径 = 请求.uri().path();
+    let 是否接口 = 路径 == "/health" || 路径.starts_with("/api/v1/");
+    let 响应 = 后续处理.run(请求).await;
+    if !是否接口 {
+        return 响应;
+    }
+
+    let (mut 响应部分, 响应体) = 响应.into_parts();
+    let 原始状态码 = 响应部分.status;
+    let 原始字节 = match axum::body::to_bytes(响应体, 16 * 1024 * 1024).await {
+        Ok(字节) => 字节,
+        Err(错误) => {
+            tracing::error!(错误 = %错误, "读取接口响应失败");
+            return 构建统一响应(axum::http::StatusCode::INTERNAL_SERVER_ERROR, Value::Null);
+        }
+    };
+    let 原始数据 = if 原始字节.is_empty() {
+        Value::Null
+    } else {
+        serde_json::from_slice(&原始字节)
+            .unwrap_or_else(|_| Value::String(String::from_utf8_lossy(&原始字节).into_owned()))
+    };
+
+    // A 204 response cannot contain the JSON envelope required by the API contract.
+    if 原始状态码 == axum::http::StatusCode::NO_CONTENT {
+        响应部分.status = axum::http::StatusCode::OK;
+    }
+    let 状态码 = 响应部分.status;
+    构建统一响应(状态码, 原始数据)
+}
+
 async fn 健康检查(
     State(状态): State<应用状态>
 ) -> Result<Json<健康响应>, 应用错误> {
     sqlx::query("SELECT 1").execute(&状态.数据库).await?;
     Ok(Json(健康响应 { 状态: "ok" }))
+}
+
+#[cfg(test)]
+mod 统一响应测试 {
+    use super::*;
+
+    #[test]
+    fn 成功响应保留业务数据并附带统一字段() {
+        let 响应 = 统一响应内容(
+            axum::http::StatusCode::CREATED,
+            serde_json::json!({"任务编号": "task-1"}),
+        );
+        let 序列化结果 = serde_json::to_value(响应).expect("统一响应应可序列化");
+
+        assert_eq!(序列化结果["状态码"], 201);
+        assert_eq!(序列化结果["消息"], "创建成功");
+        assert_eq!(序列化结果["数据"]["任务编号"], "task-1");
+    }
+
+    #[test]
+    fn http状态码与统一响应中的状态码一致() {
+        let 响应 = 构建统一响应(
+            axum::http::StatusCode::CREATED,
+            serde_json::json!({"任务编号": "task-1"}),
+        );
+        assert_eq!(响应.status(), axum::http::StatusCode::CREATED);
+    }
+
+    #[test]
+    fn 错误响应统一放入消息并将数据置空() {
+        let 响应 = 统一响应内容(
+            axum::http::StatusCode::BAD_REQUEST,
+            serde_json::json!({"消息": "参数无效"}),
+        );
+        let 序列化结果 = serde_json::to_value(响应).expect("统一响应应可序列化");
+
+        assert_eq!(序列化结果["状态码"], 400);
+        assert_eq!(序列化结果["消息"], "参数无效");
+        assert!(序列化结果["数据"].is_null());
+    }
 }
 
 pub(super) fn 提取幂等键(请求头: &HeaderMap) -> Result<String, 应用错误> {

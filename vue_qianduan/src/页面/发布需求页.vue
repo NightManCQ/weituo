@@ -58,13 +58,12 @@ function 地址摘要(位置: 任务位置) {
             <input
               v-model.number="任务表单数据.reward_points"
               type="number"
-              min="1"
+              min="0"
               max="1000000000"
               step="1"
-              required
             />
             <small class="muted">
-              可用 {{ 积分账户?.可用积分 ?? 0 }} 积分；发布后托管，验收完成后发给接单方。
+              可选，填写 0 或留空表示无积分报酬。填写正数时，可用 {{ 积分账户?.可用积分 ?? 0 }} 积分；报酬会在发布后托管，验收完成后发给接单方。
             </small>
             <small
               v-if="积分账户 && 任务表单数据.reward_points > 积分账户.可用积分"
@@ -105,9 +104,9 @@ function 地址摘要(位置: 任务位置) {
           <button
             class="button button-primary"
             :disabled="正在处理 || !任务表单数据.title.trim() ||
-              !Number.isInteger(任务表单数据.reward_points) ||
-              任务表单数据.reward_points < 1 ||
-              任务表单数据.reward_points > 1000000000"
+              !Number.isInteger(Number(任务表单数据.reward_points)) ||
+              Number(任务表单数据.reward_points) < 0 ||
+              Number(任务表单数据.reward_points) > 1000000000"
           >
             {{ 正在处理 ? '正在发布…' : '发布委托 ↗' }}
           </button>

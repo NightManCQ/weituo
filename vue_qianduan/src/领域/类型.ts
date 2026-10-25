@@ -69,6 +69,68 @@ export type 聊天会话 = {
   最近消息时间: string
 }
 
+export type 好友聊天会话 = {
+  会话编号: string
+  联系人编号: string
+  联系人昵称: string
+  最近消息: string | null
+  最近消息时间: string | null
+}
+
+export type 消息会话 = {
+  会话类型: '委托' | '好友' | '群聊'
+  会话编号: string
+  关联编号: string
+  会话名称: string
+  联系人昵称: string | null
+  会话说明: string
+  最近消息: string | null
+  最近消息时间: string
+  会话状态: string | null
+  成员数: number | null
+}
+
+export type 群组 = {
+  群组编号: string
+  群组名称: string
+  群组公告: string
+  群主编号: string
+  成员数: number
+  最后消息序号: number
+  最近消息: string | null
+  最近消息时间: string | null
+  已读至序号: number
+}
+
+export type 群成员 = {
+  用户编号: string
+  登录名: string
+  昵称: string
+  成员角色: string
+  加入时间: string
+}
+
+export type 群邀请 = {
+  邀请编号: string
+  群组编号: string
+  群组名称: string
+  邀请人编号: string
+  邀请人昵称: string
+  创建时间: string
+  过期时间: string
+}
+
+export type 群消息 = {
+  消息编号: string
+  群组编号: string
+  群内序号: number
+  发送者编号: string
+  发送者昵称: string
+  客户端消息编号: string
+  消息正文: string
+  创建时间: string
+}
+
 export type 认证结果 = {
   访问令牌: string
   令牌类型: string

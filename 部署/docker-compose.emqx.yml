@@ -16,6 +16,7 @@ services:
       EMQX_AUTHENTICATION__1__ALGORITHM: hmac-based
       EMQX_AUTHENTICATION__1__SECRET: ${MQTT_JWT_SECRET:?Set MQTT_JWT_SECRET}
       EMQX_AUTHENTICATION__1__SECRET_BASE64_ENCODED: "false"
+      EMQX_AUTHENTICATION__1__ACL_CLAIM_NAME: acl
       EMQX_AUTHORIZATION__NO_MATCH: deny
     volumes:
       - renwu-emqx-data:/opt/emqx/data

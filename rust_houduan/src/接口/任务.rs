@@ -161,9 +161,9 @@ fn 校验任务内容(
 }
 
 fn 校验报酬积分(报酬积分: Option<i64>) -> Result<(), 应用错误> {
-    if 报酬积分.is_some_and(|积分| !(1..=积分::单笔积分上限).contains(&积分)) {
+    if 报酬积分.is_some_and(|积分| !(0..=积分::单笔积分上限).contains(&积分)) {
         return Err(应用错误::请求错误(format!(
-            "委托报酬需为 1 至 {} 的整数积分",
+            "委托报酬需为 0 至 {} 的整数积分",
             积分::单笔积分上限
         )));
     }
@@ -171,8 +171,7 @@ fn 校验报酬积分(报酬积分: Option<i64>) -> Result<(), 应用错误> {
 }
 
 fn 校验新委托报酬(报酬积分: Option<i64>) -> Result<i64, 应用错误> {
-    let 报酬积分 =
-        报酬积分.ok_or_else(|| 应用错误::请求错误("发布委托必须设置积分报酬".into()))?;
+    let 报酬积分 = 报酬积分.unwrap_or(0);
     校验报酬积分(Some(报酬积分))?;
     Ok(报酬积分)
 }
@@ -219,7 +218,8 @@ fn 清理位置文本(
 pub(super) async fn 查询任务列表(
     State(状态): State<应用状态>,
     Query(查询条件): Query<任务列表查询>,
-) -> Result<Json<Vec<任务视图>>, 应用错误> {
+) -> Result<(StatusCode, Json<Vec<任务视图>>), 应用错误> {
+    println!("Hello {查询条件:?}");
     if 查询条件.状态.as_ref().is_some_and(|状态值| {
         ![
             "待接单",
@@ -234,6 +234,8 @@ pub(super) async fn 查询任务列表(
     }) {
         return Err(应用错误::请求错误("任务状态无效".into()));
     }
+
+    //
     let 数量上限 = 查询条件.数量上限.unwrap_or(50).clamp(1, 100);
     let 记录集 = sqlx::query(任务记录查询(
         r#"SELECT {任务视图字段}
@@ -244,7 +246,11 @@ pub(super) async fn 查询任务列表(
     .bind(数量上限)
     .fetch_all(&状态.数据库)
     .await?;
-    Ok(Json(记录集.iter().map(映射任务记录).collect()))
+    // Ok(Json(记录集.iter().map(映射任务记录).collect()))
+    Ok((
+        StatusCode::OK,
+        Json(记录集.iter().map(映射任务记录).collect()),
+    ))
 }
 
 pub(super) async fn 查询我的已接任务(
@@ -480,7 +486,7 @@ async fn 流转任务状态(
         .execute(&mut *事务)
         .await?;
     let 当前记录 = sqlx::query(
-        r#"SELECT "发布者编号", "接单者编号", "任务状态", "截止时间"
+        r#"SELECT "发布者编号", "接单者编号", "任务状态", "截止时间", "标题"
            FROM "任务" WHERE "任务编号" = $1 FOR UPDATE"#,
     )
     .bind(任务编号)
@@ -509,6 +515,20 @@ async fn 流转任务状态(
             || 已有记录.get::<String, _>("事件类型") != 预期事件类型
         {
             return Err(应用错误::冲突("此幂等键已用于其他任务操作".into()));
+        }
+        if 操作 == "claim" {
+            let 接单者编号: Option<Uuid> = 当前记录.get("接单者编号");
+            let 接单者编号 =
+                接单者编号.ok_or_else(|| 应用错误::冲突("已接单委托缺少接单者".into()))?;
+            let 任务标题: String = 当前记录.get("标题");
+            super::群聊::确保委托群聊(
+                &mut 事务,
+                任务编号,
+                当前记录.get("发布者编号"),
+                接单者编号,
+                &任务标题,
+            )
+            .await?;
         }
         let 记录 = sqlx::query(任务记录查询(
             r#"SELECT {任务视图字段} FROM "任务" WHERE "任务编号" = $1"#,
@@ -583,6 +603,35 @@ async fn 流转任务状态(
     .bind(new_claimant)
     .fetch_one(&mut *事务)
     .await?;
+    if 操作 == "claim" {
+        let 接单者编号: Uuid = 记录
+            .try_get::<Option<Uuid>, _>("接单者编号")?
+            .ok_or_else(|| 应用错误::冲突("接单成功后未记录接单者".into()))?;
+        super::群聊::确保委托群聊(
+            &mut 事务,
+            任务编号,
+            发布者,
+            接单者编号,
+            记录.get("标题"),
+        )
+        .await?;
+    } else if 操作 == "release" {
+        if let Some(接单者编号) = 接单者 {
+            sqlx::query(
+                r#"UPDATE "群_成员" member
+                   SET "成员状态" = '主动退出', "离开时间" = now()
+                   FROM "群_群组" group_chat
+                   WHERE group_chat."关联任务编号" = $1
+                     AND member."群组编号" = group_chat."群组编号"
+                     AND member."用户编号" = $2
+                     AND member."成员状态" = '有效'"#,
+            )
+            .bind(任务编号)
+            .bind(接单者编号)
+            .execute(&mut *事务)
+            .await?;
+        }
+    }
     let 事件编号 = Uuid::new_v4();
     let 主题 = format!("renwu/{任务编号}/events");
     let 事件 = json!({
@@ -729,6 +778,7 @@ mod 位置校验测试 {
             }"#,
         )
         .expect("应解析英文 API 位置字段");
+        assert_eq!(校验新委托报酬(请求.报酬积分).unwrap(), 0);
         let 位置 = 请求.位置.expect("应包含位置");
         let 数据 = serde_json::to_value(位置).expect("位置应可序列化");
         assert_eq!(数据["经度"], 116.397428);
@@ -771,15 +821,16 @@ mod 位置校验测试 {
     }
 
     #[test]
-    fn 新委托报酬必须为正整数且不超过上限() {
+    fn 新委托报酬可省略或为零且不超过上限() {
         assert_eq!(校验新委托报酬(Some(1)).unwrap(), 1);
+        assert_eq!(校验新委托报酬(Some(0)).unwrap(), 0);
+        assert_eq!(校验新委托报酬(None).unwrap(), 0);
         assert_eq!(
             校验新委托报酬(Some(积分::单笔积分上限)).unwrap(),
             积分::单笔积分上限
         );
-        assert!(matches!(校验新委托报酬(None), Err(应用错误::请求错误(_))));
         assert!(matches!(
-            校验新委托报酬(Some(0)),
+            校验新委托报酬(Some(-1)),
             Err(应用错误::请求错误(_))
         ));
         assert!(matches!(

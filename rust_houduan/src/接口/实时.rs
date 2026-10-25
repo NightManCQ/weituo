@@ -41,17 +41,11 @@ pub(super) async fn 获取实时凭据(
             [
                 format!("renwu/{编号}/events"),
                 format!("renwu/{编号}/messages"),
-                format!("renwu/{编号}/message_receipts/{}", 用户.编号),
             ]
         })
         .collect();
-    let 发布主题列表: Vec<String> = 任务记录集
-        .iter()
-        .map(|记录| {
-            let 编号: Uuid = 记录.get("任务编号");
-            format!("renwu/{编号}/message_requests/{}", 用户.编号)
-        })
-        .collect();
+    let mut 主题列表: Vec<String> = 主题列表;
+    主题列表.push(format!("renwu/users/{}/notifications", 用户.编号));
     let 过期时间 = (Utc::now() + ChronoDuration::minutes(5)).timestamp() as usize;
     let 消息令牌 = encode(
         &Header::default(),
@@ -59,7 +53,7 @@ pub(super) async fn 获取实时凭据(
             过期时间,
             用户名: 用户.编号.to_string(),
             访问控制: 消息访问控制 {
-                发布权限: 发布主题列表,
+                发布权限: Vec::new(),
                 订阅权限: 主题列表.clone(),
             },
         },
@@ -71,6 +65,6 @@ pub(super) async fn 获取实时凭据(
         消息令牌,
         主题列表,
         有效秒数: 300,
-        说明: "EMQX 必须配置 MQTT_JWT_SECRET 对应的 JWT 认证器并启用 ACL claim；仅订阅当前用户参与的任务主题",
+        说明: "EMQX 必须配置 MQTT_JWT_SECRET 对应的 JWT 认证器并启用 ACL claim；仅订阅当前用户参与的任务主题及个人通知主题",
     }))
 }

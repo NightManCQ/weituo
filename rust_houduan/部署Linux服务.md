@@ -7,7 +7,7 @@
 建议 API 与 worker 分别作为 systemd 服务运行：
 
 - API：监听 `127.0.0.1:8080`，由 Nginx/Caddy 通过 HTTPS 反向代理访问。
-- Worker：处理过期委托、聊天消息和事务发件箱事件，需要访问 PostgreSQL 和项目的 MQTT Broker。
+- Worker：处理过期委托、兼容性聊天消息和事务发件箱重试，需要访问 PostgreSQL 和项目的 MQTT Broker。
 - PostgreSQL、MQTT Broker：建议使用已部署的服务或独立主机；不要为了部署本后端改动其他项目的服务配置。
 - Vue 前端：单独构建并由 Nginx/Caddy 托管，或部署在其他静态站点服务上。
 
@@ -18,9 +18,11 @@ API 及 worker 启动时都会先连接 PostgreSQL 并运行内嵌的 SQLx 迁�
 部署前准备好：
 
 1. PostgreSQL 数据库和专用应用账号。数据库账号需要能够连接数据库，并在启动迁移时拥有创建/修改业务表所需的权限。此项目当前使用同一个 `DATABASE_URL` 执行迁移和运行服务。
-2. MQTT Broker 的 worker 连接地址、端口及 JWT 验证配置。Broker 的 JWT 签名密钥必须与后端 `MQTT_JWT_SECRET` 一致，并按项目要求启用 ACL；未匹配的 ACL 规则应拒绝访问。
+2. MQTT Broker 的 API/worker 连接地址、端口及 JWT 验证配置。Broker 的 JWT 签名密钥必须与后端 `MQTT_JWT_SECRET` 一致，并按项目要求启用 ACL；未匹配的 ACL 规则应拒绝访问。
 3. 供浏览器连接的 MQTT WebSocket Secure 地址（`wss://...`）。它与 worker 的 `MQTT_HOST`/`MQTT_PORT` 是不同用途的配置。
 4. 前端实际使用的站点 HTTPS 来源，用于 `CORS_ORIGIN`。
+
+浏览器端全局只建立一条 MQTT 连接：后端短时凭据只允许订阅当前用户参与的任务主题及其 `renwu/users/{用户编号}/notifications` 个人通知主题。任务聊天和好友私聊均通过 HTTP 提交并由 API 持久化；好友私聊事件写入事务发件箱后由 API 立即尝试 MQTT 发布，worker 负责重试未确认事件。API 与 worker 均须连接 Broker，并使用仅允许发布到业务事件主题的后端 JWT/ACL；普通客户端不得发布或订阅其他用户的个人通知主题。
 
 不要把 PostgreSQL 密码、JWT 密钥或高德安全密钥写入源代码、前端构建产物、命令行参数或版本库。数据库连接 URI 中的密码如含特殊字符，应先做百分号编码。
 

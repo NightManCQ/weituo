@@ -1,6 +1,6 @@
 use axum::{
     Json,
-    extract::{Path, Query, State},
+    extract::{Extension, Path, Query, State},
 };
 use chrono::{DateTime, Utc};
 use serde_json::json;
@@ -21,15 +21,15 @@ pub(super) async fn 查询我的聊天会话(
     let 记录集 = sqlx::query(
         r#"SELECT t."任务编号", t."标题", t."任务状态",
                   联系人."用户编号" AS "联系人编号", 联系人."昵称" AS "联系人昵称",
-                  最近消息."消息正文" AS "最近消息",
-                  最近消息."创建时间" AS "最近消息时间"
+                  COALESCE(最近消息."消息正文", '尚无消息') AS "最近消息",
+                  COALESCE(最近消息."创建时间", t."接单时间", t."创建时间") AS "最近消息时间"
            FROM "任务" t
            JOIN "用户" 联系人
              ON 联系人."用户编号" = CASE
                  WHEN t."发布者编号" = $1 THEN t."接单者编号"
                  ELSE t."发布者编号"
              END
-           JOIN LATERAL (
+           LEFT JOIN LATERAL (
                SELECT "消息正文", "创建时间"
                FROM "聊天消息"
                WHERE "任务编号" = t."任务编号"
@@ -37,7 +37,12 @@ pub(super) async fn 查询我的聊天会话(
                LIMIT 1
            ) 最近消息 ON TRUE
            WHERE (t."发布者编号" = $1 OR t."接单者编号" = $1)
-           ORDER BY 最近消息."创建时间" DESC, t."任务编号" DESC
+             AND NOT EXISTS (
+                 SELECT 1 FROM "群_群组" g
+                 WHERE g."关联任务编号" = t."任务编号"
+             )
+           ORDER BY COALESCE(最近消息."创建时间", t."接单时间", t."创建时间") DESC,
+                    t."任务编号" DESC
            LIMIT 200"#,
     )
     .bind(用户.编号)
@@ -77,12 +82,26 @@ pub(crate) async fn 校验并保存聊天消息(
     }
 
     let mut 事务 = 数据库.begin().await?;
+    let 已迁移群组: Option<Uuid> =
+        sqlx::query_scalar(r#"SELECT "群组编号" FROM "群_群组" WHERE "关联任务编号" = $1"#)
+            .bind(任务编号)
+            .fetch_optional(&mut *事务)
+            .await?;
+    if 已迁移群组.is_some() {
+        return Err(应用错误::冲突(
+            "委托聊天已迁移到群聊，请使用委托群聊会话".into(),
+        ));
+    }
     let 任务 = sqlx::query(
         r#"SELECT u."昵称"
            FROM "任务" t
            JOIN "用户" u ON u."用户编号" = $2 AND u."账号状态" = '正常'
            WHERE t."任务编号" = $1
              AND (t."发布者编号" = $2 OR t."接单者编号" = $2)
+             AND EXISTS (
+                 SELECT 1 FROM "群_群组" g
+                 WHERE g."关联任务编号" = t."任务编号"
+             )
            FOR SHARE OF t"#,
     )
     .bind(任务编号)
@@ -171,6 +190,19 @@ pub(crate) async fn 校验并保存聊天消息(
     ))
 }
 
+pub(super) async fn 发送任务聊天消息(
+    State(状态): State<应用状态>,
+    Path(任务编号): Path<Uuid>,
+    用户: Option<Extension<当前用户>>,
+    Json(内容): Json<聊天上行请求>,
+) -> Result<Json<聊天消息视图>, 应用错误> {
+    let 用户编号 = 用户
+        .map(|Extension(用户)| 用户.编号)
+        .ok_or_else(|| 应用错误::未授权("请先登录".into()))?;
+    let (消息, _) = 校验并保存聊天消息(&状态.数据库, 任务编号, 用户编号, 内容).await?;
+    Ok(Json(消息))
+}
+
 pub(super) async fn 查询聊天消息(
     State(状态): State<应用状态>,
     Path(任务编号): Path<Uuid>,
@@ -184,7 +216,11 @@ pub(super) async fn 查询聊天消息(
         .ok_or_else(|| 应用错误::未授权("请先登录".into()))?;
     let 参与关系 = sqlx::query(
         r#"SELECT 1 FROM "任务" WHERE "任务编号" = $1
-           AND ("发布者编号" = $2 OR "接单者编号" = $2)"#,
+           AND ("发布者编号" = $2 OR "接单者编号" = $2)
+           AND EXISTS (
+               SELECT 1 FROM "群_群组" g
+               WHERE g."关联任务编号" = "任务"."任务编号"
+           )"#,
     )
     .bind(任务编号)
     .bind(用户.编号)
@@ -193,6 +229,16 @@ pub(super) async fn 查询聊天消息(
     if 参与关系.is_none() {
         return Err(应用错误::禁止访问(
             "只有任务参与者可以查看聊天".into(),
+        ));
+    }
+    let 已迁移群组: Option<Uuid> =
+        sqlx::query_scalar(r#"SELECT "群组编号" FROM "群_群组" WHERE "关联任务编号" = $1"#)
+            .bind(任务编号)
+            .fetch_optional(&状态.数据库)
+            .await?;
+    if 已迁移群组.is_some() {
+        return Err(应用错误::冲突(
+            "委托聊天已迁移到群聊，请使用委托群聊会话".into(),
         ));
     }
     let 数量上限 = 查询条件.数量上限.unwrap_or(100).clamp(1, 200);

@@ -27,20 +27,22 @@ async fn main() -> Result<()> {
     sqlx::migrate!("./migrations")
         .run(&数据库)
         .await
-        .context("数据库迁移失败")?;
+        .context("运行数据库迁移失败")?;
     let 高德客户端 = reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(5))
         .timeout(Duration::from_secs(20))
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .context("初始化高德地图代理客户端失败")?;
+    let 消息代理 = 工作者::连接消息代理().await?;
     match 配置.运行模式.as_str() {
-        "worker" => 工作者::启动(数据库).await,
+        "worker" => 工作者::启动(数据库, 消息代理).await,
         "api" => {
             接口::启动(
                 共享::应用状态 {
                     数据库,
                     令牌密钥: 配置.令牌密钥.clone(),
+                    消息代理,
                     高德客户端,
                     高德安全密钥: 配置.高德安全密钥.clone(),
                 },
@@ -52,11 +54,12 @@ async fn main() -> Result<()> {
             let 接口状态 = 共享::应用状态 {
                 数据库: 数据库.clone(),
                 令牌密钥: 配置.令牌密钥.clone(),
+                消息代理: 消息代理.clone(),
                 高德客户端,
                 高德安全密钥: 配置.高德安全密钥.clone(),
             };
             let 接口服务 = 接口::启动(接口状态, 配置.clone());
-            let 后台服务 = 工作者::启动(数据库);
+            let 后台服务 = 工作者::启动(数据库, 消息代理);
             tokio::try_join!(接口服务, 后台服务)?;
             Ok(())
         }

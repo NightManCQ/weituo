@@ -8,6 +8,22 @@ export class 请求异常 extends Error {
   }
 }
 
+interface 统一接口响应<T> {
+  状态码: number
+  消息: string
+  数据: T
+}
+
+function 是统一接口响应(内容: unknown): 内容 is 统一接口响应<unknown> {
+  return typeof 内容 === 'object'
+    && 内容 !== null
+    && '状态码' in 内容
+    && typeof 内容.状态码 === 'number'
+    && '消息' in 内容
+    && typeof 内容.消息 === 'string'
+    && '数据' in 内容
+}
+
 export async function 发送请求<T>(
   路径: string,
   初始化: RequestInit = {},
@@ -34,13 +50,23 @@ export async function 发送请求<T>(
   }
 
   if (!响应.ok) {
-    const 错误内容 = 响应内容 as { 消息?: unknown } | undefined
-    const 错误信息 = typeof 错误内容?.消息 === 'string'
-      ? 错误内容.消息
+    const 错误信息 = 是统一接口响应(响应内容)
+      ? 响应内容.消息 || `请求失败 (${响应.status})`
+      : typeof 响应内容 === 'object'
+        && 响应内容 !== null
+        && '消息' in 响应内容
+        && typeof 响应内容.消息 === 'string'
+        ? 响应内容.消息
       : `请求失败 (${响应.status})`
     throw new 请求异常(错误信息, 响应.status)
   }
 
   if (响应内容 === undefined) throw new Error('服务器返回了空响应')
-  return 响应内容 as T
+  if (!是统一接口响应(响应内容)) {
+    throw new Error('服务器返回了无法识别的响应结构')
+  }
+  if (响应内容.状态码 !== 响应.status) {
+    throw new Error('服务器响应状态码与响应内容不一致')
+  }
+  return 响应内容.数据 as T
 }

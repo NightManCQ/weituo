@@ -33,44 +33,54 @@ async fn 发布待投递事件(状态: &工作者状态) -> Result<()> {
     .await?;
     for 记录 in 记录集 {
         let 编号: Uuid = 记录.get("事件编号");
-        let mut 事务 = 状态.数据库.begin().await?;
-        let 已领取记录 = sqlx::query(
-            r#"UPDATE "事务发件箱" SET "重试次数" = "重试次数" + 1,
-                      "下次尝试时间" = now() + interval '30 seconds'
-               WHERE "事件编号" = $1 AND "投递状态" = '待投递'
-                 AND "下次尝试时间" <= now()
-               RETURNING "主题", "事件内容""#,
-        )
-        .bind(编号)
-        .fetch_optional(&mut *事务)
-        .await?;
-        let Some(已领取记录) = 已领取记录 else {
-            事务.rollback().await?;
-            continue;
-        };
-        let 主题: String = 已领取记录.get("主题");
-        let 事件内容: Value = 已领取记录.get("事件内容");
-        事务.commit().await?;
-        match 状态.消息代理.确认发布消息(编号, &主题, 事件内容).await {
-            Ok(()) => {
-                sqlx::query(
-                    r#"UPDATE "事务发件箱" SET "投递状态" = '已投递', "投递时间" = now()
-                               WHERE "事件编号" = $1"#,
-                )
-                .bind(编号)
-                .execute(&状态.数据库)
-                .await?;
-            }
-            Err(err) => {
-                warn!(事件编号 = %编号, error = %err, "MQTT publish failed; event will retry");
-                sqlx::query(
-                    r#"UPDATE "事务发件箱" SET "下次尝试时间" = now() + interval '5 seconds'
-                               WHERE "事件编号" = $1 AND "投递状态" = '待投递'"#,
-                )
-                .bind(编号)
-                .execute(&状态.数据库)
-                .await?;
-            }
+        发布单个发件箱事件(&状态.数据库, &状态.消息代理, 编号).await?;
+    }
+    Ok(())
+}
+
+pub(crate) async fn 发布单个发件箱事件(
+    数据库: &PgPool,
+    消息代理: &消息发布器,
+    事件编号: Uuid,
+) -> Result<()> {
+    let mut 事务 = 数据库.begin().await?;
+    let 已领取记录 = sqlx::query(
+        r#"UPDATE "事务发件箱" SET "重试次数" = "重试次数" + 1,
+                  "下次尝试时间" = now() + interval '30 seconds'
+           WHERE "事件编号" = $1 AND "投递状态" = '待投递'
+             AND "下次尝试时间" <= now()
+           RETURNING "主题", "事件内容""#,
+    )
+    .bind(事件编号)
+    .fetch_optional(&mut *事务)
+    .await?;
+    let Some(已领取记录) = 已领取记录 else {
+        事务.rollback().await?;
+        return Ok(());
+    };
+    let 主题: String = 已领取记录.get("主题");
+    let 事件内容: Value = 已领取记录.get("事件内容");
+    事务.commit().await?;
+    match 消息代理.确认发布消息(事件编号, &主题, 事件内容).await {
+        Ok(()) => {
+            sqlx::query(
+                r#"UPDATE "事务发件箱" SET "投递状态" = '已投递', "投递时间" = now()
+                   WHERE "事件编号" = $1"#,
+            )
+            .bind(事件编号)
+            .execute(数据库)
+            .await?;
+            info!(%事件编号, %主题, "MQTT outbox event delivered");
+        }
+        Err(err) => {
+            warn!(%事件编号, %主题, error = %err, "MQTT publish failed; event will retry");
+            sqlx::query(
+                r#"UPDATE "事务发件箱" SET "下次尝试时间" = now() + interval '5 seconds'
+                   WHERE "事件编号" = $1 AND "投递状态" = '待投递'"#,
+            )
+            .bind(事件编号)
+            .execute(数据库)
+            .await?;
         }
     }
     Ok(())
@@ -155,7 +165,7 @@ async fn 处理发件箱任务(
         .map_err(|e| Box::new(std::io::Error::other(e.to_string())) as BoxDynError)
 }
 
-async fn 连接消息代理() -> Result<消息发布器> {
+pub(crate) async fn 连接消息代理() -> Result<消息发布器> {
     let 消息主机 = env::var("MQTT_HOST").unwrap_or_else(|_| "127.0.0.1".to_owned());
     let 消息端口 = env::var("MQTT_PORT")
         .unwrap_or_else(|_| "1883".to_owned())
@@ -170,7 +180,11 @@ async fn 连接消息代理() -> Result<消息发布器> {
             过期时间: (Utc::now() + ChronoDuration::days(3650)).timestamp() as usize,
             用户名: 消息用户名.clone(),
             访问控制: 消息访问控制 {
-                发布权限: vec!["renwu/+/events".to_owned(), "renwu/+/messages".to_owned()],
+                发布权限: vec![
+                    "renwu/+/events".to_owned(),
+                    "renwu/+/messages".to_owned(),
+                    "renwu/users/+/notifications".to_owned(),
+                ],
                 订阅权限: Vec::new(),
             },
         },
@@ -412,8 +426,11 @@ async fn 发布聊天拒绝回执(
 }
 
 impl 消息发布器 {
-    async fn 确认发布消息(
-        &self, 事件编号: Uuid, 主题: &str, 事件内容: Value
+    pub(crate) async fn 确认发布消息(
+        &self,
+        事件编号: Uuid,
+        主题: &str,
+        事件内容: Value,
     ) -> Result<()> {
         let _guard = self.发布锁.lock().await;
         let (发送者, receiver) = oneshot::channel();
@@ -450,14 +467,15 @@ impl 消息发布器 {
 async fn 运行工作循环(数据库: PgPool, 消息代理: 消息发布器) -> Result<()> {
     PostgresStorage::<()>::setup(&数据库)
         .await
-        .context("Apalis 数据库迁移失败")?;
+        .context("Apalis storage setup failed")?;
     let 存储后端 = PostgresStorage::<发件箱任务>::new(&数据库)
         .with_config(apalis_postgres::Config::default().queue("renwu-outbox"));
     let 状态 = 工作者状态 {
         数据库: 数据库.clone(),
         消息代理,
     };
-    let 工作者 = WorkerBuilder::new("renwu-outbox-worker")
+    let 工作者编号 = format!("renwu-outbox-worker-{}", Uuid::new_v4());
+    let 工作者 = WorkerBuilder::new(工作者编号)
         .backend(存储后端)
         .data(状态.clone())
         .build(处理发件箱任务);
@@ -479,8 +497,7 @@ async fn 运行工作循环(数据库: PgPool, 消息代理: 消息发布器) ->
     Ok(())
 }
 
-pub(crate) async fn 启动(数据库: PgPool) -> Result<()> {
-    let 消息代理 = 连接消息代理().await?;
+pub(crate) async fn 启动(数据库: PgPool, 消息代理: 消息发布器) -> Result<()> {
     启动聊天请求消费者(数据库.clone(), 消息代理.clone()).await?;
     运行工作循环(数据库, 消息代理).await
 }

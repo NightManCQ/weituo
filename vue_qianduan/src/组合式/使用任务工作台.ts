@@ -1,8 +1,8 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import mqtt, { type MqttClient } from 'mqtt'
 import { 请求异常, 发送请求 } from '../接口/请求'
 import { 生成唯一编号 } from '../领域/编号'
-import type { 认证结果, 聊天会话, 积分账户, 积分流水, 消息, 实时消息事件, 任务, 任务操作, 任务位置, 用户 } from '../领域/类型'
+import { 连接全局实时服务, 断开全局实时服务, 订阅实时事件, type 实时事件 } from '../实时/消息中心'
+import type { 认证结果, 好友聊天会话, 聊天会话, 积分账户, 积分流水, 消息, 消息会话, 任务, 任务操作, 任务位置, 用户 } from '../领域/类型'
 
 type 认证表单 = { login_name: string; password: string; nickname: string }
 type 任务表单 = {
@@ -14,7 +14,6 @@ type 任务表单 = {
 }
 type 任务操作项 = { key: 任务操作; label: string }
 type 发布反馈 = { 状态: 'idle' | 'submitting' | 'success' | 'error'; 消息: string }
-type 实时凭据 = { 消息地址: string; 消息令牌: string; 主题列表: string[] }
 type 待确认聊天消息 = { 任务编号: string; 客户端消息编号: string; 正文: string }
 
 const 用户令牌存储键 = 'renwu_token'
@@ -64,73 +63,14 @@ function 读取当前用户(): 用户 | null {
   return null
 }
 
-function 解析实时消息(内容: string): 实时消息事件 {
-  const 事件: unknown = JSON.parse(内容)
-  if (typeof 事件 !== 'object' || 事件 === null) {
-    throw new Error('实时消息必须是 JSON 对象')
-  }
-
-  const 记录 = 事件 as Record<string, unknown>
-  const 事件类型 = typeof 记录.事件类型 === 'string' ? 记录.事件类型 : 记录.event_type
-  const 任务编号 = typeof 记录.任务编号 === 'string' ? 记录.任务编号 : 记录.task_id
-  if (
-    (事件类型 !== undefined && typeof 事件类型 !== 'string') ||
-    (任务编号 !== undefined && typeof 任务编号 !== 'string')
-  ) {
-    throw new Error('实时消息字段格式无效')
-  }
-
-  const 原始数据 = 记录.数据 ?? 记录.data
-  let 数据: 消息 | undefined
-  if (typeof 原始数据 === 'object' && 原始数据 !== null) {
-    const 消息记录 = 原始数据 as Record<string, unknown>
-    const 消息编号 = 消息记录.消息编号 ?? 消息记录.message_id
-    if (typeof 消息编号 === 'string') {
-      const 任务编号 = 消息记录.任务编号 ?? 消息记录.task_id
-      const 发送者编号 = 消息记录.发送者编号 ?? 消息记录.sender_id
-      const 发送者昵称 = 消息记录.发送者昵称 ?? 消息记录.sender_nickname
-      const 客户端消息编号 = 消息记录.客户端消息编号 ?? 消息记录.client_message_id
-      const 消息正文 = 消息记录.消息正文 ?? 消息记录.content
-      const 创建时间 = 消息记录.创建时间 ?? 消息记录.created_at
-      if (
-        typeof 任务编号 !== 'string' ||
-        typeof 发送者编号 !== 'string' ||
-        typeof 发送者昵称 !== 'string' ||
-        typeof 客户端消息编号 !== 'string' ||
-        typeof 消息正文 !== 'string' ||
-        typeof 创建时间 !== 'string'
-      ) {
-        throw new Error('实时聊天消息字段格式无效')
-      }
-      数据 = {
-        消息编号,
-        任务编号,
-        发送者编号,
-        发送者昵称,
-        客户端消息编号,
-        消息正文,
-        创建时间,
-      }
-    }
-  }
-
-  return {
-    事件类型: 事件类型 as string | undefined,
-    任务编号: 任务编号 as string | undefined,
-    客户端消息编号: typeof 记录.客户端消息编号 === 'string'
-      ? 记录.客户端消息编号
-      : undefined,
-    错误消息: typeof 记录.错误消息 === 'string' ? 记录.错误消息 : undefined,
-    数据,
-  }
-}
-
 export function 使用任务工作台() {
   const 令牌 = ref(localStorage.getItem(用户令牌存储键) || '')
   const 当前用户 = ref(读取当前用户())
   const 任务列表 = ref<任务[]>([])
   const 我的任务列表 = ref<任务[]>([])
   const 聊天会话列表 = ref<聊天会话[]>([])
+  const 好友聊天会话列表 = ref<好友聊天会话[]>([])
+  const 消息会话列表 = ref<消息会话[]>([])
   const 当前任务 = ref<任务 | null>(null)
   const 当前委托详情 = ref<任务 | null>(null)
   const 正在加载委托详情 = ref(false)
@@ -159,11 +99,6 @@ export function 使用任务工作台() {
   const 状态筛选 = ref('')
   const 发布任务幂等键 = ref<string | null>(null)
   const 任务操作幂等键 = new Map<string, string>()
-  let 实时客户端: MqttClient | null = null
-  let 实时连接序号 = 0
-  let 实时凭据刷新定时器: ReturnType<typeof setTimeout> | null = null
-  let 消息回执定时器: ReturnType<typeof setTimeout> | null = null
-  let 聊天发送序号 = 0
   let 委托详情请求序号 = 0
 
   const 可见任务 = computed(() => 任务列表.value)
@@ -264,11 +199,34 @@ export function 使用任务工作台() {
   async function 加载聊天会话() {
     if (!当前用户.value) {
       聊天会话列表.value = []
+      好友聊天会话列表.value = []
+      消息会话列表.value = []
       return
     }
     正在加载聊天会话.value = true
     try {
-      聊天会话列表.value = await 请求<聊天会话[]>('/my/conversations')
+      const 会话列表 = await 请求<消息会话[]>('/my/message-conversations')
+      消息会话列表.value = 会话列表
+      聊天会话列表.value = 会话列表
+        .filter((会话) => 会话.会话类型 === '委托')
+        .map((会话) => ({
+          任务编号: 会话.会话编号,
+          任务标题: 会话.会话名称,
+          任务状态: 会话.会话状态 ?? '待接单',
+          联系人编号: 会话.关联编号,
+          联系人昵称: 会话.联系人昵称 ?? 会话.会话名称,
+          最近消息: 会话.最近消息 ?? '尚无消息',
+          最近消息时间: 会话.最近消息时间,
+        }))
+      好友聊天会话列表.value = 会话列表
+        .filter((会话) => 会话.会话类型 === '好友')
+        .map((会话) => ({
+          会话编号: 会话.会话编号,
+          联系人编号: 会话.关联编号,
+          联系人昵称: 会话.会话名称,
+          最近消息: 会话.最近消息,
+          最近消息时间: 会话.最近消息时间,
+        }))
     } catch (原因) {
       错误信息.value = 原因 instanceof Error ? 原因.message : '聊天会话加载失败'
     } finally {
@@ -292,101 +250,135 @@ export function 使用任务工作台() {
     }
   }
 
-  async function 连接实时服务() {
-    if (实时凭据刷新定时器) clearTimeout(实时凭据刷新定时器)
-    实时凭据刷新定时器 = null
-    if (!令牌.value || !当前用户.value) return
-    const 连接序号 = ++实时连接序号
-    const 当前令牌 = 令牌.value
-    const 用户编号 = 当前用户.value.用户编号
-    实时客户端?.end(true)
-    实时客户端 = null
-
-    try {
-      const 凭据 = await 请求<实时凭据>('/realtime/credentials', { method: 'POST' })
+  function 处理全局实时事件(事件: 实时事件) {
+    if (事件.事件类型 === 'chat.message_created' && 事件.数据) {
+      const 数据 = 事件.数据
+      const 消息编号 = 数据.消息编号 ?? 数据.message_id
+      const 任务编号 = 数据.任务编号 ?? 数据.task_id ?? 事件.任务编号
+      const 发送者编号 = 数据.发送者编号 ?? 数据.sender_id
+      const 发送者昵称 = 数据.发送者昵称 ?? 数据.sender_nickname
+      const 客户端消息编号 = 数据.客户端消息编号 ?? 数据.client_message_id
+      const 消息正文 = 数据.消息正文 ?? 数据.content
+      const 创建时间 = 数据.创建时间 ?? 数据.created_at
       if (
-        连接序号 !== 实时连接序号 ||
-        令牌.value !== 当前令牌 ||
-        当前用户.value?.用户编号 !== 用户编号
-      ) return
-
-      const MQTT地址 = import.meta.env.VITE_MQTT_URL || 凭据.消息地址
-      const 新客户端 = mqtt.connect(MQTT地址, {
-        username: 用户编号,
-        password: 凭据.消息令牌,
-        clean: true,
-        reconnectPeriod: 3000,
-        connectTimeout: 8000,
-      })
-      实时客户端 = 新客户端
-
-      新客户端.on('connect', () => {
-        if (实时客户端 !== 新客户端 || !凭据.主题列表.length) return
-        新客户端.subscribe(凭据.主题列表, { qos: 1 }, (原因, 授权主题) => {
-          if (实时客户端 !== 新客户端) return
-          const 被拒绝主题 = 授权主题?.filter((主题) => (主题.qos as number) === 128) ?? []
-          if (原因 || 被拒绝主题.length) {
-            提示信息.value = '实时聊天订阅失败，请检查 EMQX 主题权限后刷新'
-          }
-        })
-      })
-      新客户端.on('reconnect', () => {
-        if (实时客户端 === 新客户端) 提示信息.value = '实时连接正在恢复…'
-      })
-      新客户端.on('message', (_主题, 内容) => {
-        if (实时客户端 !== 新客户端) return
-        try {
-          const 事件 = 解析实时消息(内容.toString())
-          if (
-            事件.事件类型 === 'chat.message_created' &&
-            事件.数据
-          ) {
-            if (
-              事件.任务编号 === 当前任务.value?.任务编号 &&
-              !消息列表.value.some((消息项) => 消息项.消息编号 === 事件.数据?.消息编号)
-            ) {
-              消息列表.value = [...消息列表.value, 事件.数据].sort((左侧, 右侧) =>
-                左侧.创建时间.localeCompare(右侧.创建时间),
-              )
-            }
-            void 加载聊天会话()
-            if (
-              待确认消息.value?.客户端消息编号 === 事件.数据.客户端消息编号
-            ) {
-              清除待确认消息()
-              提示信息.value = '消息已通过服务器验证并送达'
-            }
-          }
-          if (事件.事件类型 === 'chat.message_rejected' && 待确认消息.value) {
-            const 待确认项 = 待确认消息.value
-            if (
-              事件.客户端消息编号 === 待确认项.客户端消息编号 ||
-              (!事件.客户端消息编号 && 事件.任务编号 === 待确认项.任务编号)
-            ) {
-              if (!消息表单数据.value) 消息表单数据.value = 待确认项.正文
-              清除待确认消息()
-              错误信息.value = 事件.错误消息 || '服务器拒绝了这条消息'
-            }
-          }
-          if (事件.事件类型?.startsWith('task.') && 事件.任务编号) {
-            void 加载任务()
-            void 加载我的任务()
-          }
-        } catch (原因) {
-          console.error('无法处理实时消息。', 原因)
-          错误信息.value = '收到无法识别的实时消息'
+        typeof 消息编号 === 'string' &&
+        typeof 任务编号 === 'string' &&
+        typeof 发送者编号 === 'string' &&
+        typeof 发送者昵称 === 'string' &&
+        typeof 客户端消息编号 === 'string' &&
+        typeof 消息正文 === 'string' &&
+        typeof 创建时间 === 'string'
+      ) {
+        const 消息项: 消息 = {
+          消息编号,
+          任务编号,
+          发送者编号,
+          发送者昵称,
+          客户端消息编号,
+          消息正文,
+          创建时间,
         }
-      })
-      新客户端.on('error', () => {
-        if (实时客户端 === 新客户端) 提示信息.value = '实时连接暂不可用，仍可通过刷新同步委托'
-      })
-      实时凭据刷新定时器 = setTimeout(() => {
-        void 连接实时服务()
-      }, 4 * 60 * 1000)
-    } catch (原因) {
-      if (连接序号 === 实时连接序号) {
-        错误信息.value = 原因 instanceof Error ? 原因.message : '实时消息配置失败'
+        if (
+          当前任务.value?.任务编号 === 任务编号 &&
+          !消息列表.value.some((已有消息) => 已有消息.消息编号 === 消息项.消息编号)
+        ) {
+          消息列表.value = [...消息列表.value, 消息项].sort((左侧, 右侧) =>
+            左侧.创建时间.localeCompare(右侧.创建时间),
+          )
+        }
+        void 加载聊天会话()
+      } else {
+        console.error('任务聊天 MQTT 事件缺少消息字段。', 事件.原始事件)
       }
+      return
+    }
+
+    if (事件.事件类型 === 'friend.message_created') {
+      const 数据 = 事件.数据
+      const 会话编号 = 事件.会话编号 ?? 数据?.会话编号
+      const 联系人编号 = 数据?.联系人编号
+      const 联系人昵称 = 数据?.联系人昵称
+      const 最近消息 = 数据?.消息正文
+      const 最近消息时间 = 数据?.创建时间
+      if (
+        typeof 会话编号 !== 'string' ||
+        typeof 联系人编号 !== 'string' ||
+        typeof 联系人昵称 !== 'string' ||
+        typeof 最近消息 !== 'string' ||
+        typeof 最近消息时间 !== 'string'
+      ) {
+        console.error('好友私聊 MQTT 事件缺少会话列表字段。', 事件.原始事件)
+        return
+      }
+
+      const 已有会话 = 好友聊天会话列表.value.find(
+        (会话) => 会话.会话编号 === 会话编号,
+      )
+      const 新会话: 好友聊天会话 = {
+        会话编号,
+        联系人编号,
+        联系人昵称,
+        最近消息,
+        最近消息时间,
+      }
+      const 当前最新时间 = 已有会话?.最近消息时间
+      if (当前最新时间 && 当前最新时间 > 最近消息时间) {
+        新会话.最近消息 = 已有会话.最近消息
+        新会话.最近消息时间 = 当前最新时间
+      }
+      好友聊天会话列表.value = [
+        新会话,
+        ...好友聊天会话列表.value.filter((会话) => 会话.会话编号 !== 会话编号),
+      ].sort((左侧, 右侧) =>
+        (右侧.最近消息时间 ?? '').localeCompare(左侧.最近消息时间 ?? ''),
+      )
+      void 加载聊天会话()
+      return
+    }
+
+    if (事件.事件类型 === 'group.message_created') {
+      void 加载聊天会话()
+      return
+    }
+
+    if (事件.事件类型.startsWith('task.')) {
+      void 加载任务()
+      void 加载我的任务()
+      return
+    }
+
+    const 通知文本 = 事件.数据?.消息 ?? 事件.数据?.message
+    if (typeof 通知文本 === 'string' && 通知文本.trim()) {
+      提示信息.value = 通知文本
+    } else if (
+      事件.事件类型.startsWith('notification.') ||
+      事件.事件类型.startsWith('friend.request_')
+    ) {
+      提示信息.value = '收到一条新通知'
+    }
+  }
+
+  const 取消实时事件订阅 = 订阅实时事件(处理全局实时事件)
+
+  async function 连接实时服务(强制刷新 = false) {
+    if (!令牌.value || !当前用户.value) return
+    try {
+      await 连接全局实时服务(
+        令牌.value,
+        当前用户.value.用户编号,
+        (状态, 消息) => {
+          if (状态 === 'error') {
+            错误信息.value = 消息 || '实时消息连接失败'
+          } else if (状态 === 'reconnecting') {
+            提示信息.value = 消息 || '实时连接正在恢复…'
+          } else if (状态 === 'connected' && 消息) {
+            提示信息.value = 消息
+          }
+        },
+        强制刷新,
+      )
+    } catch (原因) {
+      错误信息.value = 原因 instanceof Error ? 原因.message : '实时消息配置失败'
     }
   }
 
@@ -416,9 +408,7 @@ export function 使用任务工作台() {
   }
 
   function 退出登录() {
-    实时连接序号 += 1
-    if (实时凭据刷新定时器) clearTimeout(实时凭据刷新定时器)
-    实时凭据刷新定时器 = null
+    断开全局实时服务()
     清除待确认消息()
     令牌.value = ''
     当前用户.value = null
@@ -426,12 +416,12 @@ export function 使用任务工作台() {
     我的积分账户.value = null
     我的积分流水.value = []
     聊天会话列表.value = []
+    好友聊天会话列表.value = []
+    消息会话列表.value = []
     当前任务.value = null
     消息列表.value = []
     localStorage.removeItem(用户令牌存储键)
     localStorage.removeItem(用户资料存储键)
-    实时客户端?.end(true)
-    实时客户端 = null
   }
 
   async function 发布任务() {
@@ -440,6 +430,7 @@ export function 使用任务工作台() {
     正在处理.value = true
     try {
       const 幂等键 = 发布任务幂等键.value || 生成唯一编号()
+      const 报酬积分 = Number(任务表单数据.value.reward_points)
       发布任务幂等键.value = 幂等键
       await 请求<任务>('/tasks', {
         method: 'POST',
@@ -447,7 +438,9 @@ export function 使用任务工作台() {
         body: JSON.stringify({
           title: 任务表单数据.value.title,
           description: 任务表单数据.value.description,
-          reward_points: 任务表单数据.value.reward_points,
+          ...(Number.isInteger(报酬积分)
+            ? { reward_points: 报酬积分 }
+            : {}),
           deadline: 任务表单数据.value.deadline
             ? new Date(任务表单数据.value.deadline).toISOString()
             : null,
@@ -474,7 +467,12 @@ export function 使用任务工作台() {
         reward_points: 0,
         位置: null,
       }
-      发布反馈状态.value = { 状态: 'success', 消息: '委托发布成功，报酬积分已托管。' }
+      发布反馈状态.value = {
+        状态: 'success',
+        消息: 报酬积分 > 0
+          ? '委托发布成功，报酬积分已托管。'
+          : '委托发布成功，本委托不设置积分报酬。',
+      }
       提示信息.value = '委托已发布'
       await 加载任务()
       await 加载我的任务()
@@ -515,7 +513,7 @@ export function 使用任务工作台() {
       await 加载我的任务()
       await 加载积分账户()
       await 加载聊天会话()
-      await 连接实时服务()
+      await 连接实时服务(true)
     } catch (原因) {
       错误信息.value = 原因 instanceof Error ? 原因.message : '操作失败'
       await 加载任务()
@@ -555,9 +553,6 @@ export function 使用任务工作台() {
   }
 
   function 清除待确认消息() {
-    聊天发送序号 += 1
-    if (消息回执定时器) clearTimeout(消息回执定时器)
-    消息回执定时器 = null
     待确认消息.value = null
     消息待确认.value = false
     正在发送聊天消息.value = false
@@ -565,11 +560,6 @@ export function 使用任务工作台() {
 
   async function 发送聊天消息() {
     if (!当前任务.value || !当前用户.value || 正在发送聊天消息.value) return
-    if (!实时客户端?.connected) {
-      错误信息.value = '实时消息服务未连接，请稍后重试'
-      return
-    }
-
     const 待发送项 = 待确认消息.value ?? {
       任务编号: 当前任务.value.任务编号,
       客户端消息编号: 生成唯一编号(),
@@ -583,45 +573,37 @@ export function 使用任务工作台() {
 
     待确认消息.value = 待发送项
     正在发送聊天消息.value = true
-    消息待确认.value = false
-    const 发送序号 = ++聊天发送序号
-    if (消息回执定时器) clearTimeout(消息回执定时器)
-    const 等待服务器验证 = () => {
-      消息回执定时器 = setTimeout(() => {
-        if (
-          聊天发送序号 === 发送序号 &&
-          待确认消息.value?.客户端消息编号 === 待发送项.客户端消息编号
-        ) {
-          正在发送聊天消息.value = false
-          消息待确认.value = false
-          提示信息.value = '服务器暂未确认，可点击“重试发送”再次提交'
-        }
-      }, 15_000)
-    }
-    等待服务器验证()
-    const 主题 = `renwu/${待发送项.任务编号}/message_requests/${当前用户.value.用户编号}`
-    const 请求内容 = JSON.stringify({
-      客户端消息编号: 待发送项.客户端消息编号,
-      消息正文: 待发送项.正文,
-    })
-    实时客户端.publish(主题, 请求内容, { qos: 1, retain: false }, (原因) => {
-      if (
-        聊天发送序号 !== 发送序号 ||
-        待确认消息.value?.客户端消息编号 !== 待发送项.客户端消息编号
-      ) return
-      if (消息回执定时器) clearTimeout(消息回执定时器)
-      消息回执定时器 = null
-      正在发送聊天消息.value = false
-      if (原因) {
-        消息待确认.value = false
-        错误信息.value = `消息发送失败：${原因.message}`
-        return
+    消息待确认.value = true
+    错误信息.value = ''
+    try {
+      const 已保存消息 = await 请求<消息>(
+        `/tasks/${encodeURIComponent(待发送项.任务编号)}/messages`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            客户端消息编号: 待发送项.客户端消息编号,
+            消息正文: 待发送项.正文,
+          }),
+        },
+      )
+      if (当前任务.value?.任务编号 === 待发送项.任务编号) {
+        const 消息按编号 = new Map(
+          [...消息列表.value, 已保存消息].map((消息项) => [消息项.消息编号, 消息项]),
+        )
+        消息列表.value = [...消息按编号.values()].sort((左侧, 右侧) =>
+          左侧.创建时间.localeCompare(右侧.创建时间),
+        )
       }
       消息表单数据.value = ''
-      消息待确认.value = true
-      提示信息.value = '消息已发送，等待服务器验证…'
-      等待服务器验证()
-    })
+      清除待确认消息()
+      提示信息.value = '消息已保存并发送'
+      void 加载聊天会话()
+    } catch (原因) {
+      错误信息.value = 原因 instanceof Error ? 原因.message : '任务聊天消息发送失败'
+    } finally {
+      正在发送聊天消息.value = false
+      消息待确认.value = false
+    }
   }
 
   function 获取任务操作(任务项: 任务): 任务操作项[] {
@@ -657,14 +639,13 @@ export function 使用任务工作台() {
       await 加载我的任务()
       await 加载积分账户()
       await 加载聊天会话()
-      await 连接实时服务()
+      await 连接实时服务(true)
     }
   })
 
   onBeforeUnmount(() => {
-    if (实时凭据刷新定时器) clearTimeout(实时凭据刷新定时器)
-    if (消息回执定时器) clearTimeout(消息回执定时器)
-    实时客户端?.end(true)
+    取消实时事件订阅()
+    断开全局实时服务()
   })
 
   return {
@@ -674,6 +655,8 @@ export function 使用任务工作台() {
     我的积分账户,
     我的积分流水,
     聊天会话列表,
+    好友聊天会话列表,
+    消息会话列表,
     当前任务,
     当前委托详情,
     正在加载委托详情,

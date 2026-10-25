@@ -14,12 +14,13 @@
 - 普通用户、运营员、管理员角色；运营员/管理员可以停用或恢复账号。
 - 委托发布、浏览、接单、开始、提交完成、委托方验收并结算、取消、接单者释放；状态与积分账务使用同一数据库事务和行锁。
 - 内部积分账户、可用/冻结余额、追加式交易流水；发布委托时托管积分，验收后发给接单者，取消或过期时退回发布者。
-- 任务参与者的持久聊天、幂等客户端消息编号、REST 历史补拉。
-- 消息页展示按任务区分的联系人会话及最近一条消息；进入独立聊天页后先通过 REST 加载历史，新消息由前端发布 MQTT 请求、worker 异步校验任务参与权限并写入数据库，再通过 MQTT 广播，前端只将监听到的已验证消息渲染到聊天记录。
+- 委托接单成功时，在接单事务内为该委托创建专属群聊，发布者为群主、接单者为唯一成员；释放委托会移除当前接单者，之后的新接单者不能查看上一轮聊天历史。
+- 好友私聊与普通群聊保持独立；群组、成员、邀请和消息分别存于 `"群_群组"`、`"群_成员"`、`"群_邀请"`、`"群_消息"`。委托群禁止邀请、移除和退出，成员只能由接单/释放委托流程变更。
+- 消息页统一展示委托群聊、好友私聊和普通群聊；消息通过 HTTP 校验并持久化，随后服务端通过 MQTT 推送实时事件。浏览器只订阅和监听 MQTT，不发布聊天消息。
 - 中文 PostgreSQL 业务表/字段。
 - 事务发件箱和 Apalis PostgreSQL worker；定期处理过期任务，MQTT QoS 1 PUBACK 确认后才标记事件已投递。
 - Vue 任务工作台和 MQTT.js 实时订阅。Broker JWT 包含用户可订阅的任务主题 ACL，权限范围最多返回最近 100 个相关任务。
-- Vue 前端使用固定底部导航拆分为“任务、需求广场、发布需求、消息、我”；任务页默认打开，展示登录用户已接取的任务，个人页提供账号登录/注册和退出，聊天集中在消息页。
+- Vue 前端使用固定底部导航拆分为“任务、需求广场、发布需求、消息、群聊、联系人、我”；任务页默认打开，展示登录用户已接取的任务，个人页提供账号登录/注册和退出。
 
 积分仅为站内记账单位，不可提现或用户间自由转让。新账号的初始积分为 0；运营员/管理员通过审计接口发放积分。历史委托的报酬为空且不可接单；新委托报酬要求为 1 至 1,000,000,000 的整数积分。系统不包含外部支付、管理员界面、文件附件、邮件/短信、刷新令牌、生产级速率限制与账号找回。部署前应按实际业务补充这些能力和相应测试。
 
@@ -33,7 +34,7 @@
 - [配置.rs](./rust_houduan/src/配置.rs)：环境变量读取、校验和运行配置。
 - [共享.rs](./rust_houduan/src/共享.rs)：跨层共享状态、请求/响应数据结构与错误映射。
 - [接口.rs](./rust_houduan/src/接口.rs)：路由、HTTP 中间件、CORS 和监听地址。
-- [接口/](./rust_houduan/src/接口)：认证、任务、聊天、实时凭据、管理接口。
+- [接口/](./rust_houduan/src/接口)：认证、任务、聊天、好友、独立群聊、实时凭据、管理接口；群聊 HTTP 逻辑集中在 [群聊.rs](./rust_houduan/src/接口/群聊.rs)。
 - `GET /api/v1/my/tasks`：需要登录，返回当前用户已接取的任务列表。
 - `GET /api/v1/my/conversations`：需要登录，返回当前用户参与且已有聊天记录的会话、联系人和最近消息摘要。
 - `GET /api/v1/my/points`：需要登录，返回当前用户可用、冻结和总积分。
@@ -69,7 +70,7 @@ $owner = (Get-NetTCPConnection -LocalPort 8080 -State Listen).OwningProcess
 Get-Process -Id $owner
 ```
 
-仅在确认该 PID 是自己启动的旧服务后再停止它，或在 `rust_houduan/.env` 将 `API_BIND` 改为其他可用地址。不要终止不认识的进程。日常开发可运行一次 `cargo run` 启动 API 与 worker，再运行前端 `npm run dev`。**实时聊天必须保持 API、worker 和前端同时运行**：前端经 MQTT 提交聊天请求，worker 校验用户/任务参与权限后保存并将已验证消息写入事务发件箱，再广播 MQTT；API 用于登录和历史消息查询。部署时仍建议使用下方 systemd 模板分别运行 API 和 worker。
+仅在确认该 PID 是自己启动的旧服务后再停止它，或在 `rust_houduan/.env` 将 `API_BIND` 改为其他可用地址。不要终止不认识的进程。日常开发可运行一次 `cargo run` 启动 API 和 worker，再运行前端 `npm run dev`。**实时聊天必须保持 API、worker、前端和 MQTT Broker 同时运行**：委托群聊与好友私聊均通过 HTTP 提交，API 返回成功表示消息已写入数据库；worker 负责扫描并重试未确认的发件箱事件。API 和 worker 都需要连接 MQTT Broker。部署时仍建议使用下方 systemd 模板分别运行 API 和 worker。
 
 ## 本机后端连接内网 PostgreSQL / EMQX
 
@@ -116,9 +117,9 @@ Get-Process -Id $owner
 
 1. 部署时只启用 WSS/TLS 客户端 listener；管理 Dashboard 限制为本机/管理网可达。开发时可用隔离 Broker 的内网 WS listener。
 2. 创建从 MQTT `password` 读取 JWT 的 HMAC JWT authenticator，算法 HS256，密钥内容与 API 的 `MQTT_JWT_SECRET` 完全一致，关闭 Base64 secret 解码（除非密钥按 Base64 配置）。
-3. 授权规则使用 JWT `acl` claim；未匹配的主题一律 deny。用户 JWT 的 `acl.pub` 仅允许发布到该用户参与任务的 `renwu/{任务编号}/message_requests/{用户编号}`；`acl.sub` 只包含这些任务的 events/messages 及该用户的 message_receipts 主题。前端不得发布广播主题或订阅通配符。
-4. Worker 发布连接使用 `MQTT_USERNAME`，仅允许发布 `renwu/+/events` 与 `renwu/+/messages`。聊天请求消费者使用独立 Client ID，仅允许订阅 `renwu/+/message_requests/+` 并向 `renwu/+/message_receipts/+` 发布拒绝回执。
-5. Broker 必须设置连接和消息大小限制。前端重连后仍需走 REST 拉取历史/任务；不能将 MQTT 当作唯一存储。
+3. 启用 JWT 的 `acl` claim 授权；未匹配的主题一律 deny。用户 JWT 的 `acl.pub` 为空，`acl.sub` 仅包含该用户参与任务的 events/messages 主题和个人通知主题 `renwu/users/{用户编号}/notifications`。前端不得发布 MQTT 消息、订阅其他用户主题或订阅任意通配符。
+4. API 与 worker 共用后端发布凭据 `MQTT_USERNAME`，JWT 仅允许发布 `renwu/+/events`、`renwu/+/messages` 和 `renwu/users/+/notifications`。旧任务聊天 MQTT 请求消费者目前仍订阅 `renwu/+/message_requests/+`，但写入校验已拒绝旧委托聊天，并仅向 `renwu/+/message_receipts/+` 发布拒绝回执；移除该消费者后再撤销相应 Broker ACL。
+5. 浏览器看到 WebSocket `101 Switching Protocols` 只代表 WebSocket 握手成功；还需在 MQTT 网络帧/客户端日志中确认 MQTT `CONNACK` 成功、目标主题 `SUBACK` 获授权，并确认 worker 对应事件已发布。Broker 必须设置连接和消息大小限制。断线重连或首次打开消息页时仍通过 REST 加载历史会话；实时新消息由 MQTT 事件直接更新界面，不能将 MQTT 当作唯一存储。
 
 首次接入前，应在本地或测试环境验证 MQTT JWT 的用户字段、ACL claim 和未匹配默认 deny 行为。Broker 具体设置界面/配置字段可能随 EMQX 版本改变，不能省略 ACL 验收。
 
@@ -126,7 +127,11 @@ Get-Process -Id $owner
 
 所有 HTTP JSON 响应字段均使用中文；例如登录响应为 `{"访问令牌":"...","令牌类型":"Bearer","有效秒数":7200,"用户":{"用户编号":"...","登录名":"...","昵称":"..."}}`。任务、聊天、实时凭据、管理响应及错误响应也均使用对应中文数据库/业务字段名（错误信息键为 `消息`）。请求体字段和查询参数仍使用当前英文键名。
 
-发送聊天内容不再使用 HTTP POST：登录后通过 MQTT 向 `renwu/{任务编号}/message_requests/{用户编号}` 发布 `{ "客户端消息编号": "...", "消息正文": "..." }`。Worker 校验主题身份、账号状态、任务参与关系和消息字段，通过后持久化消息并广播到 `renwu/{任务编号}/messages`；拒绝请求时向用户专属的 `message_receipts` 主题返回校验错误。前端进入会话时先 GET 历史消息，之后以 MQTT 事件作为实时消息渲染来源。
+接单接口在更新委托状态的同一事务内创建/复用该委托关联群组，并加入发布者和当前接单者。委托消息仅通过群聊 HTTP 接口读写；`GET /api/v1/tasks/{id}/group-chat` 仅向有效委托群成员返回群组编号。释放委托会撤销原接单者的成员身份，下次接单时新成员从群内当前序号之后开始查看。迁移 `202610250003_commission_group_chat.sql` 为历史已接单委托建立关联群、复制旧任务聊天消息，并限制历史消息只对发布者可见；`"聊天消息"` 旧表暂时保留用于回滚/归档。
+
+旧任务消息接口 `GET/POST /api/v1/tasks/{id}/messages` 已不再用于前端委托聊天；关联群已存在时返回冲突，未建立委托群时不允许读写。好友私聊通过 `POST /api/v1/my/friends/{friend_id}/messages` 发送。事务发件箱之后经 MQTT 向个人通知主题发布好友私聊和群消息事件。消息页通过 `GET /api/v1/my/message-conversations` 一次获取委托群、好友私聊和普通群聊会话，并按最近消息时间统一排序。
+
+普通群聊由用户自主创建和管理；委托群使用相同的群组/成员/消息存储，但由委托状态机专门管理，禁止普通邀请、移除和退出。群消息通过 HTTP 持久化，同一事务给每个有效成员写事务发件箱，随后经该成员个人通知主题发布 `group.message_created`；群内序号由群组行锁定并递增分配。普通群首版人数上限 100，邀请好友确认后生效，新成员只能查看加入后的消息；HTTP 成功表示消息已保存，MQTT 负责实时通知。
 
 | 方法 | 路径 | 登录要求 |
 |---|---|---|
@@ -142,9 +147,26 @@ Get-Process -Id $owner
 | POST | `/api/v1/tasks/{id}/accept-completion` | 是；发布者验收并发放积分 |
 | POST | `/api/v1/tasks/{id}/cancel` | 是 |
 | POST | `/api/v1/tasks/{id}/release` | 是 |
-| GET | `/api/v1/tasks/{id}/messages` | 是；仅任务参与者，读取聊天历史 |
+| GET | `/api/v1/tasks/{id}/messages` | 是；旧委托聊天接口，不再提供委托消息读写 |
+| POST | `/api/v1/tasks/{id}/messages` | 是；旧委托聊天接口，不再提供委托消息读写 |
 | GET | `/api/v1/my/tasks` | 是；查询当前用户已接取的任务 |
 | GET | `/api/v1/my/conversations` | 是；查询当前用户的聊天会话 |
+| GET | `/api/v1/my/message-conversations` | 是；统一查询委托、好友私聊和群聊会话 |
+| GET | `/api/v1/tasks/{id}/group-chat` | 是；返回当前用户可访问的委托群组编号 |
+| GET | `/api/v1/my/friends` | 是；查询好友列表 |
+| GET | `/api/v1/my/friend-conversations` | 是；首次加载好友私聊会话 |
+| POST | `/api/v1/my/friends/{friend_id}/messages` | 是；写入好友私聊消息 |
+| POST | `/api/v1/groups` | 是；创建群组并成为群主 |
+| GET | `/api/v1/my/groups` | 是；查询我的群组及最近消息摘要 |
+| GET | `/api/v1/my/group-invitations` | 是；查询待处理群邀请 |
+| GET | `/api/v1/groups/{group_id}` | 是；查询群详情及成员（仅群成员） |
+| POST | `/api/v1/groups/{group_id}/invitations` | 是；群主/管理员邀请好友 |
+| POST | `/api/v1/group-invitations/{invitation_id}/accept` | 是；接受邀请并加入群组 |
+| POST | `/api/v1/group-invitations/{invitation_id}/reject` | 是；拒绝群邀请 |
+| GET | `/api/v1/groups/{group_id}/messages?before_sequence=...&limit=50` | 是；查询群消息历史（仅有效成员） |
+| POST | `/api/v1/groups/{group_id}/messages` | 是；幂等写入群消息并通知成员 |
+| DELETE | `/api/v1/groups/{group_id}/members/{user_id}` | 是；群主/管理员移除成员 |
+| DELETE | `/api/v1/groups/{group_id}/leave` | 是；退出群组（群主须先转让身份） |
 | GET | `/api/v1/my/points` | 是；查询积分账户余额 |
 | GET | `/api/v1/my/points/ledger` | 是；查询积分流水 |
 | POST | `/api/v1/realtime/credentials` | 是 |
