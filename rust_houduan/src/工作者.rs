@@ -42,7 +42,7 @@ pub(crate) async fn 发布单个发件箱事件(
     数据库: &PgPool,
     消息代理: &消息发布器,
     事件编号: Uuid,
-) -> Result<()> {
+) -> Result<bool> {
     let mut 事务 = 数据库.begin().await?;
     let 已领取记录 = sqlx::query(
         r#"UPDATE "事务发件箱" SET "重试次数" = "重试次数" + 1,
@@ -56,7 +56,7 @@ pub(crate) async fn 发布单个发件箱事件(
     .await?;
     let Some(已领取记录) = 已领取记录 else {
         事务.rollback().await?;
-        return Ok(());
+        return Ok(false);
     };
     let 主题: String = 已领取记录.get("主题");
     let 事件内容: Value = 已领取记录.get("事件内容");
@@ -71,6 +71,7 @@ pub(crate) async fn 发布单个发件箱事件(
             .execute(数据库)
             .await?;
             info!(%事件编号, %主题, "MQTT outbox event delivered");
+            Ok(true)
         }
         Err(err) => {
             warn!(%事件编号, %主题, error = %err, "MQTT publish failed; event will retry");
@@ -81,9 +82,9 @@ pub(crate) async fn 发布单个发件箱事件(
             .bind(事件编号)
             .execute(数据库)
             .await?;
+            Ok(false)
         }
     }
-    Ok(())
 }
 
 async fn 处理过期任务(数据库: &PgPool) -> Result<()> {
@@ -222,7 +223,7 @@ pub(crate) async fn 连接消息代理() -> Result<消息发布器> {
                         .expect("MQTT acknowledgement lock poisoned")
                         .remove(&ack.pkid)
                     {
-                        info!(%事件编号, packet_id = ack.pkid, "MQTT event delivery acknowledged");
+                        info!(%事件编号, packet_id = ack.pkid, "MQTT QoS 1 event delivery acknowledged");
                         let _ = 发送者.send(());
                     }
                 }
@@ -286,7 +287,7 @@ impl 消息发布器 {
 
         match timeout(Duration::from_secs(15), receiver).await {
             Ok(Ok(())) => Ok(()),
-            Ok(Err(_)) => Err(anyhow::anyhow!("MQTT acknowledgement channel closed")),
+            Ok(Err(_)) => Err(anyhow::anyhow!("MQTT QoS 1 acknowledgement channel closed")),
             Err(_) => Err(anyhow::anyhow!("MQTT QoS 1 acknowledgement timed out")),
         }
     }

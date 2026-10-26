@@ -6,7 +6,7 @@ import { 使用任务工作台 } from './组合式/使用任务工作台'
 import { 使用消息会话状态 } from './状态/消息会话状态'
 import type { 消息会话, 任务, 任务位置 } from './领域/类型'
 
-type 页面路由名 = 'tasks' | 'square' | 'publish' | 'messages' | 'contacts' | 'groups' | 'chat' | 'profile'
+type 页面路由名 = 'tasks' | 'square' | 'publish' | 'messages' | 'contacts' | 'world' | 'groups' | 'chat' | 'profile'
 
 const route = useRoute()
 const router = useRouter()
@@ -47,9 +47,9 @@ const {
 } = 使用任务工作台()
 
 const 导航项目: { 名称: string; 路由名: 页面路由名; 图标: string }[] = [
-  { 名称: '委托广场', 路由名: 'square', 图标: '▦' },
   { 名称: '消息', 路由名: 'messages', 图标: '◌' },
   { 名称: '联系人', 路由名: 'contacts', 图标: '♧' },
+  { 名称: '世界', 路由名: 'world', 图标: '◉' },
   { 名称: '我', 路由名: 'profile', 图标: '○' },
 ]
 
@@ -113,6 +113,8 @@ const 页面属性 = computed<Record<string, unknown>>(() => {
       }
     case 'contacts':
       return { 当前用户: 当前用户.value }
+    case 'world':
+      return {}
     case 'group-create':
     case 'friend-search':
       return { 当前用户: 当前用户.value }
@@ -299,13 +301,13 @@ watch(() => route.name, () => {
       >
         <button
           :aria-current="route.name === 项目.路由名 ||
-            (route.name === 'tasks' && 项目.路由名 === 'square') ||
+            ((route.name === 'tasks' || route.name === 'square') && 项目.路由名 === 'world') ||
             (route.name === 'chat' && 项目.路由名 === 'messages') ||
             ((route.name === 'friend-search' || route.name === 'group-create') &&
               项目.路由名 === 'contacts') ? 'page' : undefined"
           :class="{
             active: route.name === 项目.路由名 ||
-              (route.name === 'tasks' && 项目.路由名 === 'square') ||
+              ((route.name === 'tasks' || route.name === 'square') && 项目.路由名 === 'world') ||
               (route.name === 'chat' && 项目.路由名 === 'messages') ||
               ((route.name === 'friend-search' || route.name === 'group-create') &&
                 项目.路由名 === 'contacts'),

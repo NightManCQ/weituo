@@ -10,6 +10,7 @@ import LocationPickerPage from './页面/位置选择页.vue'
 import PublishTaskPage from './页面/发布需求页.vue'
 import TaskPage from './页面/任务页.vue'
 import TaskSquarePage from './页面/需求广场页.vue'
+import WorldPage from './页面/世界.vue'
 
 const routes: RouteRecordRaw[] = [
   { path: '/', redirect: { name: 'tasks' } },
@@ -39,6 +40,7 @@ const routes: RouteRecordRaw[] = [
   },
   { path: '/friends/chat/:friendId', name: 'friend-chat', component: ChatPage },
   { path: '/contacts', name: 'contacts', component: ContactsPage },
+  { path: '/world', name: 'world', component: WorldPage },
   { path: '/select-location', name: 'location', component: LocationPickerPage },
   { path: '/profile', name: 'profile', component: ProfilePage },
   { path: '/:pathMatch(.*)*', redirect: { name: 'tasks' } },
