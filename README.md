@@ -19,7 +19,7 @@
 - 消息页统一展示委托群聊、好友私聊和普通群聊；消息通过 HTTP 校验并持久化，随后服务端通过 MQTT 推送实时事件。浏览器只订阅和监听 MQTT，不发布聊天消息。
 - 中文 PostgreSQL 业务表/字段。
 - 事务发件箱和 Apalis PostgreSQL worker；定期处理过期任务，MQTT QoS 1 PUBACK 确认后才标记事件已投递。
-- Vue 任务工作台和 MQTT.js 实时订阅。Broker JWT 包含用户可订阅的任务主题 ACL，权限范围最多返回最近 100 个相关任务。
+- Vue 任务工作台和 MQTT.js 实时订阅。Broker JWT 按当前有效群成员关系与登录账号签发订阅 ACL。
 - Vue 前端使用固定底部导航拆分为“任务、需求广场、发布需求、消息、群聊、联系人、我”；任务页默认打开，展示登录用户已接取的任务，个人页提供账号登录/注册和退出。
 
 积分仅为站内记账单位，不可提现或用户间自由转让。新账号的初始积分为 0；运营员/管理员通过审计接口发放积分。历史委托的报酬为空且不可接单；新委托报酬要求为 1 至 1,000,000,000 的整数积分。系统不包含外部支付、管理员界面、文件附件、邮件/短信、刷新令牌、生产级速率限制与账号找回。部署前应按实际业务补充这些能力和相应测试。
@@ -112,12 +112,12 @@ Get-Process -Id $owner
 
 ### MQTT JWT 配置
 
-本后端对每个已登录用户签发 5 分钟 MQTT 专用 JWT，不复用 API Bearer token。按 [EMQX JWT 认证文档](https://docs.emqx.com/en/emqx/latest/guides/access-control/authn/jwt.html) 和 [JWT ACL 格式文档](https://docs.emqx.com/en/emqx/latest/guides/access-control/authn/acl.html) 配置：
+本后端对每个已登录用户签发 60 秒 MQTT 专用 JWT，不复用 API Bearer token。按 [EMQX JWT 认证文档](https://docs.emqx.com/en/emqx/latest/guides/access-control/authn/jwt.html) 和 [JWT ACL 格式文档](https://docs.emqx.com/en/emqx/latest/guides/access-control/authn/acl.html) 配置：
 
 1. 部署时只启用 WSS/TLS 客户端 listener；管理 Dashboard 限制为本机/管理网可达。开发时可用隔离 Broker 的内网 WS listener。
 2. 创建从 MQTT `password` 读取 JWT 的 HMAC JWT authenticator，算法 HS256，密钥内容与 API 的 `MQTT_JWT_SECRET` 完全一致，关闭 Base64 secret 解码（除非密钥按 Base64 配置）。
-3. 启用 JWT 的 `acl` claim 授权；未匹配的主题一律 deny。用户 JWT 的 `acl.pub` 为空，`acl.sub` 仅包含该用户参与任务的 events 主题和个人通知主题 `renwu/users/{用户编号}/notifications`。前端不得发布 MQTT 消息、订阅其他用户主题或订阅任意通配符。
-4. API 与 worker 共用后端发布凭据 `MQTT_USERNAME`，JWT 仅允许发布 `renwu/+/events` 和 `renwu/users/+/notifications`。任务聊天 MQTT 请求消费者及其 `message_requests` / `message_receipts` 主题已移除；部署 Broker 时同步删除这些旧主题 ACL。
+3. 启用 JWT 的 `acl` claim 授权；未匹配的主题一律 deny。用户 JWT 的 `acl.pub` 为空，`acl.sub` 只包含当前有效群成员对应的 `q/{群聊id}` 和个人通知主题 `u/{用户账号}`。关联委托群的任务状态事件也发布到该群的 `q/{群聊id}`；尚无关联群的任务事件（例如新发布、未接单或过期）发送到发布者的个人 `u/{用户账号}`，因此用户不再订阅单独的任务主题。个人账号主题段不得包含 `/`、`+`、`#` 或 NUL。实时令牌有效 60 秒，前端每 30 秒刷新凭据并重连，以尽快应用成员变更；浏览器后台计时器可能被节流，严格即时撤权仍需 Broker 主动断开/撤销支持。前端不得发布 MQTT 消息、订阅其他用户主题或订阅任意通配符。
+4. API 与 worker 共用后端发布凭据 `MQTT_USERNAME`，新事件仅向 `q/+` 和 `u/+` 发布。worker JWT 暂时保留 `renwu/+/events`，用于投递升级前已写入事务发件箱的旧任务事件，不再用于新事件或客户端订阅。群消息每条只写一条事务发件箱记录并发布到对应 `q/{群聊id}`；好友私聊和单用户通知发到每位接收者各自的 `u/{用户账号}`。任务聊天 MQTT 请求消费者及其 `message_requests` / `message_receipts` 主题已移除；部署 Broker 时同步删除这些旧主题 ACL。
 5. 浏览器看到 WebSocket `101 Switching Protocols` 只代表 WebSocket 握手成功；还需在 MQTT 网络帧/客户端日志中确认 MQTT `CONNACK` 成功、目标主题 `SUBACK` 获授权，并确认 worker 对应事件已发布。Broker 必须设置连接和消息大小限制。断线重连或首次打开消息页时仍通过 REST 加载历史会话；实时新消息由 MQTT 事件直接更新界面，不能将 MQTT 当作唯一存储。
 
 首次接入前，应在本地或测试环境验证 MQTT JWT 的用户字段、ACL claim 和未匹配默认 deny 行为。Broker 具体设置界面/配置字段可能随 EMQX 版本改变，不能省略 ACL 验收。
@@ -126,9 +126,9 @@ Get-Process -Id $owner
 
 所有 HTTP JSON 响应字段均使用中文；例如登录响应为 `{"访问令牌":"...","令牌类型":"Bearer","有效秒数":7200,"用户":{"用户编号":"...","登录名":"...","昵称":"..."}}`。任务、群聊、实时凭据、管理响应及错误响应也均使用对应中文数据库/业务字段名（错误信息键为 `消息`）。请求体字段和查询参数仍使用当前英文键名。
 
-接单接口在更新委托状态的同一事务内创建/复用该委托关联群组，并加入发布者和当前接单者。委托消息仅通过群聊 HTTP 接口读写；`GET /api/v1/tasks/{id}/group-chat` 仅向有效委托群成员返回群组编号。释放委托会撤销原接单者的成员身份，下次接单时新成员从群内当前序号之后开始查看。迁移 `202610250003_commission_group_chat.sql` 将旧聊天历史复制到委托群；后续迁移 `202610250004_remove_legacy_task_chat.sql` 删除旧 `"聊天消息"` 表和未投递的旧任务聊天事件，并移除旧任务聊天 HTTP/MQTT 后端入口。好友私聊通过 `POST /api/v1/my/friends/{friend_id}/messages` 发送。事务发件箱之后经 MQTT 向个人通知主题发布好友私聊和群消息事件。消息页通过 `GET /api/v1/my/message-conversations` 一次获取委托群、好友私聊和普通群聊会话，并按最近消息时间统一排序。
+接单接口在更新委托状态的同一事务内创建/复用该委托关联群组，并加入发布者和当前接单者。委托消息仅通过群聊 HTTP 接口读写；`GET /api/v1/tasks/{id}/group-chat` 仅向有效委托群成员返回群组编号。释放委托会撤销原接单者的成员身份，下次接单时新成员从群内当前序号之后开始查看。迁移 `202610250003_commission_group_chat.sql` 将旧聊天历史复制到委托群；后续迁移 `202610250004_remove_legacy_task_chat.sql` 删除旧 `"聊天消息"` 表和未投递的旧任务聊天事件，并移除旧任务聊天 HTTP/MQTT 后端入口。好友私聊通过 `POST /api/v1/my/friends/{friend_id}/messages` 发送。事务发件箱之后经 MQTT 向 `u/{用户账号}` 发布私聊和单用户通知，向 `q/{群聊id}` 发布群消息。消息页通过 `GET /api/v1/my/message-conversations` 一次获取委托群、好友私聊和普通群聊会话，并按最近消息时间统一排序。
 
-普通群聊由用户自主创建和管理；委托群使用相同的群组/成员/消息存储，但由委托状态机专门管理，禁止普通邀请、移除和退出。群消息通过 HTTP 持久化，同一事务给每个有效成员写事务发件箱，随后经该成员个人通知主题发布 `group.message_created`；群内序号由群组行锁定并递增分配。普通群首版人数上限 100，邀请好友确认后生效，新成员只能查看加入后的消息；HTTP 成功表示消息已保存，MQTT 负责实时通知。
+普通群聊由用户自主创建和管理；委托群使用相同的群组/成员/消息存储，但由委托状态机专门管理，禁止普通邀请、移除和退出。群消息通过 HTTP 持久化，同一事务写入一条 `group.message_created` outbox 事件，发布到 `q/{群聊id}`；群内序号由群组行锁定并递增分配。普通群首版人数上限 100，邀请好友确认后生效，新成员只能查看加入后的消息；HTTP 成功表示消息已保存，MQTT 负责实时通知。凭据只包含当前有效成员的群主题，成员变更在客户端每 30 秒刷新凭据并重连后生效。
 
 | 方法 | 路径 | 登录要求 |
 |---|---|---|

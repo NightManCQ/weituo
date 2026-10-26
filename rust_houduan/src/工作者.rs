@@ -90,12 +90,15 @@ async fn 处理过期任务(数据库: &PgPool) -> Result<()> {
     loop {
         let mut 事务 = 数据库.begin().await?;
         let 记录集 = sqlx::query(
-            r#"SELECT "任务编号", "发布者编号"
-               FROM "任务"
-               WHERE "任务状态" = '待接单' AND "截止时间" <= now()
-               ORDER BY "截止时间"
+            r#"SELECT t."任务编号", t."发布者编号", u."登录名",
+                      (SELECT g."群组编号" FROM "群_群组" g
+                       WHERE g."关联任务编号" = t."任务编号") AS "群组编号"
+               FROM "任务" t
+               JOIN "用户" u ON u."用户编号" = t."发布者编号"
+               WHERE t."任务状态" = '待接单' AND t."截止时间" <= now()
+               ORDER BY t."截止时间"
                LIMIT 50
-               FOR UPDATE SKIP LOCKED"#,
+               FOR UPDATE OF t SKIP LOCKED"#,
         )
         .fetch_all(&mut *事务)
         .await?;
@@ -107,6 +110,9 @@ async fn 处理过期任务(数据库: &PgPool) -> Result<()> {
         for 记录 in &记录集 {
             let 任务编号: Uuid = 记录.get("任务编号");
             let 发布者编号: Uuid = 记录.get("发布者编号");
+            let 登录名: String = 记录.get("登录名");
+            let 群组编号: Option<Uuid> = 记录.get("群组编号");
+            let 主题 = 构造任务事件主题(群组编号, &登录名)?;
             crate::接口::积分::退款委托报酬(&mut 事务, 任务编号, None, None).await?;
             let 事件编号 = Uuid::new_v4();
             let 更新结果 = sqlx::query(
@@ -142,7 +148,7 @@ async fn 处理过期任务(数据库: &PgPool) -> Result<()> {
                    VALUES ($1, 'task.expired', $2, $3)"#,
             )
             .bind(事件编号)
-            .bind(format!("renwu/{任务编号}/events"))
+            .bind(主题)
             .bind(事件)
             .execute(&mut *事务)
             .await?;
@@ -182,7 +188,8 @@ pub(crate) async fn 连接消息代理() -> Result<消息发布器> {
             访问控制: 消息访问控制 {
                 发布权限: vec![
                     "renwu/+/events".to_owned(),
-                    "renwu/users/+/notifications".to_owned(),
+                    "q/+".to_owned(),
+                    "u/+".to_owned(),
                 ],
                 订阅权限: Vec::new(),
             },

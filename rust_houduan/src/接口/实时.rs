@@ -26,24 +26,41 @@ pub(super) async fn 获取实时凭据(
             "MQTT_JWT_SECRET 至少需要 32 字节"
         )));
     }
-    let 任务记录集 = sqlx::query(
-        r#"SELECT "任务编号" FROM "任务"
-           WHERE ("发布者编号" = $1 OR "接单者编号" = $1)
-           ORDER BY "更新时间" DESC LIMIT 100"#,
+    let 登录名: String = sqlx::query_scalar(
+        r#"SELECT "登录名" FROM "用户"
+           WHERE "用户编号" = $1 AND "账号状态" = '正常'"#,
+    )
+    .bind(用户.编号)
+    .fetch_optional(&状态.数据库)
+    .await?
+    .ok_or_else(|| 应用错误::未授权("账号不存在或已停用".into()))?;
+    if !是安全的_mqtt账号主题段(&登录名) {
+        return Err(应用错误::请求错误(
+            "登录名包含 MQTT 主题不支持的字符，无法建立实时连接".into(),
+        ));
+    }
+    let 群组记录集 = sqlx::query(
+        r#"SELECT g."群组编号"
+           FROM "群_成员" m
+           JOIN "群_群组" g ON g."群组编号" = m."群组编号"
+           WHERE m."用户编号" = $1
+             AND m."成员状态" = '有效'
+             AND g."群组状态" = '正常'
+           ORDER BY g."群组编号""#,
     )
     .bind(用户.编号)
     .fetch_all(&状态.数据库)
     .await?;
-    let 主题列表: Vec<String> = 任务记录集
+    let mut 主题列表: Vec<String> = 群组记录集
         .iter()
-        .flat_map(|记录| {
-            let 编号: Uuid = 记录.get("任务编号");
-            [format!("renwu/{编号}/events")]
+        .map(|记录| {
+            let 群组编号: Uuid = 记录.get("群组编号");
+            format!("q/{群组编号}")
         })
         .collect();
-    let mut 主题列表: Vec<String> = 主题列表;
-    主题列表.push(format!("renwu/users/{}/notifications", 用户.编号));
-    let 过期时间 = (Utc::now() + ChronoDuration::minutes(5)).timestamp() as usize;
+    主题列表.push(format!("u/{登录名}"));
+    let 有效秒数: u64 = 60;
+    let 过期时间 = (Utc::now() + ChronoDuration::seconds(60)).timestamp() as usize;
     let 消息令牌 = encode(
         &Header::default(),
         &消息令牌声明 {
@@ -61,7 +78,7 @@ pub(super) async fn 获取实时凭据(
         消息地址: 主机地址,
         消息令牌,
         主题列表,
-        有效秒数: 300,
-        说明: "EMQX 必须配置 MQTT_JWT_SECRET 对应的 JWT 认证器并启用 ACL claim；仅订阅当前用户参与的任务事件主题及个人通知主题",
+        有效秒数,
+        说明: "EMQX 必须配置 MQTT_JWT_SECRET 对应的 JWT 认证器并启用 ACL claim；仅订阅当前用户有效群组及本人通知主题",
     }))
 }

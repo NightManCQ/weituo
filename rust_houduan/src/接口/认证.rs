@@ -108,12 +108,14 @@ pub(super) async fn 注册用户(
     let 登录用户 = 事件内容.登录名.trim();
     let 昵称 = 事件内容.昵称.trim();
     if !(3..=64).contains(&登录用户.chars().count())
+        || !是安全的_mqtt账号主题段(登录用户)
         || 事件内容.密码.len() < 10
         || 事件内容.密码.len() > 128
         || !(1..=40).contains(&昵称.chars().count())
     {
         return Err(应用错误::请求错误(
-            "登录名长度需为 3-64，密码需为 10-128 字节，昵称需为 1-40 个字符".into(),
+            "登录名长度需为 3-64 且不能包含 /、+、#，密码需为 10-128 字节，昵称需为 1-40 个字符"
+                .into(),
         ));
     }
     let 盐值 = SaltString::generate(&mut OsRng);

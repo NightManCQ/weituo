@@ -401,13 +401,18 @@ pub(super) async fn 邀请群成员(
             "委托群成员由委托接单关系管理".into(),
         ));
     }
-    let 目标用户正常 =
-        sqlx::query(r#"SELECT 1 FROM "用户" WHERE "用户编号" = $1 AND "账号状态" = '正常'"#)
-            .bind(内容.用户编号)
-            .fetch_optional(&mut *事务)
-            .await?;
-    if 目标用户正常.is_none() {
-        return Err(应用错误::未找到("用户不存在或已停用".into()));
+    let 目标用户登录名: String = sqlx::query_scalar(
+        r#"SELECT "登录名" FROM "用户"
+           WHERE "用户编号" = $1 AND "账号状态" = '正常'"#,
+    )
+    .bind(内容.用户编号)
+    .fetch_optional(&mut *事务)
+    .await?
+    .ok_or_else(|| 应用错误::未找到("用户不存在或已停用".into()))?;
+    if !是安全的_mqtt账号主题段(&目标用户登录名) {
+        return Err(应用错误::请求错误(
+            "目标用户登录名包含 MQTT 主题不支持的字符".into(),
+        ));
     }
     let 已是好友 = sqlx::query(
         r#"SELECT 1 FROM "好友关系"
@@ -491,7 +496,7 @@ pub(super) async fn 邀请群成员(
            VALUES ($1, 'group.invitation_created', $2, $3)"#,
     )
     .bind(事件编号)
-    .bind(format!("renwu/users/{}/notifications", 内容.用户编号))
+    .bind(format!("u/{目标用户登录名}"))
     .bind(事件)
     .execute(&mut *事务)
     .await?;
@@ -877,61 +882,44 @@ pub(super) async fn 发送群消息(
     .await?;
     let 发送者昵称: String = 群组.get("发送者昵称");
     let 创建时间: DateTime<Utc> = 消息记录.get("创建时间");
-    let 成员列表 = sqlx::query(
-        r#"SELECT "用户编号" FROM "群_成员"
-           WHERE "群组编号" = $1 AND "成员状态" = '有效'"#,
-    )
-    .bind(群组编号)
-    .fetch_all(&mut *事务)
-    .await?;
-    let mut 待发布事件编号 = Vec::with_capacity(成员列表.len());
-    for 成员 in 成员列表 {
-        let 接收用户编号: Uuid = 成员.get("用户编号");
-        let 事件编号 = Uuid::new_v4();
-        let 事件 = serde_json::json!({
-            "事件编号": 事件编号,
-            "事件类型": "group.message_created",
-            "结构版本": 1,
-            "发生时间": 创建时间,
+    let 事件编号 = Uuid::new_v4();
+    let 事件 = serde_json::json!({
+        "事件编号": 事件编号,
+        "事件类型": "group.message_created",
+        "结构版本": 1,
+        "发生时间": 创建时间,
+        "群组编号": 群组编号,
+        "数据": {
+            "消息编号": 消息编号,
             "群组编号": 群组编号,
-            "数据": {
-                "消息编号": 消息编号,
-                "群组编号": 群组编号,
-                "群内序号": 群内序号,
-                "接收用户编号": 接收用户编号,
-                "发送者编号": 用户编号,
-                "发送者昵称": 发送者昵称.clone(),
-                "客户端消息编号": 内容.客户端消息编号.trim(),
-                "消息正文": 正文,
-                "创建时间": 创建时间
-            }
-        });
-        sqlx::query(
-            r#"INSERT INTO "事务发件箱" ("事件编号", "事件类型", "主题", "事件内容")
-               VALUES ($1, 'group.message_created', $2, $3)"#,
-        )
-        .bind(事件编号)
-        .bind(format!("renwu/users/{接收用户编号}/notifications"))
-        .bind(事件)
-        .execute(&mut *事务)
-        .await?;
-        待发布事件编号.push(事件编号);
-    }
+            "群内序号": 群内序号,
+            "发送者编号": 用户编号,
+            "发送者昵称": 发送者昵称,
+            "客户端消息编号": 内容.客户端消息编号.trim(),
+            "消息正文": 正文,
+            "创建时间": 创建时间
+        }
+    });
+    sqlx::query(
+        r#"INSERT INTO "事务发件箱" ("事件编号", "事件类型", "主题", "事件内容")
+           VALUES ($1, 'group.message_created', $2, $3)"#,
+    )
+    .bind(事件编号)
+    .bind(format!("q/{群组编号}"))
+    .bind(事件)
+    .execute(&mut *事务)
+    .await?;
     事务.commit().await?;
 
     let 数据库 = 状态.数据库.clone();
     let 消息代理 = 状态.消息代理.clone();
-    for 事件编号 in 待发布事件编号 {
-        let 数据库 = 数据库.clone();
-        let 消息代理 = 消息代理.clone();
-        tokio::spawn(async move {
-            if let Err(错误) =
-                crate::工作者::发布单个发件箱事件(&数据库, &消息代理, 事件编号).await
-            {
-                tracing::error!(%事件编号, error = %错误, "immediate group MQTT delivery failed");
-            }
-        });
-    }
+    tokio::spawn(async move {
+        if let Err(错误) =
+            crate::工作者::发布单个发件箱事件(&数据库, &消息代理, 事件编号).await
+        {
+            tracing::error!(%事件编号, error = %错误, "immediate group MQTT delivery failed");
+        }
+    });
     Ok(Json(群消息视图 {
         消息编号,
         群组编号,

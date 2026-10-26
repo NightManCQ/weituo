@@ -118,12 +118,13 @@ async fn 为用户发布任务(
         "任务编号": 编号,
         "数据": {"任务状态": "待接单"}
     });
+    let 主题 = 查询任务事件主题(&mut 事务, 编号).await?;
     sqlx::query(
         r#"INSERT INTO "事务发件箱" ("事件编号", "事件类型", "主题", "事件内容")
                    VALUES ($1, 'task.created', $2, $3)"#,
     )
     .bind(事件编号)
-    .bind(format!("renwu/{编号}/events"))
+    .bind(主题)
     .bind(事件)
     .execute(&mut *事务)
     .await?;
@@ -460,12 +461,13 @@ async fn 修改用户任务(
     .bind(幂等键)
     .execute(&mut *事务)
     .await?;
+    let 主题 = 查询任务事件主题(&mut 事务, 任务编号).await?;
     sqlx::query(
         r#"INSERT INTO "事务发件箱" ("事件编号", "事件类型", "主题", "事件内容")
                    VALUES ($1, 'task.updated', $2, $3)"#,
     )
     .bind(事件编号)
-    .bind(format!("renwu/{任务编号}/events"))
+    .bind(主题)
     .bind(事件)
     .execute(&mut *事务)
     .await?;
@@ -633,7 +635,7 @@ async fn 流转任务状态(
         }
     }
     let 事件编号 = Uuid::new_v4();
-    let 主题 = format!("renwu/{任务编号}/events");
+    let 主题 = 查询任务事件主题(&mut 事务, 任务编号).await?;
     let 事件 = json!({
         "事件编号": 事件编号,
         "事件类型": 事件类型,
@@ -668,6 +670,26 @@ async fn 流转任务状态(
     .await?;
     事务.commit().await?;
     Ok(Json(映射任务记录(&记录)))
+}
+
+async fn 查询任务事件主题(
+    事务: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    任务编号: Uuid,
+) -> Result<String, 应用错误> {
+    let 记录 = sqlx::query(
+        r#"SELECT g."群组编号", u."登录名"
+           FROM "任务" t
+           JOIN "用户" u ON u."用户编号" = t."发布者编号"
+           LEFT JOIN "群_群组" g ON g."关联任务编号" = t."任务编号"
+           WHERE t."任务编号" = $1"#,
+    )
+    .bind(任务编号)
+    .fetch_optional(&mut **事务)
+    .await?
+    .ok_or_else(|| 应用错误::未找到("任务不存在，无法生成实时主题".into()))?;
+    let 群组编号: Option<Uuid> = 记录.get("群组编号");
+    let 发布者登录名: String = 记录.get("登录名");
+    Ok(构造任务事件主题(群组编号, &发布者登录名)?)
 }
 
 pub(super) async fn 接取任务(
