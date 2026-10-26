@@ -1,7 +1,6 @@
 use std::env;
 
 use axum::{Json, extract::State};
-use chrono::{Duration as ChronoDuration, Utc};
 use jsonwebtoken::{EncodingKey, Header, encode};
 use sqlx::Row;
 use uuid::Uuid;
@@ -59,12 +58,10 @@ pub(super) async fn 获取实时凭据(
         })
         .collect();
     主题列表.push(format!("u/{登录名}"));
-    let 有效秒数: u64 = 60;
-    let 过期时间 = (Utc::now() + ChronoDuration::seconds(60)).timestamp() as usize;
     let 消息令牌 = encode(
         &Header::default(),
         &消息令牌声明 {
-            过期时间,
+            过期时间: None,
             用户名: 用户.编号.to_string(),
             访问控制: 消息访问控制 {
                 发布权限: Vec::new(),
@@ -78,7 +75,6 @@ pub(super) async fn 获取实时凭据(
         消息地址: 主机地址,
         消息令牌,
         主题列表,
-        有效秒数,
         说明: "EMQX 必须配置 MQTT_JWT_SECRET 对应的 JWT 认证器并启用 ACL claim；仅订阅当前用户有效群组及本人通知主题",
     }))
 }

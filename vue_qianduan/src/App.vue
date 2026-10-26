@@ -1,13 +1,17 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { storeToRefs } from 'pinia'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { 使用任务工作台 } from './组合式/使用任务工作台'
+import { 使用消息会话状态 } from './状态/消息会话状态'
 import type { 消息会话, 任务, 任务位置 } from './领域/类型'
 
 type 页面路由名 = 'tasks' | 'square' | 'publish' | 'messages' | 'contacts' | 'groups' | 'chat' | 'profile'
 
 const route = useRoute()
 const router = useRouter()
+const 消息会话状态 = 使用消息会话状态()
+const { 会话列表 } = storeToRefs(消息会话状态)
 const {
   当前用户,
   任务列表,
@@ -17,12 +21,10 @@ const {
   我发布的委托还有更多,
   我发布的委托加载错误,
   我的委托归属,
-  消息会话列表,
   当前委托详情,
   错误信息,
   提示信息,
   正在处理,
-  正在加载聊天会话,
   正在加载委托详情,
   委托详情错误,
   是否注册,
@@ -31,7 +33,6 @@ const {
   发布反馈状态,
   我的积分账户,
   我的积分流水,
-  状态筛选,
   提交认证,
   退出登录,
   加载任务,
@@ -39,7 +40,6 @@ const {
   加载积分账户,
   加载委托详情,
   清除委托详情,
-  加载聊天会话,
   发布任务,
   执行任务操作,
   获取任务操作,
@@ -48,7 +48,6 @@ const {
 
 const 导航项目: { 名称: string; 路由名: 页面路由名; 图标: string }[] = [
   { 名称: '委托广场', 路由名: 'square', 图标: '▦' },
-  { 名称: '发布委托', 路由名: 'publish', 图标: '＋' },
   { 名称: '消息', 路由名: 'messages', 图标: '◌' },
   { 名称: '联系人', 路由名: 'contacts', 图标: '♧' },
   { 名称: '我', 路由名: 'profile', 图标: '○' },
@@ -82,13 +81,8 @@ const 页面属性 = computed<Record<string, unknown>>(() => {
       return {
         当前用户: 当前用户.value,
         任务列表: 任务列表.value,
-        状态筛选: 状态筛选.value,
         格式化日期,
         获取任务操作,
-        'on更新:状态筛选': async (状态: string) => {
-          状态筛选.value = 状态
-          await 加载任务()
-        },
         on刷新: 加载任务,
         on发布需求: () => router.push({ name: 'publish' }),
         on我的委托: () => router.push({ name: 'tasks' }),
@@ -113,10 +107,7 @@ const 页面属性 = computed<Record<string, unknown>>(() => {
     case 'messages':
       return {
         当前用户: 当前用户.value,
-        消息会话列表: 消息会话列表.value,
-        正在加载: 正在加载聊天会话.value,
         格式化日期,
-        on刷新: 加载聊天会话,
         on打开会话: 打开消息会话,
         on前往个人中心: () => router.push({ name: 'profile' }),
       }
@@ -182,7 +173,7 @@ const 页面属性 = computed<Record<string, unknown>>(() => {
 })
 
 watch(() => route.name, (路由名) => {
-  if (路由名 === 'messages' && 当前用户.value) void 加载聊天会话()
+  if (路由名 === 'messages' && 当前用户.value) void 消息会话状态.刷新会话列表()
   if (路由名 === 'publish' && 当前用户.value) void 加载积分账户()
 })
 
@@ -323,7 +314,7 @@ watch(() => route.name, () => {
         >
           <span class="nav-icon" aria-hidden="true">{{ 项目.图标 }}</span>
           <span class="nav-label">{{ 项目.名称 }}</span>
-          <i v-if="项目.路由名 === 'messages' && 消息会话列表.length" class="nav-indicator"></i>
+          <i v-if="项目.路由名 === 'messages' && 会话列表.length" class="nav-indicator"></i>
         </button>
       </RouterLink>
     </nav>

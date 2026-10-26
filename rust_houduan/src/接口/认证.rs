@@ -9,7 +9,6 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Response},
 };
-use chrono::{Duration as ChronoDuration, Utc};
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use sqlx::Row;
 use tracing::error;
@@ -25,10 +24,12 @@ pub(super) async fn 验证可选身份(
     if let Some(值) = 请求.headers().get(header::AUTHORIZATION) {
         let 认证内容 = 值.to_str().unwrap_or_default();
         if let Some(令牌) = 认证内容.strip_prefix("Bearer ") {
+            let mut 校验规则 = Validation::default();
+            校验规则.required_spec_claims.remove("exp");
             match decode::<令牌声明>(
                 令牌,
                 &DecodingKey::from_secret(状态.令牌密钥.as_bytes()),
-                &Validation::default(),
+                &校验规则,
             ) {
                 Ok(令牌数据) => {
                     match sqlx::query(
@@ -91,7 +92,7 @@ pub(super) async fn 验证可选身份(
 fn 签发访问令牌(用户编号: Uuid, 密钥: &str) -> Result<String, 应用错误> {
     let 令牌内容 = 令牌声明 {
         主体: 用户编号,
-        过期时间: (Utc::now() + ChronoDuration::hours(2)).timestamp() as usize,
+        过期时间: None,
     };
     encode(
         &Header::default(),
@@ -166,7 +167,6 @@ pub(super) async fn 注册用户(
         Json(认证响应 {
             访问令牌: 令牌,
             令牌类型: "Bearer",
-            有效秒数: 7200,
             用户,
         }),
     ))
@@ -202,7 +202,30 @@ pub(super) async fn 登录用户(
     Ok(Json(认证响应 {
         访问令牌: 令牌,
         令牌类型: "Bearer",
-        有效秒数: 7200,
         用户,
     }))
+}
+
+#[cfg(test)]
+mod 访问令牌测试 {
+    use super::签发访问令牌;
+    use crate::共享::令牌声明;
+    use jsonwebtoken::{DecodingKey, Validation, decode};
+    use uuid::Uuid;
+
+    #[test]
+    fn 访问令牌不包含过期时间且可通过校验() {
+        let 用户编号 = Uuid::new_v4();
+        let 密钥 = "测试用的访问令牌签名密钥";
+        let 令牌 = 签发访问令牌(用户编号, 密钥).expect("访问令牌应能签发");
+        let mut 校验规则 = Validation::default();
+        校验规则.required_spec_claims.remove("exp");
+
+        let 解码结果 =
+            decode::<令牌声明>(&令牌, &DecodingKey::from_secret(密钥.as_bytes()), &校验规则)
+                .expect("没有过期时间的访问令牌应能通过校验");
+
+        assert_eq!(解码结果.claims.主体, 用户编号);
+        assert_eq!(解码结果.claims.过期时间, None);
+    }
 }

@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { storeToRefs } from 'pinia'
 import { 发送请求 } from '../接口/请求'
 import { 订阅实时事件 } from '../实时/消息中心'
+import { 使用消息会话状态 } from '../状态/消息会话状态'
 import type { 消息会话, 用户 } from '../领域/类型'
 
 type 好友申请 = {
@@ -19,16 +21,16 @@ type 消息列表项 =
 
 const 属性 = defineProps<{
   当前用户: 用户 | null
-  消息会话列表: 消息会话[]
-  正在加载: boolean
   格式化日期: (日期: string) => string
 }>()
 
 const emit = defineEmits<{
-  刷新: []
   打开会话: [会话: 消息会话]
   前往个人中心: []
 }>()
+
+const 消息会话状态 = 使用消息会话状态()
+const { 会话列表, 正在加载, 加载错误 } = storeToRefs(消息会话状态)
 
 type 消息分类 = '全部' | '好友验证' | 消息会话['会话类型']
 const 当前分类 = ref<消息分类>('全部')
@@ -41,24 +43,24 @@ const 申请反馈 = ref('')
 let 申请加载序号 = 0
 
 const 分类列表 = computed(() => [
-  { 名称: '全部' as const, 数量: 属性.消息会话列表.length + 好友申请列表.value.length },
+  { 名称: '全部' as const, 数量: 会话列表.value.length + 好友申请列表.value.length },
   { 名称: '好友验证' as const, 数量: 好友申请列表.value.length },
   {
     名称: '好友' as const,
-    数量: 属性.消息会话列表.filter((会话) => 会话.会话类型 === '好友').length,
+    数量: 会话列表.value.filter((会话) => 会话.会话类型 === '好友').length,
   },
   {
     名称: '群聊' as const,
-    数量: 属性.消息会话列表.filter((会话) => 会话.会话类型 === '群聊').length,
+    数量: 会话列表.value.filter((会话) => 会话.会话类型 === '群聊').length,
   },
   {
     名称: '委托' as const,
-    数量: 属性.消息会话列表.filter((会话) => 会话.会话类型 === '委托').length,
+    数量: 会话列表.value.filter((会话) => 会话.会话类型 === '委托').length,
   },
 ])
 
 const 消息列表 = computed<消息列表项[]>(() => [
-  ...属性.消息会话列表.map((会话) => ({
+  ...会话列表.value.map((会话) => ({
     类型: '会话' as const,
     键: `${会话.会话类型}:${会话.会话编号}`,
     时间: 会话.最近消息时间,
@@ -138,7 +140,7 @@ async function 处理好友申请(申请: 好友申请, 操作: 'accept' | 'reje
     )
     申请反馈.value = 操作 === 'accept' ? `已添加 ${申请.昵称} 为好友` : '已拒绝好友申请'
     await 加载好友申请()
-    if (操作 === 'accept') emit('刷新')
+    if (操作 === 'accept') void 消息会话状态.刷新会话列表()
   } catch (原因) {
     申请错误.value = 原因 instanceof Error ? 原因.message : '处理好友申请失败'
   } finally {
@@ -147,7 +149,7 @@ async function 处理好友申请(申请: 好友申请, 操作: 'accept' | 'reje
 }
 
 function 刷新消息() {
-  emit('刷新')
+  void 消息会话状态.刷新会话列表()
   void 加载好友申请()
 }
 
@@ -182,6 +184,7 @@ onBeforeUnmount(取消好友申请订阅)
     <template v-if="当前用户">
       <div v-if="申请错误" class="im-request-feedback im-request-error" role="alert">{{ 申请错误 }}</div>
       <div v-if="申请反馈" class="im-request-feedback im-request-success" role="status">{{ 申请反馈 }}</div>
+      <div v-if="加载错误" class="im-request-feedback im-request-error" role="alert">{{ 加载错误 }}</div>
       <div class="im-toolbar">
         <label class="im-search">
           <span aria-hidden="true">⌕</span>

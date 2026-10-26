@@ -114,7 +114,6 @@ export type 群消息 = {
 export type 认证结果 = {
   访问令牌: string
   令牌类型: string
-  有效秒数: number
   用户: 用户
 }
 

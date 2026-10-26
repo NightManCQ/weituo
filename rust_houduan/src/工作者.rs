@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use apalis::prelude::*;
 use apalis_postgres::PostgresStorage;
-use chrono::{Duration as ChronoDuration, Utc};
+use chrono::Utc;
 use jsonwebtoken::{EncodingKey, Header, encode};
 use rumqttc::{AsyncClient, Event, MqttOptions, Outgoing, Packet, QoS, Transport};
 use serde_json::{Value, json};
@@ -183,7 +183,7 @@ pub(crate) async fn 连接消息代理() -> Result<消息发布器> {
     let 消息令牌 = encode(
         &Header::default(),
         &消息令牌声明 {
-            过期时间: (Utc::now() + ChronoDuration::days(3650)).timestamp() as usize,
+            过期时间: None,
             用户名: 消息用户名.clone(),
             访问控制: 消息访问控制 {
                 发布权限: vec![

@@ -7,13 +7,11 @@ type 任务操作项 = { key: 任务操作; label: string }
 defineProps<{
   当前用户: 用户 | null
   任务列表: 任务[]
-  状态筛选: string
   格式化日期: (日期: string) => string
   获取任务操作: (任务项: 任务) => 任务操作项[]
 }>()
 
 const emit = defineEmits<{
-  '更新:状态筛选': [状态: string]
   刷新: []
   发布需求: []
   执行操作: [任务项: 任务, 操作: 任务操作]
@@ -21,7 +19,6 @@ const emit = defineEmits<{
   登录: []
 }>()
 
-const 状态选项 = ['待接单', '已接单', '进行中', '待验收', '已完成', '已取消', '已过期']
 </script>
 
 <template>
@@ -42,12 +39,8 @@ const 状态选项 = ['待接单', '已接单', '进行中', '待验收', '已�
       </div>
     </div>
     <div class="list-heading">
-      <div><div class="section-eyebrow">浏览委托</div><h2>全部委托</h2></div>
+      <div><div class="section-eyebrow">浏览委托</div><h2>待接单委托</h2></div>
       <div class="list-controls">
-        <select :value="状态筛选" aria-label="按委托状态筛选" @change="emit('更新:状态筛选', ($event.target as HTMLSelectElement).value)">
-          <option value="">全部状态</option>
-          <option v-for="状态 in 状态选项" :key="状态">{{ 状态 }}</option>
-        </select>
         <button class="button button-quiet" @click="emit('刷新')">刷新 ↻</button>
       </div>
     </div>

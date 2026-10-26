@@ -79,8 +79,8 @@ impl IntoResponse for 应用错误 {
 pub(crate) struct 令牌声明 {
     #[serde(rename = "sub")]
     pub(crate) 主体: Uuid,
-    #[serde(rename = "exp")]
-    pub(crate) 过期时间: usize,
+    #[serde(rename = "exp", skip_serializing_if = "Option::is_none")]
+    pub(crate) 过期时间: Option<usize>,
 }
 
 #[derive(Clone, Debug)]
@@ -93,7 +93,6 @@ pub(crate) struct 当前用户 {
 pub(crate) struct 认证响应 {
     pub(crate) 访问令牌: String,
     pub(crate) 令牌类型: &'static str,
-    pub(crate) 有效秒数: u64,
     pub(crate) 用户: 用户视图,
 }
 
@@ -186,14 +185,13 @@ pub(crate) struct 实时连接信息 {
     pub(crate) 消息地址: String,
     pub(crate) 消息令牌: String,
     pub(crate) 主题列表: Vec<String>,
-    pub(crate) 有效秒数: u64,
     pub(crate) 说明: &'static str,
 }
 
 #[derive(Serialize, Deserialize)]
 pub(crate) struct 消息令牌声明 {
-    #[serde(rename = "exp")]
-    pub(crate) 过期时间: usize,
+    #[serde(rename = "exp", skip_serializing_if = "Option::is_none")]
+    pub(crate) 过期时间: Option<usize>,
     #[serde(rename = "username")]
     pub(crate) 用户名: String,
     #[serde(rename = "acl")]
@@ -305,11 +303,10 @@ mod 响应字段测试 {
         let 认证数据 = serde_json::to_value(认证响应 {
             访问令牌: "token".into(),
             令牌类型: "Bearer",
-            有效秒数: 7200,
             用户,
         })
         .expect("认证响应应可序列化");
-        校验字段(&认证数据, &["访问令牌", "令牌类型", "有效秒数", "用户"]);
+        校验字段(&认证数据, &["访问令牌", "令牌类型", "用户"]);
         校验字段(&认证数据["用户"], &["用户编号", "登录名", "昵称"]);
 
         let 任务数据 = serde_json::to_value(任务视图 {
@@ -347,19 +344,36 @@ mod 响应字段测试 {
             消息地址: "wss://example.invalid/mqtt".into(),
             消息令牌: "token".into(),
             主题列表: Vec::new(),
-            有效秒数: 60,
             说明: "说明",
         })
         .expect("实时凭据响应应可序列化");
-        校验字段(
-            &实时数据,
-            &["消息地址", "消息令牌", "主题列表", "有效秒数", "说明"],
-        );
+        校验字段(&实时数据, &["消息地址", "消息令牌", "主题列表", "说明"]);
 
         let 错误数据 = serde_json::to_value(接口错误 {
             消息: "错误".into(),
         })
         .expect("错误响应应可序列化");
         校验字段(&错误数据, &["消息"]);
+    }
+
+    #[test]
+    fn 用户与消息代理令牌均不序列化过期时间() {
+        let 用户令牌 = serde_json::to_value(令牌声明 {
+            主体: Uuid::nil(),
+            过期时间: None,
+        })
+        .expect("用户令牌声明应可序列化");
+        assert!(用户令牌.get("exp").is_none());
+
+        let 消息令牌 = serde_json::to_value(消息令牌声明 {
+            过期时间: None,
+            用户名: Uuid::nil().to_string(),
+            访问控制: 消息访问控制 {
+                发布权限: Vec::new(),
+                订阅权限: Vec::new(),
+            },
+        })
+        .expect("消息令牌声明应可序列化");
+        assert!(消息令牌.get("exp").is_none());
     }
 }

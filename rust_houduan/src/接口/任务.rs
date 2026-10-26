@@ -761,7 +761,16 @@ async fn 流转任务状态(
         "结构版本": 2,
         "发生时间": Utc::now(),
         "任务编号": 任务编号,
-        "数据": {"任务状态": new_status}
+        "数据": {
+            "任务状态": new_status,
+            "发布者编号": 发布者,
+            "标题": 当前记录.get::<String, _>("标题"),
+            "消息": if 操作 == "claim" {
+                format!("你的委托《{}》已被接单", 当前记录.get::<String, _>("标题"))
+            } else {
+                String::new()
+            }
+        }
     });
     sqlx::query(
         r#"INSERT INTO "任务事件"

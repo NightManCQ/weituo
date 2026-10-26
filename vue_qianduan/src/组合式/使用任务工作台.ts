@@ -2,7 +2,8 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { 请求异常, 发送请求 } from '../接口/请求'
 import { 生成唯一编号 } from '../领域/编号'
 import { 连接全局实时服务, 断开全局实时服务, 订阅实时事件, type 实时事件 } from '../实时/消息中心'
-import type { 认证结果, 积分账户, 积分流水, 消息会话, 任务, 任务操作, 任务位置, 用户 } from '../领域/类型'
+import { 使用消息会话状态 } from '../状态/消息会话状态'
+import type { 认证结果, 积分账户, 积分流水, 任务, 任务操作, 任务位置, 用户 } from '../领域/类型'
 
 type 认证表单 = { login_name: string; password: string; nickname: string }
 type 任务表单 = {
@@ -65,6 +66,7 @@ function 读取当前用户(): 用户 | null {
 }
 
 export function 使用任务工作台() {
+  const 消息会话状态 = 使用消息会话状态()
   const 令牌 = ref(localStorage.getItem(用户令牌存储键) || '')
   const 当前用户 = ref(读取当前用户())
   const 任务列表 = ref<任务[]>([])
@@ -76,14 +78,12 @@ export function 使用任务工作台() {
   const 我发布的委托加载错误 = ref('')
   const 我发布的委托分类 = ref<我发布的委托分类>('all')
   const 我的委托归属 = ref<我的委托归属>('published')
-  const 消息会话列表 = ref<消息会话[]>([])
   const 当前委托详情 = ref<任务 | null>(null)
   const 正在加载委托详情 = ref(false)
   const 委托详情错误 = ref('')
   const 错误信息 = ref('')
   const 提示信息 = ref('')
   const 正在处理 = ref(false)
-  const 正在加载聊天会话 = ref(false)
   const 是否注册 = ref(false)
   const 认证表单数据 = ref<认证表单>({ login_name: '', password: '', nickname: '' })
   const 任务表单数据 = ref<任务表单>({
@@ -96,11 +96,14 @@ export function 使用任务工作台() {
   const 我的积分账户 = ref<积分账户 | null>(null)
   const 我的积分流水 = ref<积分流水[]>([])
   const 发布反馈状态 = ref<发布反馈>({ 状态: 'idle', 消息: '' })
-  const 状态筛选 = ref('')
+  const 状态筛选 = ref('待接单')
   const 发布任务幂等键 = ref<string | null>(null)
   const 任务操作幂等键 = new Map<string, string>()
   let 委托详情请求序号 = 0
   let 我发布的委托请求序号 = 0
+
+  消息会话状态.开始监听实时事件()
+  消息会话状态.设置身份(令牌.value, 当前用户.value?.用户编号 ?? null)
 
   const 可见任务 = computed(() => 任务列表.value)
   const 我的协作任务 = computed(() => {
@@ -126,7 +129,7 @@ export function 使用任务工作台() {
   async function 加载任务() {
     清除提示()
     try {
-      const 查询参数 = 状态筛选.value ? `?status=${encodeURIComponent(状态筛选.value)}` : ''
+      const 查询参数 = `?status=${encodeURIComponent(状态筛选.value)}`
       const 任务结果 = await 请求<任务[]>(`/tasks${查询参数}`)
       任务列表.value = 任务结果
     } catch (原因) {
@@ -247,34 +250,28 @@ export function 使用任务工作台() {
   }
 
   async function 加载聊天会话() {
-    if (!当前用户.value) {
-      消息会话列表.value = []
-      return
-    }
-    正在加载聊天会话.value = true
-    try {
-      消息会话列表.value = await 请求<消息会话[]>('/my/message-conversations')
-    } catch (原因) {
-      错误信息.value = 原因 instanceof Error ? 原因.message : '聊天会话加载失败'
-    } finally {
-      正在加载聊天会话.value = false
-    }
+    await 消息会话状态.刷新会话列表()
   }
 
   function 处理全局实时事件(事件: 实时事件) {
-    if (
-      事件.事件类型 === 'friend.message_created' ||
-      事件.事件类型 === 'group.message_created'
-    ) {
-      void 加载聊天会话()
-      return
-    }
-
     if (事件.事件类型.startsWith('task.')) {
+      const 是当前用户委托被接单 =
+        事件.事件类型 === 'task.claimed' &&
+        事件.数据 &&
+        事件.数据.发布者编号 === 当前用户.value?.用户编号
       void 加载任务()
       void 加载我的任务()
       void 加载我发布的委托(我发布的委托分类.value, true)
       if (事件.事件类型 === 'task.completed') void 连接实时服务(true)
+      if (是当前用户委托被接单 && 事件.数据) {
+        const 事件消息 = 事件.数据.消息
+        const 标题 = 事件.数据.标题
+        提示信息.value = typeof 事件消息 === 'string' && 事件消息
+          ? 事件消息
+          : typeof 标题 === 'string'
+            ? `你的委托《${标题}》已被接单`
+            : '你的委托已被接单'
+      }
       return
     }
 
@@ -303,8 +300,6 @@ export function 使用任务工作台() {
             错误信息.value = 消息 || '实时消息连接失败'
           } else if (状态 === 'reconnecting') {
             提示信息.value = 消息 || '实时连接正在恢复…'
-          } else if (状态 === 'connected' && 消息) {
-            提示信息.value = 消息
           }
         },
         强制刷新,
@@ -325,6 +320,7 @@ export function 使用任务工作台() {
       })
       令牌.value = 认证结果.访问令牌
       当前用户.value = 认证结果.用户
+      消息会话状态.设置身份(令牌.value, 当前用户.value.用户编号)
       localStorage.setItem(用户令牌存储键, 令牌.value)
       localStorage.setItem(用户资料存储键, JSON.stringify(当前用户.value))
       await 加载任务()
@@ -343,6 +339,7 @@ export function 使用任务工作台() {
     断开全局实时服务()
     令牌.value = ''
     当前用户.value = null
+    消息会话状态.设置身份('', null)
     我的任务列表.value = []
     我发布的委托请求序号 += 1
     我发布的委托列表.value = []
@@ -352,7 +349,6 @@ export function 使用任务工作台() {
     正在加载我发布的委托.value = false
     我的积分账户.value = null
     我的积分流水.value = []
-    消息会话列表.value = []
     localStorage.removeItem(用户令牌存储键)
     localStorage.removeItem(用户资料存储键)
   }
@@ -510,14 +506,12 @@ export function 使用任务工作台() {
     我的委托归属,
     我的积分账户,
     我的积分流水,
-    消息会话列表,
     当前委托详情,
     正在加载委托详情,
     委托详情错误,
     错误信息,
     提示信息,
     正在处理,
-    正在加载聊天会话,
     是否注册,
     认证表单数据,
     任务表单数据,

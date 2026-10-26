@@ -14,7 +14,6 @@ type 实时凭据 = {
   消息地址: string;
   消息令牌: string;
   主题列表: string[];
-  有效秒数: number;
 };
 
 type 实时监听器 = (事件: 实时事件) => void;
@@ -26,7 +25,6 @@ let 当前身份键 = "";
 let 连接代数 = 0;
 let 正在连接身份键 = "";
 let 正在连接: Promise<void> | null = null;
-let 凭据刷新定时器: ReturnType<typeof setTimeout> | null = null;
 let 状态监听器: 连接状态监听器 | null = null;
 
 export function 订阅实时事件(监听器: 实时监听器) {
@@ -49,8 +47,6 @@ function 分发事件(事件: 实时事件) {
 }
 
 function 关闭现有连接() {
-  if (凭据刷新定时器) clearTimeout(凭据刷新定时器);
-  凭据刷新定时器 = null;
   客户端?.end(true);
   客户端 = null;
   当前身份键 = "";
@@ -117,11 +113,11 @@ export async function 连接全局实时服务(
       if (客户端 === 新客户端) 通知连接状态("reconnecting", "实时连接正在恢复…");
     });
     新客户端.on("message", (主题, 内容) => {
-      console.log("---", 主题);
-
       if (客户端 !== 新客户端) return;
+      const 原始文本 = 内容.toString();
+      // console.log(`[MQTT] 收到主题「${主题}」的数据:`, 原始文本);
       try {
-        const 原始事件: unknown = JSON.parse(内容.toString());
+        const 原始事件: unknown = JSON.parse(原始文本);
         if (typeof 原始事件 !== "object" || 原始事件 === null || Array.isArray(原始事件)) {
           throw new Error("实时消息必须是 JSON 对象");
         }
@@ -142,14 +138,16 @@ export async function 连接全局实时服务(
         if (数据 !== undefined && (typeof 数据 !== "object" || 数据 === null || Array.isArray(数据))) {
           throw new Error("实时消息数据必须是对象");
         }
-        分发事件({
+        const 实时事件对象: 实时事件 = {
           主题,
           事件类型: typeof 事件类型 === "string" ? 事件类型 : "notification.unknown",
           任务编号: typeof 任务编号 === "string" ? 任务编号 : undefined,
           会话编号: typeof 会话编号 === "string" ? 会话编号 : undefined,
           数据: 数据 as Record<string, unknown> | undefined,
           原始事件: 记录,
-        });
+        };
+        console.log(`[MQTT] 主题「${主题}」解析成功:`, 实时事件对象);
+        分发事件(实时事件对象);
       } catch (原因) {
         console.error("无法解析 MQTT 实时消息。", 原因);
         通知连接状态("error", "收到无法识别的实时消息");
@@ -162,14 +160,6 @@ export async function 连接全局实时服务(
       }
     });
 
-    凭据刷新定时器 = setTimeout(
-      () => {
-        void 连接全局实时服务(令牌, 用户编号, 用户登录名, 状态回调, true).catch((原因: unknown) => {
-          通知连接状态("error", 原因 instanceof Error ? 原因.message : "刷新实时连接凭据失败");
-        });
-      },
-      Math.max(30, 凭据.有效秒数 - 30) * 1000,
-    );
   })();
   正在连接 = 连接任务;
   try {
