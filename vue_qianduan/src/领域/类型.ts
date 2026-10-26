@@ -49,26 +49,6 @@ export type 积分流水 = {
   创建时间: string
 }
 
-export type 消息 = {
-  消息编号: string
-  任务编号: string
-  发送者编号: string
-  发送者昵称: string
-  客户端消息编号: string
-  消息正文: string
-  创建时间: string
-}
-
-export type 聊天会话 = {
-  任务编号: string
-  任务标题: string
-  任务状态: string
-  联系人编号: string
-  联系人昵称: string
-  最近消息: string
-  最近消息时间: string
-}
-
 export type 好友聊天会话 = {
   会话编号: string
   联系人编号: string
@@ -139,11 +119,3 @@ export type 认证结果 = {
 }
 
 export type 任务操作 = 'claim' | 'start' | 'complete' | 'accept-completion' | 'cancel' | 'release'
-
-export type 实时消息事件 = {
-  事件类型?: string
-  任务编号?: string
-  客户端消息编号?: string
-  错误消息?: string
-  数据?: 消息
-}

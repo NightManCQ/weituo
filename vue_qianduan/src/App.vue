@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { 使用任务工作台 } from './组合式/使用任务工作台'
 import type { 消息会话, 任务, 任务位置 } from './领域/类型'
@@ -46,7 +46,6 @@ const 导航项目: { 名称: string; 路由名: 页面路由名; 图标: string
   { 名称: '委托广场', 路由名: 'square', 图标: '▦' },
   { 名称: '发布委托', 路由名: 'publish', 图标: '＋' },
   { 名称: '消息', 路由名: 'messages', 图标: '◌' },
-  { 名称: '群聊', 路由名: 'groups', 图标: '◎' },
   { 名称: '联系人', 路由名: 'contacts', 图标: '♧' },
   { 名称: '我', 路由名: 'profile', 图标: '○' },
 ]
@@ -109,7 +108,8 @@ const 页面属性 = computed<Record<string, unknown>>(() => {
       }
     case 'contacts':
       return { 当前用户: 当前用户.value }
-    case 'groups':
+    case 'group-create':
+    case 'friend-search':
       return { 当前用户: 当前用户.value }
     case 'group-chat':
       return {
@@ -119,23 +119,11 @@ const 页面属性 = computed<Record<string, unknown>>(() => {
     case 'friend-chat':
       return {
         当前用户: 当前用户.value,
-        联系人昵称: typeof route.query.nickname === 'string' ? route.query.nickname : '好友',
-        当前任务: null,
-        消息列表: [],
-        消息表单数据: '',
-        可以聊天: false,
-        正在处理: false,
-        正在发送聊天消息: false,
-        消息待确认: false,
-        有待确认消息: false,
-        可以发送消息: false,
         好友私聊: {
           用户编号: typeof route.params.friendId === 'string' ? route.params.friendId : '',
           联系人昵称: typeof route.query.nickname === 'string' ? route.query.nickname : '好友',
         },
         on返回: () => router.push({ name: 'contacts' }),
-        'on更新:消息表单数据': () => {},
-        on发送消息: () => {},
       }
     case 'chat': {
       return {
@@ -230,6 +218,17 @@ function 完成位置选择(位置: 任务位置) {
 function 返回发布页() {
   void router.replace({ name: 'publish' })
 }
+
+function 打开联系人快捷菜单(路由名: 'group-create' | 'friend-search') {
+  联系人快捷菜单已打开.value = false
+  void router.push({ name: 路由名 })
+}
+
+const 联系人快捷菜单已打开 = ref(false)
+
+watch(() => route.name, () => {
+  联系人快捷菜单已打开.value = false
+})
 </script>
 
 <template>
@@ -241,7 +240,24 @@ function 返回发布页() {
     }"
   >
     <header v-if="route.name !== 'chat' && route.name !== 'friend-chat' && route.name !== 'group-chat'" class="topbar">
-      <RouterLink class="brand" :to="{ name: 'square' }">
+      <div v-if="route.name === 'contacts'" class="contact-create-menu">
+        <button
+          class="contact-create-trigger"
+          type="button"
+          aria-label="创建或添加"
+          :aria-expanded="联系人快捷菜单已打开"
+          @click="联系人快捷菜单已打开 = !联系人快捷菜单已打开"
+        >+</button>
+        <div v-if="联系人快捷菜单已打开" class="contact-create-popover" role="menu">
+          <button type="button" role="menuitem" @click="打开联系人快捷菜单('group-create')">
+            <span>＋</span>创建群聊
+          </button>
+          <button type="button" role="menuitem" @click="打开联系人快捷菜单('friend-search')">
+            <span>⌕</span>添加好友
+          </button>
+        </div>
+      </div>
+      <RouterLink v-else class="brand" :to="{ name: 'square' }">
         <span class="brand-mark">委</span><span>委托协作</span>
       </RouterLink>
       <div v-if="当前用户" class="user-menu">
@@ -278,10 +294,14 @@ function 返回发布页() {
       >
         <button
           :aria-current="route.name === 项目.路由名 ||
-            (route.name === 'chat' && 项目.路由名 === 'messages') ? 'page' : undefined"
+            (route.name === 'chat' && 项目.路由名 === 'messages') ||
+            ((route.name === 'friend-search' || route.name === 'group-create') &&
+              项目.路由名 === 'contacts') ? 'page' : undefined"
           :class="{
             active: route.name === 项目.路由名 ||
-              (route.name === 'chat' && 项目.路由名 === 'messages'),
+              (route.name === 'chat' && 项目.路由名 === 'messages') ||
+              ((route.name === 'friend-search' || route.name === 'group-create') &&
+                项目.路由名 === 'contacts'),
           }"
           @click="navigate"
         >

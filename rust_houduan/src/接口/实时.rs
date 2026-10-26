@@ -38,10 +38,7 @@ pub(super) async fn 获取实时凭据(
         .iter()
         .flat_map(|记录| {
             let 编号: Uuid = 记录.get("任务编号");
-            [
-                format!("renwu/{编号}/events"),
-                format!("renwu/{编号}/messages"),
-            ]
+            [format!("renwu/{编号}/events")]
         })
         .collect();
     let mut 主题列表: Vec<String> = 主题列表;
@@ -65,6 +62,6 @@ pub(super) async fn 获取实时凭据(
         消息令牌,
         主题列表,
         有效秒数: 300,
-        说明: "EMQX 必须配置 MQTT_JWT_SECRET 对应的 JWT 认证器并启用 ACL claim；仅订阅当前用户参与的任务主题及个人通知主题",
+        说明: "EMQX 必须配置 MQTT_JWT_SECRET 对应的 JWT 认证器并启用 ACL claim；仅订阅当前用户参与的任务事件主题及个人通知主题",
     }))
 }

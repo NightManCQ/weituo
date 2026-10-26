@@ -181,44 +181,6 @@ pub(crate) struct 任务列表查询 {
     pub(crate) 数量上限: Option<i64>,
 }
 
-#[derive(Deserialize)]
-pub(crate) struct 聊天上行请求 {
-    #[serde(alias = "client_message_id")]
-    pub(crate) 客户端消息编号: String,
-    #[serde(alias = "content")]
-    pub(crate) 消息正文: String,
-}
-
-#[derive(Serialize)]
-pub(crate) struct 聊天消息视图 {
-    pub(crate) 消息编号: Uuid,
-    pub(crate) 任务编号: Uuid,
-    pub(crate) 发送者编号: Uuid,
-    pub(crate) 发送者昵称: String,
-    pub(crate) 客户端消息编号: String,
-    pub(crate) 消息正文: String,
-    pub(crate) 创建时间: DateTime<Utc>,
-}
-
-#[derive(Serialize)]
-pub(crate) struct 聊天会话视图 {
-    pub(crate) 任务编号: Uuid,
-    pub(crate) 任务标题: String,
-    pub(crate) 任务状态: String,
-    pub(crate) 联系人编号: Uuid,
-    pub(crate) 联系人昵称: String,
-    pub(crate) 最近消息: String,
-    pub(crate) 最近消息时间: DateTime<Utc>,
-}
-
-#[derive(Deserialize)]
-pub(crate) struct 聊天消息查询 {
-    #[serde(rename = "after")]
-    pub(crate) 起始时间: Option<DateTime<Utc>>,
-    #[serde(rename = "limit")]
-    pub(crate) 数量上限: Option<i64>,
-}
-
 #[derive(Serialize)]
 pub(crate) struct 实时连接信息 {
     pub(crate) 消息地址: String,
@@ -284,15 +246,6 @@ mod 响应字段测试 {
     }
 
     #[test]
-    fn mqtt聊天请求支持中文协议字段() {
-        let 请求: 聊天上行请求 =
-            serde_json::from_str(r#"{"客户端消息编号":"client-id","消息正文":"你好"}"#)
-                .expect("中文聊天请求字段应可解析");
-        assert_eq!(请求.客户端消息编号, "client-id");
-        assert_eq!(请求.消息正文, "你好");
-    }
-
-    #[test]
     fn 所有接口响应均使用中文业务字段名() {
         let 时间 = DateTime::<Utc>::from_timestamp(0, 0).expect("有效时间戳");
         let 用户 = 用户视图 {
@@ -338,52 +291,6 @@ mod 响应字段测试 {
                 "版本号",
                 "位置",
                 "报酬积分",
-            ],
-        );
-
-        let 消息数据 = serde_json::to_value(聊天消息视图 {
-            消息编号: Uuid::nil(),
-            任务编号: Uuid::nil(),
-            发送者编号: Uuid::nil(),
-            发送者昵称: "测试昵称".into(),
-            客户端消息编号: "client-id".into(),
-            消息正文: "消息".into(),
-            创建时间: 时间,
-        })
-        .expect("聊天消息响应应可序列化");
-        校验字段(
-            &消息数据,
-            &[
-                "消息编号",
-                "任务编号",
-                "发送者编号",
-                "发送者昵称",
-                "客户端消息编号",
-                "消息正文",
-                "创建时间",
-            ],
-        );
-
-        let 会话数据 = serde_json::to_value(聊天会话视图 {
-            任务编号: Uuid::nil(),
-            任务标题: "任务".into(),
-            任务状态: "进行中".into(),
-            联系人编号: Uuid::nil(),
-            联系人昵称: "联系人".into(),
-            最近消息: "你好".into(),
-            最近消息时间: 时间,
-        })
-        .expect("聊天会话响应应可序列化");
-        校验字段(
-            &会话数据,
-            &[
-                "任务编号",
-                "任务标题",
-                "任务状态",
-                "联系人编号",
-                "联系人昵称",
-                "最近消息",
-                "最近消息时间",
             ],
         );
 

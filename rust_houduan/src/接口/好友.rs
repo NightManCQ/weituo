@@ -322,26 +322,64 @@ pub(super) async fn 创建好友申请(
         ));
     }
 
+    let 申请编号 = Uuid::new_v4();
+    let mut 事务 = 状态.数据库.begin().await?;
     let 插入结果 = sqlx::query(
         r#"INSERT INTO "好友申请"
            ("申请编号", "申请人编号", "目标用户编号", "申请附言")
            VALUES ($1, $2, $3, $4)"#,
     )
-    .bind(Uuid::new_v4())
+    .bind(申请编号)
     .bind(当前编号)
     .bind(申请.目标用户编号)
     .bind(附言)
-    .execute(&状态.数据库)
+    .execute(&mut *事务)
     .await;
-    if let Err(err) = 插入结果 {
-        if err
+    if let Err(错误) = 插入结果 {
+        if 错误
             .as_database_error()
             .is_some_and(|数据库| 数据库.code().as_deref() == Some("23505"))
         {
             return Err(应用错误::冲突("已有待处理的好友申请".into()));
         }
-        return Err(err.into());
+        return Err(错误.into());
     }
+
+    let 事件编号 = Uuid::new_v4();
+    let 事件 = serde_json::json!({
+        "事件编号": 事件编号,
+        "事件类型": "friend.request_created",
+        "结构版本": 1,
+        "发生时间": Utc::now(),
+        "通知用户编号": 申请.目标用户编号,
+        "数据": {
+            "申请编号": 申请编号,
+            "申请人编号": 当前编号,
+            "目标用户编号": 申请.目标用户编号,
+            "申请附言": 附言
+        }
+    });
+    sqlx::query(
+        r#"INSERT INTO "事务发件箱" ("事件编号", "事件类型", "主题", "事件内容")
+           VALUES ($1, 'friend.request_created', $2, $3)"#,
+    )
+    .bind(事件编号)
+    .bind(format!("renwu/users/{}/notifications", 申请.目标用户编号))
+    .bind(事件)
+    .execute(&mut *事务)
+    .await?;
+    事务.commit().await?;
+
+    let 数据库 = 状态.数据库.clone();
+    let 消息代理 = 状态.消息代理.clone();
+    tokio::spawn(async move {
+        if let Err(错误) =
+            crate::工作者::发布单个发件箱事件(&数据库, &消息代理, 事件编号).await
+        {
+            tracing::error!(%事件编号, error = %错误, "immediate friend request MQTT delivery failed");
+        }
+    });
+
     Ok(Json(serde_json::json!({"消息": "好友申请已发送"})))
 }
 

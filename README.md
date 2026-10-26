@@ -26,7 +26,7 @@
 
 ## Rust 后端代码分层
 
-`rust_houduan/src/` 按职责拆分启动配置、纯业务规则、HTTP 接口、共享数据模型和后台 worker；HTTP 接口继续按认证、任务、聊天、实时连接和用户管理拆分为独立文件。任务状态机位于独立领域模块，不依赖 Axum 或数据库。源文件和核心业务规则优先采用中文命名；HTTP JSON 响应使用数据库中文字段名及中文业务属性名，包含认证响应、任务、聊天、实时凭据、管理结果和错误信息。请求体字段与查询参数保持现有英文命名以兼容客户端；JWT 标准声明和 MQTT 事件类型值按协议要求保留英文，MQTT 事件 JSON 属性使用中文。
+`rust_houduan/src/` 按职责拆分启动配置、纯业务规则、HTTP 接口、共享数据模型和后台 worker；HTTP 接口按认证、任务、好友、群聊、实时连接和用户管理拆分为独立文件。任务状态机位于独立领域模块，不依赖 Axum 或数据库。源文件和核心业务规则优先采用中文命名；HTTP JSON 响应使用数据库中文字段名及中文业务属性名，包含认证响应、任务、群聊、实时凭据、管理结果和错误信息。请求体字段与查询参数保持现有英文命名以兼容客户端；JWT 标准声明和 MQTT 事件类型值按协议要求保留英文，MQTT 事件 JSON 属性使用中文。
 
 例如登录响应使用 `访问令牌`、`令牌类型`、`有效秒数`、`用户`，其中用户字段为 `用户编号`、`登录名`、`昵称`；任务和聊天响应分别使用数据库字段名 `任务编号`、`任务状态`、`消息编号`、`消息正文` 等。Rust 响应结构体直接序列化中文字段名，不再通过 serde 将其改写成英文键。
 
@@ -34,9 +34,8 @@
 - [配置.rs](./rust_houduan/src/配置.rs)：环境变量读取、校验和运行配置。
 - [共享.rs](./rust_houduan/src/共享.rs)：跨层共享状态、请求/响应数据结构与错误映射。
 - [接口.rs](./rust_houduan/src/接口.rs)：路由、HTTP 中间件、CORS 和监听地址。
-- [接口/](./rust_houduan/src/接口)：认证、任务、聊天、好友、独立群聊、实时凭据、管理接口；群聊 HTTP 逻辑集中在 [群聊.rs](./rust_houduan/src/接口/群聊.rs)。
+- [接口/](./rust_houduan/src/接口)：认证、任务、好友、独立群聊、实时凭据、管理接口；群聊 HTTP 逻辑集中在 [群聊.rs](./rust_houduan/src/接口/群聊.rs)。
 - `GET /api/v1/my/tasks`：需要登录，返回当前用户已接取的任务列表。
-- `GET /api/v1/my/conversations`：需要登录，返回当前用户参与且已有聊天记录的会话、联系人和最近消息摘要。
 - `GET /api/v1/my/points`：需要登录，返回当前用户可用、冻结和总积分。
 - `GET /api/v1/my/points/ledger?limit=50`：需要登录，返回最近积分流水及交易后余额。
 - `POST /api/v1/admin/users/{id}/points`：运营员/管理员发放整数积分；需要 `Idempotency-Key`，请求体为 `{"amount": 100, "description": "..."}`，会记录操作审计。
@@ -117,19 +116,17 @@ Get-Process -Id $owner
 
 1. 部署时只启用 WSS/TLS 客户端 listener；管理 Dashboard 限制为本机/管理网可达。开发时可用隔离 Broker 的内网 WS listener。
 2. 创建从 MQTT `password` 读取 JWT 的 HMAC JWT authenticator，算法 HS256，密钥内容与 API 的 `MQTT_JWT_SECRET` 完全一致，关闭 Base64 secret 解码（除非密钥按 Base64 配置）。
-3. 启用 JWT 的 `acl` claim 授权；未匹配的主题一律 deny。用户 JWT 的 `acl.pub` 为空，`acl.sub` 仅包含该用户参与任务的 events/messages 主题和个人通知主题 `renwu/users/{用户编号}/notifications`。前端不得发布 MQTT 消息、订阅其他用户主题或订阅任意通配符。
-4. API 与 worker 共用后端发布凭据 `MQTT_USERNAME`，JWT 仅允许发布 `renwu/+/events`、`renwu/+/messages` 和 `renwu/users/+/notifications`。旧任务聊天 MQTT 请求消费者目前仍订阅 `renwu/+/message_requests/+`，但写入校验已拒绝旧委托聊天，并仅向 `renwu/+/message_receipts/+` 发布拒绝回执；移除该消费者后再撤销相应 Broker ACL。
+3. 启用 JWT 的 `acl` claim 授权；未匹配的主题一律 deny。用户 JWT 的 `acl.pub` 为空，`acl.sub` 仅包含该用户参与任务的 events 主题和个人通知主题 `renwu/users/{用户编号}/notifications`。前端不得发布 MQTT 消息、订阅其他用户主题或订阅任意通配符。
+4. API 与 worker 共用后端发布凭据 `MQTT_USERNAME`，JWT 仅允许发布 `renwu/+/events` 和 `renwu/users/+/notifications`。任务聊天 MQTT 请求消费者及其 `message_requests` / `message_receipts` 主题已移除；部署 Broker 时同步删除这些旧主题 ACL。
 5. 浏览器看到 WebSocket `101 Switching Protocols` 只代表 WebSocket 握手成功；还需在 MQTT 网络帧/客户端日志中确认 MQTT `CONNACK` 成功、目标主题 `SUBACK` 获授权，并确认 worker 对应事件已发布。Broker 必须设置连接和消息大小限制。断线重连或首次打开消息页时仍通过 REST 加载历史会话；实时新消息由 MQTT 事件直接更新界面，不能将 MQTT 当作唯一存储。
 
 首次接入前，应在本地或测试环境验证 MQTT JWT 的用户字段、ACL claim 和未匹配默认 deny 行为。Broker 具体设置界面/配置字段可能随 EMQX 版本改变，不能省略 ACL 验收。
 
 ## API 概览
 
-所有 HTTP JSON 响应字段均使用中文；例如登录响应为 `{"访问令牌":"...","令牌类型":"Bearer","有效秒数":7200,"用户":{"用户编号":"...","登录名":"...","昵称":"..."}}`。任务、聊天、实时凭据、管理响应及错误响应也均使用对应中文数据库/业务字段名（错误信息键为 `消息`）。请求体字段和查询参数仍使用当前英文键名。
+所有 HTTP JSON 响应字段均使用中文；例如登录响应为 `{"访问令牌":"...","令牌类型":"Bearer","有效秒数":7200,"用户":{"用户编号":"...","登录名":"...","昵称":"..."}}`。任务、群聊、实时凭据、管理响应及错误响应也均使用对应中文数据库/业务字段名（错误信息键为 `消息`）。请求体字段和查询参数仍使用当前英文键名。
 
-接单接口在更新委托状态的同一事务内创建/复用该委托关联群组，并加入发布者和当前接单者。委托消息仅通过群聊 HTTP 接口读写；`GET /api/v1/tasks/{id}/group-chat` 仅向有效委托群成员返回群组编号。释放委托会撤销原接单者的成员身份，下次接单时新成员从群内当前序号之后开始查看。迁移 `202610250003_commission_group_chat.sql` 为历史已接单委托建立关联群、复制旧任务聊天消息，并限制历史消息只对发布者可见；`"聊天消息"` 旧表暂时保留用于回滚/归档。
-
-旧任务消息接口 `GET/POST /api/v1/tasks/{id}/messages` 已不再用于前端委托聊天；关联群已存在时返回冲突，未建立委托群时不允许读写。好友私聊通过 `POST /api/v1/my/friends/{friend_id}/messages` 发送。事务发件箱之后经 MQTT 向个人通知主题发布好友私聊和群消息事件。消息页通过 `GET /api/v1/my/message-conversations` 一次获取委托群、好友私聊和普通群聊会话，并按最近消息时间统一排序。
+接单接口在更新委托状态的同一事务内创建/复用该委托关联群组，并加入发布者和当前接单者。委托消息仅通过群聊 HTTP 接口读写；`GET /api/v1/tasks/{id}/group-chat` 仅向有效委托群成员返回群组编号。释放委托会撤销原接单者的成员身份，下次接单时新成员从群内当前序号之后开始查看。迁移 `202610250003_commission_group_chat.sql` 将旧聊天历史复制到委托群；后续迁移 `202610250004_remove_legacy_task_chat.sql` 删除旧 `"聊天消息"` 表和未投递的旧任务聊天事件，并移除旧任务聊天 HTTP/MQTT 后端入口。好友私聊通过 `POST /api/v1/my/friends/{friend_id}/messages` 发送。事务发件箱之后经 MQTT 向个人通知主题发布好友私聊和群消息事件。消息页通过 `GET /api/v1/my/message-conversations` 一次获取委托群、好友私聊和普通群聊会话，并按最近消息时间统一排序。
 
 普通群聊由用户自主创建和管理；委托群使用相同的群组/成员/消息存储，但由委托状态机专门管理，禁止普通邀请、移除和退出。群消息通过 HTTP 持久化，同一事务给每个有效成员写事务发件箱，随后经该成员个人通知主题发布 `group.message_created`；群内序号由群组行锁定并递增分配。普通群首版人数上限 100，邀请好友确认后生效，新成员只能查看加入后的消息；HTTP 成功表示消息已保存，MQTT 负责实时通知。
 
@@ -147,10 +144,7 @@ Get-Process -Id $owner
 | POST | `/api/v1/tasks/{id}/accept-completion` | 是；发布者验收并发放积分 |
 | POST | `/api/v1/tasks/{id}/cancel` | 是 |
 | POST | `/api/v1/tasks/{id}/release` | 是 |
-| GET | `/api/v1/tasks/{id}/messages` | 是；旧委托聊天接口，不再提供委托消息读写 |
-| POST | `/api/v1/tasks/{id}/messages` | 是；旧委托聊天接口，不再提供委托消息读写 |
 | GET | `/api/v1/my/tasks` | 是；查询当前用户已接取的任务 |
-| GET | `/api/v1/my/conversations` | 是；查询当前用户的聊天会话 |
 | GET | `/api/v1/my/message-conversations` | 是；统一查询委托、好友私聊和群聊会话 |
 | GET | `/api/v1/tasks/{id}/group-chat` | 是；返回当前用户可访问的委托群组编号 |
 | GET | `/api/v1/my/friends` | 是；查询好友列表 |
@@ -183,14 +177,7 @@ FROM "角色" WHERE "角色名称" = '管理员'
 ON CONFLICT DO NOTHING;
 ```
 
-所有写 API 均采用 JSON。认证请求头为 `Authorization: Bearer <access_token>`；创建任务和任务状态操作还必须提供稳定的 `Idempotency-Key`，重复请求不会重复产生任务状态事件。聊天使用 `client_message_id` 做幂等去重。聊天请求体示例：
-
-```json
-{
-  "客户端消息编号": "客户端生成的 UUID",
-  "消息正文": "消息内容"
-}
-```
+所有写 API 均采用 JSON。认证请求头为 `Authorization: Bearer <access_token>`；创建任务和任务状态操作还必须提供稳定的 `Idempotency-Key`，重复请求不会重复产生任务状态事件。群聊消息使用客户端消息编号做幂等去重。
 
 ## Debian 部署概要
 

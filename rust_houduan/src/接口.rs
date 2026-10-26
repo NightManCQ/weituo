@@ -12,8 +12,6 @@ pub(crate) mod 积分;
 mod 管理;
 #[path = "接口/群聊.rs"]
 mod 群聊;
-#[path = "接口/聊天.rs"]
-pub(crate) mod 聊天;
 #[path = "接口/认证.rs"]
 mod 认证;
 
@@ -76,7 +74,6 @@ pub(crate) async fn 启动(状态: 应用状态, 配置: 运行配置) -> Result
             "/api/v1/tasks/{task_id}/group-chat",
             get(群聊::查询委托群组),
         )
-        .route("/api/v1/my/conversations", get(聊天::查询我的聊天会话))
         .route(
             "/api/v1/my/message-conversations",
             get(消息::查询我的消息会话),
@@ -123,10 +120,6 @@ pub(crate) async fn 启动(状态: 应用状态, 配置: 运行配置) -> Result
         .route(
             "/api/v1/admin/users/{id}/points",
             post(积分::管理员发放积分),
-        )
-        .route(
-            "/api/v1/tasks/{id}/messages",
-            get(聊天::查询聊天消息).post(聊天::发送任务聊天消息),
         )
         .route("/api/v1/realtime/credentials", post(实时::获取实时凭据))
         .route("/api/v1/admin/users/{id}/disable", post(管理::禁用用户))

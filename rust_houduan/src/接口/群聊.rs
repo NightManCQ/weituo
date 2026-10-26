@@ -963,6 +963,23 @@ mod 数据库集成测试 {
             .run(&数据库)
             .await
             .expect("运行数据库迁移失败");
+        let 旧聊天表仍存在: bool =
+            sqlx::query_scalar(r#"SELECT to_regclass('"聊天消息"') IS NOT NULL"#)
+                .fetch_one(&数据库)
+                .await
+                .expect("检查旧聊天表失败");
+        assert!(!旧聊天表仍存在, "迁移后不应保留旧任务聊天表");
+        let 旧待投递事件仍存在: bool = sqlx::query_scalar(
+            r#"SELECT EXISTS (
+                   SELECT 1 FROM "事务发件箱"
+                   WHERE "事件类型" = 'chat.message_created'
+                     AND "主题" LIKE 'renwu/%/messages'
+               )"#,
+        )
+        .fetch_one(&数据库)
+        .await
+        .expect("检查旧任务聊天 outbox 事件失败");
+        assert!(!旧待投递事件仍存在, "迁移后不应保留旧任务聊天 outbox 事件");
 
         let 发布者编号 = Uuid::new_v4();
         let 首位接单者编号 = Uuid::new_v4();
