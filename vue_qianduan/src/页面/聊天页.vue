@@ -46,6 +46,7 @@ const 群消息滚动区域 = ref<HTMLElement | null>(null)
 const 群组 = ref<{
   群组编号: string
   关联任务编号: string | null
+  群组状态: '正常' | '已归档' | '已解散'
   群组名称: string
   群组公告: string
   群主编号: string
@@ -135,7 +136,13 @@ function 添加群消息(消息: 群消息) {
 
 async function 发送群聊消息() {
   const 正文 = 群消息正文.value.trim()
-  if (!正文 || !props.当前用户 || !群组.value || 正在发送群消息.value) return
+  if (
+    !正文 ||
+    !props.当前用户 ||
+    !群组.value ||
+    群组.value.群组状态 !== '正常' ||
+    正在发送群消息.value
+  ) return
   正在发送群消息.value = true
   群聊错误.value = ''
   try {
@@ -225,6 +232,13 @@ function 返回群聊() {
 }
 
 function 处理群聊实时事件(事件: 实时事件) {
+  if (
+    事件.事件类型 === 'task.completed' &&
+    事件.任务编号 === 群组.value?.关联任务编号
+  ) {
+    void 加载群聊()
+    return
+  }
   if (事件.事件类型 !== 'group.message_created' || !事件.数据) return
   const 数据 = 事件.数据
   const 群组编号 = 数据.群组编号 ?? 事件.原始事件.群组编号
@@ -491,6 +505,7 @@ onBeforeUnmount(() => {
       <div v-if="群组" class="chat-page-title group-chat-title">
         <div class="section-eyebrow">
           {{ 群组.关联任务编号 ? '委托参与者' : '群聊' }} · {{ 群组.成员列表.length }} 位成员
+          <span v-if="群组.群组状态 === '已归档'"> · 已归档</span>
         </div>
         <h1>{{ 群组.群组名称 }}</h1>
       </div>
@@ -587,7 +602,10 @@ onBeforeUnmount(() => {
           <p>{{ 消息.消息正文 }}</p>
         </article>
       </div>
-      <form class="chat-compose full-chat-compose" @submit.prevent="发送群聊消息">
+      <div v-if="群组.群组状态 === '已归档'" class="chat-compose full-chat-compose">
+        <p class="muted">该委托已完成，群聊已归档；历史消息仅供查看。</p>
+      </div>
+      <form v-else class="chat-compose full-chat-compose" @submit.prevent="发送群聊消息">
         <input
           v-model="群消息正文"
           maxlength="4000"

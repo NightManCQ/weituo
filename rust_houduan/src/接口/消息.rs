@@ -34,11 +34,19 @@ pub(super) async fn 查询我的消息会话(
         r#"(
                SELECT '委托'::text AS "会话类型",
                       g."群组编号" AS "会话编号",
-                      联系人."用户编号" AS "关联编号",
+                      COALESCE(t."接单者编号", t."发布者编号") AS "关联编号",
                       t."标题" AS "会话名称",
                       联系人."昵称" AS "联系人昵称",
-                      '委托沟通'::text AS "会话说明",
-                      COALESCE(latest."消息正文", '委托沟通已开始') AS "最近消息",
+                      CASE WHEN t."接单者编号" IS NULL
+                           THEN '等待接单'::text ELSE '委托沟通'::text
+                      END AS "会话说明",
+                      COALESCE(
+                          latest."消息正文",
+                          CASE WHEN t."接单者编号" IS NULL
+                               THEN '委托已发布，等待接单'::text
+                               ELSE '委托沟通已开始'::text
+                          END
+                      ) AS "最近消息",
                       COALESCE(latest."创建时间", g."创建时间")
                           AS "最近消息时间",
                       t."任务状态" AS "会话状态",
@@ -51,7 +59,7 @@ pub(super) async fn 查询我的消息会话(
                JOIN "群_成员" own ON own."群组编号" = g."群组编号"
                                  AND own."用户编号" = $1
                                  AND own."成员状态" = '有效'
-               JOIN "用户" 联系人 ON 联系人."用户编号" = CASE
+               LEFT JOIN "用户" 联系人 ON 联系人."用户编号" = CASE
                    WHEN t."发布者编号" = $1 THEN t."接单者编号"
                    ELSE t."发布者编号"
                END

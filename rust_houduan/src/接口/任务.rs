@@ -108,6 +108,7 @@ async fn 为用户发布任务(
     .bind(报酬积分)
     .fetch_one(&mut *事务)
     .await?;
+    super::群聊::创建委托群聊(&mut 事务, 编号, 用户.编号, 标题).await?;
     积分::创建委托报酬托管(&mut 事务, 编号, 用户.编号, 报酬积分, 用户.编号, &幂等键).await?;
     let 任务 = 映射任务记录(&记录);
     let 事件编号 = Uuid::new_v4();
@@ -642,20 +643,6 @@ async fn 流转任务状态(
         {
             return Err(应用错误::冲突("此幂等键已用于其他任务操作".into()));
         }
-        if 操作 == "claim" {
-            let 接单者编号: Option<Uuid> = 当前记录.get("接单者编号");
-            let 接单者编号 =
-                接单者编号.ok_or_else(|| 应用错误::冲突("已接单委托缺少接单者".into()))?;
-            let 任务标题: String = 当前记录.get("标题");
-            super::群聊::确保委托群聊(
-                &mut 事务,
-                任务编号,
-                当前记录.get("发布者编号"),
-                接单者编号,
-                &任务标题,
-            )
-            .await?;
-        }
         let 记录 = sqlx::query(任务记录查询(
             r#"SELECT {任务视图字段} FROM "任务" WHERE "任务编号" = $1"#,
         ))
@@ -733,14 +720,7 @@ async fn 流转任务状态(
         let 接单者编号: Uuid = 记录
             .try_get::<Option<Uuid>, _>("接单者编号")?
             .ok_or_else(|| 应用错误::冲突("接单成功后未记录接单者".into()))?;
-        super::群聊::确保委托群聊(
-            &mut 事务,
-            任务编号,
-            发布者,
-            接单者编号,
-            记录.get("标题"),
-        )
-        .await?;
+        super::群聊::加入委托群聊(&mut 事务, 任务编号, 接单者编号).await?;
     } else if 操作 == "release" {
         if let Some(接单者编号) = 接单者 {
             sqlx::query(
@@ -756,6 +736,21 @@ async fn 流转任务状态(
             .bind(接单者编号)
             .execute(&mut *事务)
             .await?;
+        }
+    }
+    if 操作 == "accept-completion" {
+        let 归档结果 = sqlx::query(
+            r#"UPDATE "群_群组"
+               SET "群组状态" = '已归档', "归档时间" = now(), "更新时间" = now()
+               WHERE "关联任务编号" = $1 AND "群组状态" = '正常'"#,
+        )
+        .bind(任务编号)
+        .execute(&mut *事务)
+        .await?;
+        if 归档结果.rows_affected() != 1 {
+            return Err(应用错误::冲突(
+                "委托群不存在或已归档，无法完成验收".into(),
+            ));
         }
     }
     let 事件编号 = Uuid::new_v4();

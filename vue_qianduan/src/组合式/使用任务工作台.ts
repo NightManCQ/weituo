@@ -274,6 +274,7 @@ export function 使用任务工作台() {
       void 加载任务()
       void 加载我的任务()
       void 加载我发布的委托(我发布的委托分类.value, true)
+      if (事件.事件类型 === 'task.completed') void 连接实时服务(true)
       return
     }
 
@@ -412,7 +413,7 @@ export function 使用任务工作台() {
       void 加载我发布的委托(我发布的委托分类.value, true)
       await 加载积分账户()
       await 加载聊天会话()
-      await 连接实时服务()
+      await 连接实时服务(true)
     } catch (原因) {
       const 错误 = 原因 instanceof Error ? 原因.message : '发布失败，请稍后重试'
       发布反馈状态.value = { 状态: 'error', 消息: `委托发布失败：${错误}` }
