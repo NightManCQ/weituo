@@ -70,6 +70,8 @@ pub(crate) async fn 启动(状态: 应用状态, 配置: 运行配置) -> Result
             get(任务::查询任务列表).post(任务::发布任务),
         )
         .route("/api/v1/my/tasks", get(任务::查询我的已接任务))
+        .route("/api/v1/my/published-tasks", get(任务::查询我发布的委托))
+        .route("/api/v1/my/claimed-tasks", get(任务::查询我接单的委托))
         .route(
             "/api/v1/tasks/{task_id}/group-chat",
             get(群聊::查询委托群组),

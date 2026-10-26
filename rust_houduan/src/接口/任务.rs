@@ -4,6 +4,7 @@ use axum::{
     http::StatusCode,
 };
 use chrono::Utc;
+use serde::Deserialize;
 use serde_json::json;
 use sqlx::Row;
 use sqlx::postgres::types::PgPoint;
@@ -273,6 +274,129 @@ pub(super) async fn 查询我的已接任务(
     .fetch_all(&状态.数据库)
     .await?;
     Ok(Json(记录集.iter().map(映射任务记录).collect()))
+}
+
+#[derive(Deserialize)]
+pub(super) struct 我发布的委托查询 {
+    #[serde(rename = "status")]
+    分类: Option<String>,
+    #[serde(rename = "limit")]
+    数量上限: Option<i64>,
+    #[serde(rename = "offset")]
+    偏移量: Option<i64>,
+}
+
+#[derive(serde::Serialize)]
+pub(super) struct 分页委托响应 {
+    任务列表: Vec<任务视图>,
+    总数: i64,
+}
+
+pub(super) async fn 查询我发布的委托(
+    State(状态): State<应用状态>,
+    Query(查询条件): Query<我发布的委托查询>,
+    请求: axum::http::Request<axum::body::Body>,
+) -> Result<Json<分页委托响应>, 应用错误> {
+    let 用户 = 请求
+        .extensions()
+        .get::<当前用户>()
+        .cloned()
+        .ok_or_else(|| 应用错误::未授权("请先登录".into()))?;
+    let 分类 = 查询条件.分类.as_deref().unwrap_or("all");
+    if !["all", "ongoing", "completed"].contains(&分类) {
+        return Err(应用错误::请求错误("委托分类无效".into()));
+    }
+    let 数量上限 = 查询条件.数量上限.unwrap_or(10).clamp(1, 10);
+    let 偏移量 = 查询条件.偏移量.unwrap_or(0).max(0);
+    let 分类 = (分类 != "all").then_some(分类);
+    let 条件 = r#"("发布者编号" = $1 AND (
+        $2::text IS NULL
+        OR ($2 = 'ongoing' AND "任务状态" IN ('待接单', '已接单', '进行中', '待验收'))
+        OR ($2 = 'completed' AND "任务状态" = '已完成')
+    ))"#;
+
+    let 总数: i64 = sqlx::query_scalar(
+        r#"SELECT count(*) FROM "任务"
+           WHERE "发布者编号" = $1 AND (
+               $2::text IS NULL
+               OR ($2 = 'ongoing' AND "任务状态" IN ('待接单', '已接单', '进行中', '待验收'))
+               OR ($2 = 'completed' AND "任务状态" = '已完成')
+           )"#,
+    )
+    .bind(用户.编号)
+    .bind(分类)
+    .fetch_one(&状态.数据库)
+    .await?;
+    let 记录集 = sqlx::query(任务记录查询(&format!(
+        r#"SELECT {{任务视图字段}} FROM "任务"
+           WHERE {条件}
+           ORDER BY "创建时间" DESC, "任务编号" DESC
+           LIMIT $3 OFFSET $4"#
+    )))
+    .bind(用户.编号)
+    .bind(分类)
+    .bind(数量上限)
+    .bind(偏移量)
+    .fetch_all(&状态.数据库)
+    .await?;
+
+    Ok(Json(分页委托响应 {
+        任务列表: 记录集.iter().map(映射任务记录).collect(),
+        总数,
+    }))
+}
+
+pub(super) async fn 查询我接单的委托(
+    State(状态): State<应用状态>,
+    Query(查询条件): Query<我发布的委托查询>,
+    请求: axum::http::Request<axum::body::Body>,
+) -> Result<Json<分页委托响应>, 应用错误> {
+    let 用户 = 请求
+        .extensions()
+        .get::<当前用户>()
+        .cloned()
+        .ok_or_else(|| 应用错误::未授权("请先登录".into()))?;
+    let 分类 = 查询条件.分类.as_deref().unwrap_or("all");
+    if !["all", "ongoing", "completed"].contains(&分类) {
+        return Err(应用错误::请求错误("委托分类无效".into()));
+    }
+    let 数量上限 = 查询条件.数量上限.unwrap_or(10).clamp(1, 10);
+    let 偏移量 = 查询条件.偏移量.unwrap_or(0).max(0);
+    let 分类 = (分类 != "all").then_some(分类);
+
+    let 总数: i64 = sqlx::query_scalar(
+        r#"SELECT count(*) FROM "任务"
+           WHERE "接单者编号" = $1 AND (
+               $2::text IS NULL
+               OR ($2 = 'ongoing' AND "任务状态" IN ('已接单', '进行中', '待验收'))
+               OR ($2 = 'completed' AND "任务状态" = '已完成')
+           )"#,
+    )
+    .bind(用户.编号)
+    .bind(分类)
+    .fetch_one(&状态.数据库)
+    .await?;
+    let 记录集 = sqlx::query(任务记录查询(
+        r#"SELECT {任务视图字段} FROM "任务"
+           WHERE "接单者编号" = $1 AND (
+               $2::text IS NULL
+               OR ($2 = 'ongoing' AND "任务状态" IN ('已接单', '进行中', '待验收'))
+               OR ($2 = 'completed' AND "任务状态" = '已完成')
+           )
+           ORDER BY "更新时间" DESC, "任务编号" DESC
+           LIMIT $3 OFFSET $4"#,
+    ))
+    .bind(用户.编号)
+    .bind(分类)
+    .bind(数量上限)
+    .bind(偏移量)
+    .fetch_all(&状态.数据库)
+    .await?;
+
+    Ok(Json(分页委托响应 {
+        任务列表: 记录集.iter().map(映射任务记录).collect(),
+        总数,
+    }))
 }
 
 pub(super) async fn 查询委托(

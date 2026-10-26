@@ -14,6 +14,9 @@ type 任务表单 = {
 }
 type 任务操作项 = { key: 任务操作; label: string }
 type 发布反馈 = { 状态: 'idle' | 'submitting' | 'success' | 'error'; 消息: string }
+type 我发布的委托分类 = 'all' | 'ongoing' | 'completed'
+type 我的委托归属 = 'published' | 'claimed'
+type 分页委托响应 = { 任务列表: 任务[]; 总数: number }
 const 用户令牌存储键 = 'renwu_token'
 const 用户资料存储键 = 'renwu_user'
 
@@ -66,6 +69,13 @@ export function 使用任务工作台() {
   const 当前用户 = ref(读取当前用户())
   const 任务列表 = ref<任务[]>([])
   const 我的任务列表 = ref<任务[]>([])
+  const 我发布的委托列表 = ref<任务[]>([])
+  const 我发布的委托总数 = ref(0)
+  const 正在加载我发布的委托 = ref(false)
+  const 我发布的委托还有更多 = ref(false)
+  const 我发布的委托加载错误 = ref('')
+  const 我发布的委托分类 = ref<我发布的委托分类>('all')
+  const 我的委托归属 = ref<我的委托归属>('published')
   const 消息会话列表 = ref<消息会话[]>([])
   const 当前委托详情 = ref<任务 | null>(null)
   const 正在加载委托详情 = ref(false)
@@ -90,6 +100,7 @@ export function 使用任务工作台() {
   const 发布任务幂等键 = ref<string | null>(null)
   const 任务操作幂等键 = new Map<string, string>()
   let 委托详情请求序号 = 0
+  let 我发布的委托请求序号 = 0
 
   const 可见任务 = computed(() => 任务列表.value)
   const 我的协作任务 = computed(() => {
@@ -132,6 +143,64 @@ export function 使用任务工作台() {
       我的任务列表.value = await 请求<任务[]>('/my/tasks')
     } catch (原因) {
       错误信息.value = 原因 instanceof Error ? 原因.message : '我的委托加载失败'
+    }
+  }
+
+  async function 加载我发布的委托(
+    分类: 我发布的委托分类 = 我发布的委托分类.value,
+    重置 = false,
+    归属: 我的委托归属 = 我的委托归属.value,
+  ) {
+    if (!当前用户.value) {
+      我发布的委托请求序号 += 1
+      我发布的委托列表.value = []
+      我发布的委托总数.value = 0
+      我发布的委托还有更多.value = false
+      我发布的委托加载错误.value = ''
+      正在加载我发布的委托.value = false
+      return
+    }
+    if (!重置 && (正在加载我发布的委托.value || !我发布的委托还有更多.value)) return
+
+    if (重置) {
+      我发布的委托分类.value = 分类
+      我的委托归属.value = 归属
+      我发布的委托请求序号 += 1
+      我发布的委托列表.value = []
+      我发布的委托总数.value = 0
+      我发布的委托还有更多.value = true
+    } else if (分类 !== 我发布的委托分类.value) {
+      return
+    }
+
+    我发布的委托加载错误.value = ''
+    const 请求序号 = 我发布的委托请求序号
+    const 偏移量 = 重置 ? 0 : 我发布的委托列表.value.length
+    正在加载我发布的委托.value = true
+    try {
+      const 参数 = new URLSearchParams({
+        status: 分类,
+        limit: '10',
+        offset: String(偏移量),
+      })
+      const 路径 = 归属 === 'published' ? '/my/published-tasks' : '/my/claimed-tasks'
+      const 结果 = await 请求<分页委托响应>(`${路径}?${参数}`)
+      if (请求序号 !== 我发布的委托请求序号) return
+      我发布的委托列表.value = 重置
+        ? 结果.任务列表
+        : [...我发布的委托列表.value, ...结果.任务列表]
+      我发布的委托总数.value = 结果.总数
+      我发布的委托还有更多.value = 我发布的委托列表.value.length < 结果.总数
+    } catch (原因) {
+      if (请求序号 === 我发布的委托请求序号) {
+        我发布的委托加载错误.value =
+          原因 instanceof Error ? 原因.message : '我发布的委托加载失败'
+        错误信息.value = 原因 instanceof Error ? 原因.message : '我发布的委托加载失败'
+      }
+    } finally {
+      if (请求序号 === 我发布的委托请求序号) {
+        正在加载我发布的委托.value = false
+      }
     }
   }
 
@@ -204,6 +273,7 @@ export function 使用任务工作台() {
     if (事件.事件类型.startsWith('task.')) {
       void 加载任务()
       void 加载我的任务()
+      void 加载我发布的委托(我发布的委托分类.value, true)
       return
     }
 
@@ -273,6 +343,12 @@ export function 使用任务工作台() {
     令牌.value = ''
     当前用户.value = null
     我的任务列表.value = []
+    我发布的委托请求序号 += 1
+    我发布的委托列表.value = []
+    我发布的委托总数.value = 0
+    我发布的委托还有更多.value = false
+    我发布的委托加载错误.value = ''
+    正在加载我发布的委托.value = false
     我的积分账户.value = null
     我的积分流水.value = []
     消息会话列表.value = []
@@ -330,8 +406,10 @@ export function 使用任务工作台() {
           : '委托发布成功，本委托不设置积分报酬。',
       }
       提示信息.value = '委托已发布'
+      void 加载我发布的委托(我发布的委托分类.value, true)
       await 加载任务()
       await 加载我的任务()
+      void 加载我发布的委托(我发布的委托分类.value, true)
       await 加载积分账户()
       await 加载聊天会话()
       await 连接实时服务()
@@ -366,6 +444,7 @@ export function 使用任务工作台() {
           : '委托状态已更新'
       await 加载任务()
       await 加载我的任务()
+      void 加载我发布的委托(我发布的委托分类.value, true)
       await 加载积分账户()
       await 加载聊天会话()
       await 连接实时服务(true)
@@ -373,6 +452,7 @@ export function 使用任务工作台() {
       错误信息.value = 原因 instanceof Error ? 原因.message : '操作失败'
       await 加载任务()
       await 加载我的任务()
+      void 加载我发布的委托(我发布的委托分类.value, true)
     }
   }
 
@@ -406,7 +486,6 @@ export function 使用任务工作台() {
   onMounted(async () => {
     await 加载任务()
     if (令牌.value && 当前用户.value) {
-      await 加载我的任务()
       await 加载积分账户()
       await 加载聊天会话()
       await 连接实时服务(true)
@@ -422,6 +501,12 @@ export function 使用任务工作台() {
     当前用户,
     任务列表,
     我的任务列表,
+    我发布的委托列表,
+    我发布的委托总数,
+    正在加载我发布的委托,
+    我发布的委托还有更多,
+    我发布的委托加载错误,
+    我的委托归属,
     我的积分账户,
     我的积分流水,
     消息会话列表,
@@ -443,6 +528,7 @@ export function 使用任务工作台() {
     退出登录,
     加载任务,
     加载我的任务,
+    加载我发布的委托,
     加载积分账户,
     加载委托详情,
     清除委托详情,

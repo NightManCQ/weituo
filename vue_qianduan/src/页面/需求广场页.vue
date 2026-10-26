@@ -32,7 +32,14 @@ const 状态选项 = ['待接单', '已接单', '进行中', '待验收', '已�
         <h1>委托广场 <span class="count-pill">{{ 任务列表.length }}</span></h1>
         <p class="muted">{{ 当前用户 ? `你好，${当前用户.昵称}，看看有哪些委托适合你。` : '发现委托，找到一起完成它的人。' }}</p>
       </div>
-      <button class="button button-primary" @click="emit('发布需求')">＋ 发布委托</button>
+      <div class="square-actions">
+        <RouterLink
+          v-if="当前用户"
+          class="button button-outline"
+          :to="{ name: 'tasks' }"
+        >我的委托</RouterLink>
+        <button class="button button-primary" @click="emit('发布需求')">＋ 发布委托</button>
+      </div>
     </div>
     <div class="list-heading">
       <div><div class="section-eyebrow">浏览委托</div><h2>全部委托</h2></div>
@@ -88,3 +95,8 @@ const 状态选项 = ['待接单', '已接单', '进行中', '待验收', '已�
     <div v-else class="empty-state"><div class="empty-icon">✳</div><h3>暂时没有委托</h3><p>稍后刷新看看，或发布一个新委托。</p></div>
   </section>
 </template>
+
+<style scoped>
+.square-actions{display:flex;align-items:center;gap:8px}
+@media(max-width:680px){.square-actions{flex-wrap:wrap;justify-content:flex-end}}
+</style>

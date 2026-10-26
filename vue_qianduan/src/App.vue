@@ -11,7 +11,12 @@ const router = useRouter()
 const {
   当前用户,
   任务列表,
-  我的任务列表,
+  我发布的委托列表,
+  我发布的委托总数,
+  正在加载我发布的委托,
+  我发布的委托还有更多,
+  我发布的委托加载错误,
+  我的委托归属,
   消息会话列表,
   当前委托详情,
   错误信息,
@@ -30,7 +35,7 @@ const {
   提交认证,
   退出登录,
   加载任务,
-  加载我的任务,
+  加载我发布的委托,
   加载积分账户,
   加载委托详情,
   清除委托详情,
@@ -42,7 +47,6 @@ const {
 } = 使用任务工作台()
 
 const 导航项目: { 名称: string; 路由名: 页面路由名; 图标: string }[] = [
-  { 名称: '委托', 路由名: 'tasks', 图标: '▤' },
   { 名称: '委托广场', 路由名: 'square', 图标: '▦' },
   { 名称: '发布委托', 路由名: 'publish', 图标: '＋' },
   { 名称: '消息', 路由名: 'messages', 图标: '◌' },
@@ -55,11 +59,20 @@ const 页面属性 = computed<Record<string, unknown>>(() => {
     case 'tasks':
       return {
         当前用户: 当前用户.value,
-        任务列表: 我的任务列表.value,
-        正在加载: 正在处理.value,
+        任务列表: 我发布的委托列表.value,
+        总数: 我发布的委托总数.value,
+        正在加载: 正在加载我发布的委托.value,
+        还有更多: 我发布的委托还有更多.value,
+        加载错误: 我发布的委托加载错误.value,
+        委托归属: 我的委托归属.value,
         格式化日期,
         获取任务操作,
-        on刷新: 加载我的任务,
+        on分类变更: (分类: 'all' | 'ongoing' | 'completed') =>
+          加载我发布的委托(分类, true),
+        on归属变更: (归属: 'published' | 'claimed') =>
+          加载我发布的委托(undefined, true, 归属),
+        on加载更多: () => 加载我发布的委托(),
+        on刷新: () => 加载我发布的委托(undefined, true),
         on执行操作: 执行任务操作,
         on查看消息: 打开任务消息,
         on前往广场: () => router.push({ name: 'square' }),
@@ -78,6 +91,7 @@ const 页面属性 = computed<Record<string, unknown>>(() => {
         },
         on刷新: 加载任务,
         on发布需求: () => router.push({ name: 'publish' }),
+        on我的委托: () => router.push({ name: 'tasks' }),
         on执行操作: 执行任务操作,
         on查看消息: 打开任务消息,
         on登录: 打开登录,
@@ -168,7 +182,6 @@ const 页面属性 = computed<Record<string, unknown>>(() => {
 })
 
 watch(() => route.name, (路由名) => {
-  if (路由名 === 'tasks' && 当前用户.value) void 加载我的任务()
   if (路由名 === 'messages' && 当前用户.value) void 加载聊天会话()
   if (路由名 === 'publish' && 当前用户.value) void 加载积分账户()
 })
@@ -284,6 +297,7 @@ watch(() => route.name, () => {
         route.name !== 'location' && route.name !== 'commission-detail'"
       class="bottom-nav"
       aria-label="主导航"
+      :style="{ gridTemplateColumns: `repeat(${导航项目.length}, minmax(0, 1fr))` }"
     >
       <RouterLink
         v-for="项目 in 导航项目"
@@ -294,11 +308,13 @@ watch(() => route.name, () => {
       >
         <button
           :aria-current="route.name === 项目.路由名 ||
+            (route.name === 'tasks' && 项目.路由名 === 'square') ||
             (route.name === 'chat' && 项目.路由名 === 'messages') ||
             ((route.name === 'friend-search' || route.name === 'group-create') &&
               项目.路由名 === 'contacts') ? 'page' : undefined"
           :class="{
             active: route.name === 项目.路由名 ||
+              (route.name === 'tasks' && 项目.路由名 === 'square') ||
               (route.name === 'chat' && 项目.路由名 === 'messages') ||
               ((route.name === 'friend-search' || route.name === 'group-create') &&
                 项目.路由名 === 'contacts'),
