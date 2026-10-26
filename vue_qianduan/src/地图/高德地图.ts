@@ -31,6 +31,7 @@ export type 高德地图实例 = {
   on: (事件: 'click', 回调: (事件数据: { lnglat: 高德经纬点 }) => void) => void
   setCenter: (坐标: [number, number]) => void
   setZoom: (级别: number) => void
+  setZoomAndCenter: (级别: number, 坐标: [number, number], 立即?: boolean) => void
 }
 
 export type 高德标记 = {

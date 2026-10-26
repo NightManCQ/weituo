@@ -101,8 +101,7 @@ function 定位当前位置() {
       ({ coords }) => {
         if (请求序号 !== 定位请求序号 || 地图实例 !== 地图) return
         const 经纬: [number, number] = [coords.longitude, coords.latitude]
-        地图.setCenter(经纬)
-        地图.setZoom(16)
+        地图.setZoomAndCenter(16, 经纬, true)
         当前位置标记?.setMap(null)
         当前位置标记 = new SDK.CircleMarker({
           center: 经纬,

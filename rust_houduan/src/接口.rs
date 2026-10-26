@@ -369,6 +369,7 @@ fn 有效的高德服务路径(路径: &str) -> bool {
     格式有效
         && (路径 == "v3/geocode/geo"
             || 路径 == "v3/geocode/regeo"
+            || 路径 == "v3/log/init"
             || 路径 == "v4/map/styles"
             || 路径.starts_with("v4/map/styles/"))
 }
@@ -381,6 +382,7 @@ mod 高德代理路径测试 {
     fn 代理只接受固定主机可处理的安全路径片段() {
         assert!(有效的高德服务路径("v3/geocode/regeo"));
         assert!(有效的高德服务路径("v3/geocode/geo"));
+        assert!(有效的高德服务路径("v3/log/init"));
         assert!(有效的高德服务路径("v4/map/styles/abc"));
         assert!(!有效的高德服务路径("../internal"));
         assert!(!有效的高德服务路径("v3/%2e%2e/internal"));
