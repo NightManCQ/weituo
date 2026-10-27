@@ -68,7 +68,7 @@
 	},
 	"web": {
 		"router": {
-			"mode": ""
+			"mode": "history"
 		},
 		"devServer": {
 			"port": "5174"

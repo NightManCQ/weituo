@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { onHide, onLoad, onShow } from '@dcloudio/uni-app'
-import { ref } from 'vue'
+import { onHide, onLoad, onPageScroll, onShow } from '@dcloudio/uni-app'
+import { nextTick, ref } from 'vue'
 import type { 好友消息, 群消息, 用户 } from '../../common/leixing'
 import { 创建编号, 发送请求, 格式化时间, 读取当前用户 } from '../../common/wangluo'
-import { 连接实时消息, 订阅实时事件 } from '../../common/shishi'
-import type { 实时事件 } from '../../common/shishi'
+import { 订阅实时事件 } from '../../common/实时'
+import type { 实时事件 } from '../../common/实时'
 
 type 群成员 = { 用户编号: string; 昵称: string; 成员角色: string }
 type 群详情 = {
@@ -32,18 +32,66 @@ const 邀请用户编号 = ref('')
 const 正在加载 = ref(false)
 const 正在发送 = ref(false)
 const 错误 = ref('')
-const 滚动位置 = ref(0)
+const 群管理面板已展开 = ref(false)
 const 接近底部 = ref(true)
+let 页面内容高度 = 0
+let 页面滚动高度 = 0
+let 页面视口高度 = 0
 let 正在刷新 = false
 let 取消订阅: (() => void) | null = null
 
-function 滚动到最新消息() {
-  滚动位置.value += 100000
+function 格式化消息时间(值: string): string {
+  const 日期 = new Date(值)
+  if (Number.isNaN(日期.getTime())) return ''
+  return `${String(日期.getHours()).padStart(2, '0')}:${String(日期.getMinutes()).padStart(2, '0')}`
 }
 
-function 记录滚动位置(事件: { detail: { scrollTop: number; scrollHeight: number } }) {
-  滚动位置.value = 事件.detail.scrollTop
-  接近底部.value = 事件.detail.scrollHeight - 事件.detail.scrollTop <= 440
+function 消息日期键(值: string): string {
+  const 日期 = new Date(值)
+  if (Number.isNaN(日期.getTime())) return 值.slice(0, 10)
+  return `${日期.getFullYear()}-${日期.getMonth() + 1}-${日期.getDate()}`
+}
+
+function 是否显示日期(消息列表: 好友消息[] | 群消息[], 索引: number): boolean {
+  return 索引 == 0 || 消息日期键(消息列表[索引 - 1].创建时间) != 消息日期键(消息列表[索引].创建时间)
+}
+
+function 格式化日期标签(值: string): string {
+  const 日期 = new Date(值)
+  if (Number.isNaN(日期.getTime())) return 值.slice(0, 10)
+  const 今天 = new Date()
+  const 日期零点 = new Date(日期.getFullYear(), 日期.getMonth(), 日期.getDate()).getTime()
+  const 今天零点 = new Date(今天.getFullYear(), 今天.getMonth(), 今天.getDate()).getTime()
+  const 相差天数 = Math.floor((今天零点 - 日期零点) / 86400000)
+  if (相差天数 == 0) return '今天'
+  if (相差天数 == 1) return '昨天'
+  return `${日期.getFullYear()}年${日期.getMonth() + 1}月${日期.getDate()}日`
+}
+
+function 滚动到最新消息() {
+  nextTick(() => {
+    uni.createSelectorQuery().select('.chat-shell').boundingClientRect((位置) => {
+      if (位置 == null) return
+      页面内容高度 = 位置.height
+      页面滚动高度 = Math.max(页面内容高度 - 页面视口高度, 0)
+      接近底部.value = true
+      uni.pageScrollTo({ scrollTop: 页面滚动高度, duration: 0 })
+    }).exec()
+  })
+}
+
+function 更新是否接近底部() {
+  接近底部.value = 页面内容高度 - 页面滚动高度 - 页面视口高度 <= 440
+}
+
+function 更新页面高度() {
+  nextTick(() => {
+    uni.createSelectorQuery().select('.chat-shell').boundingClientRect((位置) => {
+      if (位置 == null) return
+      页面内容高度 = 位置.height
+      更新是否接近底部()
+    }).exec()
+  })
 }
 
 function 合并好友消息(消息列表: 好友消息[]): 好友消息[] {
@@ -64,6 +112,7 @@ function 添加好友消息(消息: 好友消息) {
   if (已有消息) return
   好友消息列表.value = 合并好友消息([...好友消息列表.value, 消息])
   if (接近底部.value) 滚动到最新消息()
+  else 更新页面高度()
 }
 
 function 处理好友实时事件(事件: 实时事件) {
@@ -158,6 +207,7 @@ function 处理群聊实时事件(事件: 实时事件) {
   }].sort((左侧, 右侧) => 左侧.群内序号 - 右侧.群内序号).slice(-100)
   当前群组.最后消息序号 = Math.max(当前群组.最后消息序号, 群内序号)
   if (接近底部.value) 滚动到最新消息()
+  else 更新页面高度()
 }
 
 async function 刷新() {
@@ -192,12 +242,14 @@ async function 刷新() {
         ) == 索引,
       ).sort((左侧, 右侧) => 左侧.群内序号 - 右侧.群内序号).slice(-100)
       if (首次加载 || 接近底部.value) 滚动到最新消息()
+      else 更新页面高度()
       if (详情.关联任务编号 == null) 好友列表.value = await 发送请求<好友[]>('/my/friends')
     } else if (好友编号.value) {
       const 消息 = await 发送请求<好友消息[]>(`/my/friends/${encodeURIComponent(好友编号.value)}/messages?limit=200`)
       const 首次加载 = 好友消息列表.value.length == 0
       好友消息列表.value = 合并好友消息([...好友消息列表.value, ...消息])
       if (首次加载 || 接近底部.value) 滚动到最新消息()
+      else 更新页面高度()
     }
   } catch (原因) {
     错误.value = 原因 instanceof Error ? 原因.message : '加载聊天失败'
@@ -297,14 +349,18 @@ function 返回() {
 
 let 任务编号 = ''
 onLoad((参数) => {
+  页面视口高度 = uni.getSystemInfoSync().windowHeight
   当前用户.value = 读取当前用户()
   群组编号.value = 参数['groupId'] as string || ''
   好友编号.value = 参数['friendId'] as string || ''
   联系人昵称.value = decodeURIComponent(参数['nickname'] as string || '好友')
   任务编号 = 参数['taskId'] as string || ''
 })
+onPageScroll((事件) => {
+  页面滚动高度 = 事件.scrollTop
+  更新是否接近底部()
+})
 onShow(() => {
-  void 连接实时消息(当前用户.value)
   if (取消订阅 == null) {
     取消订阅 = 订阅实时事件((事件) => {
       if (好友编号.value) 处理好友实时事件(事件)
@@ -320,51 +376,133 @@ onHide(() => {
 </script>
 
 <template>
-  <view class="page chat-page">
-    <view class="page-heading row-between">
-      <view><text class="eyebrow">{{ 好友编号 ? '好友私聊' : '群聊' }}</text><text class="title">{{ 好友编号 ? 联系人昵称 : 群组?.群组名称 || '委托会话' }}</text></view>
-      <button class="secondary" @click="返回">返回</button>
-    </view>
-    <view v-if="错误" class="notice error">{{ 错误 }}</view>
-    <button v-if="当前用户 == null" class="primary" @click="uni.switchTab({ url: '/pages/wode/wode' })">前往登录</button>
-    <view class="actions"><button class="secondary" @click="刷新">{{ 正在加载 ? '同步中…' : '刷新消息' }}</button></view>
-    <view v-if="群组 != null" class="card">
-      <text class="card-title">群成员 · {{ 群组.成员列表.length }}</text>
-      <view v-for="成员 in 群组.成员列表" :key="成员.用户编号" class="list-row">
-        <text class="grow">{{ 成员.昵称 }} · {{ 成员.成员角色 }}</text>
-        <button v-if="群组.关联任务编号 == null && ['群主', '管理员'].includes(群组.成员列表.find((项) => 项.用户编号 == 当前用户?.用户编号)?.成员角色 || '') && 成员.用户编号 != 当前用户?.用户编号 && 成员.成员角色 != '群主'" class="text-button" @click="移除成员(成员.用户编号, 成员.昵称)">移除</button>
+  <view class="chat-shell">
+    <view class="chat-header">
+      <button class="chat-back" @click="返回">‹</button>
+      <view class="chat-avatar">
+        <text>{{ (好友编号 ? 联系人昵称 : 群组?.群组名称 || '群').slice(0, 1) }}</text>
       </view>
-      <template v-if="群组.关联任务编号 == null">
-        <picker :range="好友列表" range-key="昵称" @change="(事件) => 邀请用户编号 = 好友列表[Number(事件.detail.value)].用户编号">
-          <view class="list-row clickable"><text class="grow">{{ 邀请用户编号 ? (好友列表.find((好友) => 好友.用户编号 == 邀请用户编号)?.昵称 || '选择好友') : '选择好友邀请入群' }}</text><text class="arrow">⌄</text></view>
-        </picker>
-        <button class="secondary" @click="邀请好友">邀请好友</button>
-        <button v-if="当前用户?.用户编号 != 群组.群主编号" class="text-button left" @click="退出群聊">退出群聊</button>
-      </template>
+      <view class="chat-contact">
+        <text class="chat-contact-name">{{ 好友编号 ? 联系人昵称 : 群组?.群组名称 || '委托会话' }}</text>
+        <text class="chat-contact-detail">{{ 好友编号 ? '好友私聊' : `${群组?.成员列表.length || 0} 位成员` }}</text>
+      </view>
+      <button v-if="群组 != null" class="chat-menu-button" @click="群管理面板已展开 = !群管理面板已展开">
+        {{ 群管理面板已展开 ? '收起' : '⋮' }}
+      </button>
     </view>
-    <view v-if="群组?.群组状态 == '已归档'" class="notice">
+
+    <view v-if="群管理面板已展开 && 群组 != null" class="group-panel">
+      <text class="group-panel-title">群成员 · {{ 群组.成员列表.length }}</text>
+      <view v-for="成员 in 群组.成员列表" :key="成员.用户编号" class="group-member-row">
+        <text class="group-member-name">{{ 成员.昵称 }} · {{ 成员.成员角色 }}</text>
+        <button v-if="群组.关联任务编号 == null && ['群主', '管理员'].includes(群组.成员列表.find((项) => 项.用户编号 == 当前用户?.用户编号)?.成员角色 || '') && 成员.用户编号 != 当前用户?.用户编号 && 成员.成员角色 != '群主'" class="group-member-action" @click="移除成员(成员.用户编号, 成员.昵称)">移除</button>
+      </view>
+      <picker v-if="群组.关联任务编号 == null" :range="好友列表" range-key="昵称" @change="(事件) => 邀请用户编号 = 好友列表[Number(事件.detail.value)].用户编号">
+        <view class="group-invite-picker">{{ 邀请用户编号 ? (好友列表.find((好友) => 好友.用户编号 == 邀请用户编号)?.昵称 || '选择好友') : '选择好友邀请入群' }}</view>
+      </picker>
+      <view class="group-panel-actions">
+        <button v-if="群组.关联任务编号 == null" class="group-member-action" @click="邀请好友">邀请好友</button>
+        <button v-if="当前用户?.用户编号 != 群组.群主编号 && 群组.关联任务编号 == null" class="group-member-action" @click="退出群聊">退出群聊</button>
+      </view>
+    </view>
+
+    <view v-if="错误 && 当前用户 != null" class="chat-error">
+      <text>{{ 错误 }}</text>
+      <button class="chat-retry" :disabled="正在加载" @click="刷新">{{ 正在加载 ? '加载中…' : '重试' }}</button>
+    </view>
+    <view v-if="群组?.群组状态 == '已归档'" class="chat-archive">
       该委托已完成，群聊已归档；历史消息仅供查看。
     </view>
-    <scroll-view class="message-list" :scroll-top="滚动位置" @scroll="记录滚动位置">
-      <view v-if="好友编号" v-for="消息 in 好友消息列表" :key="消息.消息编号" class="message" :class="消息.发送者编号 == 当前用户?.用户编号 ? 'message-mine' : 'message-other'">
-        <text class="muted">{{ 消息.发送者编号 == 当前用户?.用户编号 ? '我' : 消息.发送者昵称 }} · {{ 格式化时间(消息.创建时间) }}</text>
-        <text class="body">{{ 消息.消息正文 }}</text>
-      </view>
-      <view v-else v-for="消息 in 群消息列表" :key="消息.消息编号" class="message" :class="消息.发送者编号 == 当前用户?.用户编号 ? 'message-mine' : 'message-other'">
-        <text class="muted">{{ 消息.发送者编号 == 当前用户?.用户编号 ? '我' : 消息.发送者昵称 }} · {{ 格式化时间(消息.创建时间) }}</text>
-        <text class="body">{{ 消息.消息正文 }}</text>
-      </view>
-      <view v-if="好友编号 && 好友消息列表.length == 0 && !错误" class="empty">还没有消息，发起一段对话吧。</view>
-      <view v-if="!好友编号 && 群消息列表.length == 0 && !错误" class="empty">还没有群消息。</view>
-    </scroll-view>
-    <view v-if="当前用户 != null && (好友编号 || 群组?.群组状态 == '正常')" class="compose">
-      <input v-model="消息正文" class="field compose-field grow" maxlength="4000" placeholder="输入消息…" confirm-type="send" :disabled="好友消息待确认 != null" @confirm="发送" />
-      <button class="primary" :disabled="正在发送 || 消息正文.trim().length == 0" @click="发送">{{ 正在发送 ? '发送中' : 好友消息待确认 != null ? '重试发送' : '发送' }}</button>
+
+    <view class="chat-messages">
+      <view v-if="正在加载 && 好友编号 && 好友消息列表.length == 0" class="chat-empty">正在加载消息…</view>
+      <template v-if="好友编号">
+        <template v-for="(消息, 索引) in 好友消息列表" :key="消息.消息编号">
+          <view v-if="是否显示日期(好友消息列表, 索引)" class="chat-date-row">
+            <text class="chat-date">{{ 格式化日期标签(消息.创建时间) }}</text>
+          </view>
+          <view class="message-row" :class="消息.发送者编号 == 当前用户?.用户编号 ? 'message-row-mine' : 'message-row-other'">
+            <view class="chat-bubble" :class="消息.发送者编号 == 当前用户?.用户编号 ? 'chat-bubble-mine' : 'chat-bubble-other'">
+              <text class="chat-message-text">{{ 消息.消息正文 }}</text>
+              <text class="chat-message-time">{{ 格式化消息时间(消息.创建时间) }}</text>
+            </view>
+          </view>
+        </template>
+      </template>
+      <template v-else>
+        <template v-for="(消息, 索引) in 群消息列表" :key="消息.消息编号">
+          <view v-if="是否显示日期(群消息列表, 索引)" class="chat-date-row">
+            <text class="chat-date">{{ 格式化日期标签(消息.创建时间) }}</text>
+          </view>
+          <view class="message-row" :class="消息.发送者编号 == 当前用户?.用户编号 ? 'message-row-mine' : 'message-row-other'">
+            <view class="chat-bubble" :class="消息.发送者编号 == 当前用户?.用户编号 ? 'chat-bubble-mine' : 'chat-bubble-other'">
+              <text v-if="消息.发送者编号 != 当前用户?.用户编号" class="chat-sender">{{ 消息.发送者昵称 }}</text>
+              <text class="chat-message-text">{{ 消息.消息正文 }}</text>
+              <text class="chat-message-time">{{ 格式化消息时间(消息.创建时间) }}</text>
+            </view>
+          </view>
+        </template>
+      </template>
+      <view v-if="!正在加载 && !错误 && 好友编号 && 好友消息列表.length == 0" class="chat-empty">还没有消息，发起一段对话吧。</view>
+      <view v-if="!正在加载 && !错误 && !好友编号 && 群消息列表.length == 0" class="chat-empty">还没有群消息。</view>
+    </view>
+
+    <view v-if="当前用户 == null" class="chat-login">
+      <button class="chat-login-button" @click="uni.switchTab({ url: '/pages/wode/wode' })">登录后开始聊天</button>
+    </view>
+    <view v-else-if="好友编号 || 群组?.群组状态 == '正常'" class="chat-compose">
+      <input
+        v-model="消息正文"
+        class="chat-input"
+        maxlength="4000"
+        :placeholder="好友消息待确认 != null ? '发送失败，可重试原消息' : '输入消息'"
+        confirm-type="send"
+        :disabled="好友消息待确认 != null"
+        @confirm="发送"
+      />
+      <button class="chat-send" :class="{ 'chat-send-disabled': 正在发送 || 消息正文.trim().length == 0 }" :disabled="正在发送 || 消息正文.trim().length == 0" @click="发送">
+        {{ 正在发送 ? '…' : 好友消息待确认 != null ? '↻' : '➤' }}
+      </button>
     </view>
   </view>
 </template>
 
 <style>
-.message-mine { align-self: flex-end; background-color: #e7f4ef; }
-.message-other { align-self: flex-start; }
+.chat-shell { display: flex; flex-direction: column; width: 100%; max-width: 720px; margin: 0 auto; padding: 0; background-color: #efeae2; }
+.chat-header { display: flex; flex-direction: row; align-items: center; min-height: 64px; padding: 8px 12px; background-color: #075e54; }
+.chat-back { width: 36px; min-width: 36px; height: 42px; margin: 0 7px 0 0; padding: 0; border: 0; background-color: transparent; color: #ffffff; font-size: 34px; line-height: 36px; }
+.chat-avatar { display: flex; align-items: center; justify-content: center; width: 42px; min-width: 42px; height: 42px; border-radius: 21px; background-color: #d7eee4; color: #075e54; font-size: 19px; font-weight: 700; }
+.chat-contact { display: flex; flex: 1; flex-direction: column; min-width: 0; margin-left: 10px; }
+.chat-contact-name { overflow: hidden; color: #ffffff; font-size: 16px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.chat-contact-detail { margin-top: 3px; color: #d2e8e3; font-size: 12px; }
+.chat-menu-button { min-width: 38px; height: 38px; margin: 0 0 0 8px; padding: 0 8px; border: 0; background-color: transparent; color: #ffffff; font-size: 20px; }
+.group-panel { padding: 10px 16px; border-bottom: 1px solid #d5ded9; background-color: #ffffff; }
+.group-panel-title { display: flex; margin-bottom: 5px; color: #075e54; font-size: 14px; font-weight: 700; }
+.group-member-row { display: flex; flex-direction: row; align-items: center; justify-content: space-between; min-height: 38px; border-bottom: 1px solid #eef0ed; }
+.group-member-name { color: #25332e; font-size: 13px; }
+.group-member-action { min-height: 30px; margin: 2px; padding: 0 10px; border: 1px solid #d5e5dd; border-radius: 15px; background-color: #ffffff; color: #087e67; font-size: 12px; }
+.group-invite-picker { margin-top: 8px; padding: 9px 10px; border: 1px solid #e1e8e3; border-radius: 8px; color: #52635c; font-size: 13px; }
+.group-panel-actions { display: flex; flex-direction: row; flex-wrap: wrap; margin-top: 5px; }
+.chat-error { display: flex; flex-direction: row; align-items: center; justify-content: space-between; padding: 8px 12px; background-color: #fff3ef; color: #9c3c2b; font-size: 13px; }
+.chat-retry { min-height: 30px; margin: 0; padding: 0 10px; border: 1px solid #e7c7bb; border-radius: 15px; background-color: #ffffff; color: #9c3c2b; font-size: 12px; }
+.chat-archive { padding: 8px 12px; background-color: #fff8df; color: #71633b; text-align: center; font-size: 12px; }
+.chat-messages { padding: 12px 12px 8px; background-color: #efeae2; }
+.chat-date-row { display: flex; flex-direction: row; justify-content: center; margin: 8px 0 14px; }
+.chat-date { padding: 5px 11px; border-radius: 12px; background-color: #faf4df; color: #68716b; font-size: 11px; }
+.message-row { display: flex; flex-direction: row; margin: 4px 0; }
+.message-row-mine { justify-content: flex-end; }
+.message-row-other { justify-content: flex-start; }
+.chat-bubble { display: flex; flex-direction: column; width: auto; max-width: 560px; margin: 0; padding: 8px 10px 5px; border-radius: 10px; }
+.chat-bubble-mine { border-bottom-right-radius: 3px; background-color: #d9fdd3; }
+.chat-bubble-other { border-bottom-left-radius: 3px; background-color: #ffffff; }
+.chat-sender { margin-bottom: 3px; color: #087e67; font-size: 12px; font-weight: 700; }
+.chat-message-text { color: #17211d; font-size: 15px; line-height: 1.4; }
+.chat-message-time { align-self: flex-end; margin-top: 4px; color: #78827d; font-size: 10px; }
+.chat-empty { display: flex; justify-content: center; margin-top: 28px; color: #748078; font-size: 13px; }
+.chat-compose { display: flex; flex-direction: row; align-items: center; padding: 8px 10px; border-top: 1px solid #e4e6e2; background-color: #f7f5f0; }
+.chat-input { flex: 1; min-width: 0; height: 42px; margin: 0 8px 0 0; padding: 0 15px; border: 1px solid #e0e4df; border-radius: 22px; background-color: #ffffff; color: #17211d; font-size: 14px; }
+.chat-send { display: flex; align-items: center; justify-content: center; width: 42px; min-width: 42px; height: 42px; margin: 0; padding: 0; border: 0; border-radius: 21px; background-color: #087e67; color: #ffffff; font-size: 18px; font-weight: 700; }
+.chat-send-disabled { background-color: #9aaca4; color: #edf2ef; }
+.chat-login { display: flex; justify-content: center; padding: 12px; background-color: #f7f5f0; }
+.chat-login-button { min-height: 40px; margin: 0; padding: 0 18px; border: 0; border-radius: 20px; background-color: #087e67; color: #ffffff; font-size: 14px; font-weight: 600; }
 </style>

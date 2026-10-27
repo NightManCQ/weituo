@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="uni.changbi.mqtt">
+
+    <!-- 基础网络权限 -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+
+    <!--
+        前台服务权限（Android 9+ 必须声明）
+        FOREGROUND_SERVICE_DATA_SYNC：Android 14+ 对 dataSync 类型的细化权限
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+
+    <!--
+        POST_NOTIFICATIONS：Android 13+ 发送通知需要运行时权限
+        此处声明后，UniApp 侧需要在合适时机调用系统权限申请 API
+        若不申请，通知不显示但前台服务仍可运行（静默前台服务）
+    -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!--
+        RECEIVE_BOOT_COMPLETED：接收开机广播，设备重启后自动恢复 MQTT 连接
+    -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <application>
+        <!--
+            MQTT 前台保活服务
+            exported="false"：不允许其他 App 启动此服务
+            foregroundServiceType="dataSync"：
+              - Android 10+ 要求前台服务声明类型
+              - dataSync 适用于持续数据同步场景（MQTT 消息收发）
+              - Android 14+ 需要同时声明 FOREGROUND_SERVICE_DATA_SYNC 权限（已在上方声明）
+        -->
+        <service
+            android:name="uni.changbi.mqtt.MqttForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync"
+            android:stopWithTask="false" />
+
+        <!--
+            开机自启 BroadcastReceiver
+            stopWithTask="false" 使得即使用户划掉 App，服务也不会停止
+            BootReceiver 在设备重启后重新启动前台服务
+        -->
+        <receiver
+            android:name="uni.changbi.mqtt.MqttBootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+    </application>
+
+</manifest>

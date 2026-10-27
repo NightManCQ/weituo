@@ -4,7 +4,7 @@ import { onHide } from '@dcloudio/uni-app'
 import { ref } from 'vue'
 import type { 用户 } from '../../common/leixing'
 import { 发送请求, 格式化时间, 读取当前用户 } from '../../common/wangluo'
-import { 连接实时消息, 订阅实时事件 } from '../../common/shishi'
+import { 订阅实时事件 } from '../../common/实时'
 
 type 好友 = { 用户编号: string; 登录名: string; 昵称: string; 建立时间: string }
 type 群组 = { 群组编号: string; 群组名称: string; 群组公告: string; 成员数: number; 最近消息: string | null; 最近消息时间: string | null }
@@ -74,7 +74,6 @@ async function 处理邀请(邀请: 群邀请, 操作: 'accept' | 'reject') {
 
 onShow(() => {
   当前用户.value = 读取当前用户()
-  void 连接实时消息(当前用户.value)
   if (取消订阅 == null) 取消订阅 = 订阅实时事件(() => { void 刷新() })
   void 刷新()
 })

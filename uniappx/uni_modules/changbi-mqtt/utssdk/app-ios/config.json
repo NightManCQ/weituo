@@ -1,0 +1,14 @@
+{
+  "deploymentTarget": "13.0",
+  "dependencies": [
+    {
+      "id": "CocoaMQTT",
+      "source": "SPM",
+      "parameters": {
+        "url": "https://github.com/emqx/CocoaMQTT.git",
+        "version": "2.1.0",
+        "products": ["CocoaMQTT"]
+      }
+    }
+  ]
+}

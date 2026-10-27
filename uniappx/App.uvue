@@ -1,13 +1,14 @@
 <script setup>
-	import { 连接实时消息 } from './common/shishi'
+	import { 连接实时消息 } from './common/实时'
 
 	// #ifdef APP-ANDROID || APP-HARMONY
+
 	let firstBackTime = 0
 	// #endif
-
 	onLaunch(() => {
 		console.log('App Launch')
 		void 连接实时消息()
+
 	})
 
 	onAppShow(() => {
@@ -43,39 +44,234 @@
 </script>
 
 <style>
-	page { background-color: #f4f6f5; color: #1b2427; font-size: 14px; }
-	.page { padding: 18px 16px 30px; }
-	.page-heading { display: flex; flex-direction: column; margin: 4px 0 18px; }
-	.eyebrow { color: #087e67; font-size: 12px; font-weight: 700; }
-	.title { color: #1b2427; font-size: 25px; font-weight: 700; }
-	.card { display: flex; flex-direction: column; margin: 10px 0; padding: 16px; border: 1px solid #e8edeb; border-radius: 14px; background-color: #ffffff; }
-	.card-title { color: #1b2427; font-size: 16px; font-weight: 700; margin: 6px 0; }
-	.body { color: #34423d; font-size: 14px; line-height: 1.6; }
-	.muted { color: #7c8986; font-size: 12px; line-height: 1.6; }
-	.label { display: flex; margin-top: 10px; color: #566460; font-size: 13px; font-weight: 600; }
-	.field { width: 100%; min-height: 42px; margin: 6px 0; padding: 10px 12px; border: 1px solid #e3e9e6; border-radius: 8px; background-color: #ffffff; color: #1b2427; font-size: 14px; }
-	.textarea { min-height: 110px; }
-	.primary, .secondary { min-height: 38px; margin: 4px 4px 4px 0; padding: 0 14px; border-radius: 8px; font-size: 13px; font-weight: 600; }
-	.primary { border: 0; background-color: #087e67; color: #ffffff; }
-	.secondary { border: 1px solid #c9e0d7; background-color: #ffffff; color: #087e67; }
-	.small { min-height: 32px; font-size: 12px; }
-	.text-button { margin: 4px 0; border: 0; background-color: transparent; color: #087e67; font-size: 13px; }
-	.left { align-self: flex-start; }
-	.actions, .row-between, .compose, .list-row, .filters { display: flex; flex-direction: row; align-items: center; flex-wrap: wrap; }
-	.row-between { justify-content: space-between; }
-	.grow { flex: 1; min-width: 0; }
-	.badge, .chip { padding: 5px 9px; border-radius: 14px; background-color: #e7f4ef; color: #087e67; font-size: 12px; }
-	.chip { border: 1px solid #c9e0d7; }
-	.card-footer { margin-top: 12px; }
-	.list-row { justify-content: space-between; min-height: 50px; padding: 9px 2px; border-bottom: 1px solid #edf1ef; }
-	.arrow { color: #7c8986; font-size: 22px; }
-	.notice { margin: 8px 0; padding: 11px 13px; border-radius: 8px; font-size: 13px; }
-	.error { background-color: #fff0ec; color: #a84229; }
-	.empty { display: flex; flex-direction: column; align-items: center; padding: 30px 12px; color: #7c8986; text-align: center; }
-	.location-box { display: flex; flex-direction: column; margin: 8px 0; padding: 12px; border: 1px solid #e8edeb; border-radius: 9px; }
-	.chat-page { display: flex; flex-direction: column; }
-	.message-list { height: 360px; margin: 8px 0; padding: 10px; border: 1px solid #e8edeb; border-radius: 10px; background-color: #ffffff; }
-	.message { display: flex; flex-direction: column; margin: 8px 0; padding: 10px; border-radius: 9px; background-color: #f4f6f5; }
-	.compose { flex-wrap: nowrap; padding-bottom: 10px; }
-	.compose-field { margin: 0; }
+	page {
+		background-color: #f4f6f5;
+		color: #1b2427;
+		font-size: 14px;
+	}
+
+	.page {
+		padding: 18px 16px 30px;
+	}
+
+	.page-heading {
+		display: flex;
+		flex-direction: column;
+		margin: 4px 0 18px;
+	}
+
+	.eyebrow {
+		color: #087e67;
+		font-size: 12px;
+		font-weight: 700;
+	}
+
+	.title {
+		color: #1b2427;
+		font-size: 25px;
+		font-weight: 700;
+	}
+
+	.card {
+		display: flex;
+		flex-direction: column;
+		margin: 10px 0;
+		padding: 16px;
+		border: 1px solid #e8edeb;
+		border-radius: 14px;
+		background-color: #ffffff;
+	}
+
+	.card-title {
+		color: #1b2427;
+		font-size: 16px;
+		font-weight: 700;
+		margin: 6px 0;
+	}
+
+	.body {
+		color: #34423d;
+		font-size: 14px;
+		line-height: 1.6;
+	}
+
+	.muted {
+		color: #7c8986;
+		font-size: 12px;
+		line-height: 1.6;
+	}
+
+	.label {
+		display: flex;
+		margin-top: 10px;
+		color: #566460;
+		font-size: 13px;
+		font-weight: 600;
+	}
+
+	.field {
+		width: 100%;
+		min-height: 42px;
+		margin: 6px 0;
+		padding: 10px 12px;
+		border: 1px solid #e3e9e6;
+		border-radius: 8px;
+		background-color: #ffffff;
+		color: #1b2427;
+		font-size: 14px;
+	}
+
+	.textarea {
+		min-height: 110px;
+	}
+
+	.primary,
+	.secondary {
+		min-height: 38px;
+		margin: 4px 4px 4px 0;
+		padding: 0 14px;
+		border-radius: 8px;
+		font-size: 13px;
+		font-weight: 600;
+	}
+
+	.primary {
+		border: 0;
+		background-color: #087e67;
+		color: #ffffff;
+	}
+
+	.secondary {
+		border: 1px solid #c9e0d7;
+		background-color: #ffffff;
+		color: #087e67;
+	}
+
+	.small {
+		min-height: 32px;
+		font-size: 12px;
+	}
+
+	.text-button {
+		margin: 4px 0;
+		border: 0;
+		background-color: transparent;
+		color: #087e67;
+		font-size: 13px;
+	}
+
+	.left {
+		align-self: flex-start;
+	}
+
+	.actions,
+	.row-between,
+	.compose,
+	.list-row,
+	.filters {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		flex-wrap: wrap;
+	}
+
+	.row-between {
+		justify-content: space-between;
+	}
+
+	.grow {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.badge,
+	.chip {
+		padding: 5px 9px;
+		border-radius: 14px;
+		background-color: #e7f4ef;
+		color: #087e67;
+		font-size: 12px;
+	}
+
+	.chip {
+		border: 1px solid #c9e0d7;
+	}
+
+	.card-footer {
+		margin-top: 12px;
+	}
+
+	.list-row {
+		justify-content: space-between;
+		min-height: 50px;
+		padding: 9px 2px;
+		border-bottom: 1px solid #edf1ef;
+	}
+
+	.arrow {
+		color: #7c8986;
+		font-size: 22px;
+	}
+
+	.notice {
+		margin: 8px 0;
+		padding: 11px 13px;
+		border-radius: 8px;
+		font-size: 13px;
+	}
+
+	.error {
+		background-color: #fff0ec;
+		color: #a84229;
+	}
+
+	.empty {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		padding: 30px 12px;
+		color: #7c8986;
+		text-align: center;
+	}
+
+	.location-box {
+		display: flex;
+		flex-direction: column;
+		margin: 8px 0;
+		padding: 12px;
+		border: 1px solid #e8edeb;
+		border-radius: 9px;
+	}
+
+	.chat-page {
+		display: flex;
+		flex-direction: column;
+	}
+
+	.message-list {
+		height: 360px;
+		margin: 8px 0;
+		padding: 10px;
+		border: 1px solid #e8edeb;
+		border-radius: 10px;
+		background-color: #ffffff;
+	}
+
+	.message {
+		display: flex;
+		flex-direction: column;
+		margin: 8px 0;
+		padding: 10px;
+		border-radius: 9px;
+		background-color: #f4f6f5;
+	}
+
+	.compose {
+		flex-wrap: nowrap;
+		padding-bottom: 10px;
+	}
+
+	.compose-field {
+		margin: 0;
+	}
 </style>
