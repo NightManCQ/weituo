@@ -1,0 +1,122 @@
+<script setup lang="ts">
+import { onShow } from '@dcloudio/uni-app'
+import { onHide } from '@dcloudio/uni-app'
+import { ref } from 'vue'
+import type { 用户 } from '../../common/leixing'
+import { 发送请求, 格式化时间, 读取当前用户 } from '../../common/wangluo'
+import { 连接实时消息, 订阅实时事件 } from '../../common/shishi'
+
+type 好友 = { 用户编号: string; 登录名: string; 昵称: string; 建立时间: string }
+type 群组 = { 群组编号: string; 群组名称: string; 群组公告: string; 成员数: number; 最近消息: string | null; 最近消息时间: string | null }
+type 群邀请 = { 邀请编号: string; 群组编号: string; 群组名称: string; 邀请人昵称: string; 创建时间: string }
+const 当前用户 = ref<用户 | null>(null)
+const 好友列表 = ref<好友[]>([])
+const 群组列表 = ref<群组[]>([])
+const 邀请列表 = ref<群邀请[]>([])
+const 搜索 = ref('')
+const 正在加载 = ref(false)
+const 错误 = ref('')
+let 取消订阅: (() => void) | null = null
+
+async function 刷新() {
+  if (当前用户.value == null) return
+  正在加载.value = true
+  错误.value = ''
+  try {
+    const [好友, 群组, 邀请] = await Promise.all([
+      发送请求<好友[]>('/my/friends'),
+      发送请求<群组[]>('/my/groups'),
+      发送请求<群邀请[]>('/my/group-invitations'),
+    ])
+    好友列表.value = 好友
+    群组列表.value = 群组
+    邀请列表.value = 邀请
+  } catch (原因) {
+    错误.value = 原因 instanceof Error ? 原因.message : '加载联系人失败'
+  } finally {
+    正在加载.value = false
+  }
+}
+
+function 打开好友(好友项: 好友) {
+  uni.navigateTo({ url: `/pages/liaotian/liaotian?friendId=${encodeURIComponent(好友项.用户编号)}&nickname=${encodeURIComponent(好友项.昵称)}` })
+}
+
+function 打开群聊(编号: string) {
+  uni.navigateTo({ url: `/pages/liaotian/liaotian?groupId=${encodeURIComponent(编号)}` })
+}
+
+async function 删除好友(好友项: 好友) {
+  const 确认 = await new Promise<boolean>((resolve) => uni.showModal({
+    title: '删除好友',
+    content: `确定删除好友 ${好友项.昵称} 吗？历史聊天记录会保留。`,
+    success: (结果) => resolve(结果.confirm),
+    fail: () => resolve(false),
+  }))
+  if (!确认) return
+  try {
+    await 发送请求(`/my/friends/${encodeURIComponent(好友项.用户编号)}`, { method: 'DELETE' })
+    await 刷新()
+  } catch (原因) {
+    uni.showToast({ title: 原因 instanceof Error ? 原因.message : '删除好友失败', icon: 'none' })
+  }
+}
+
+async function 处理邀请(邀请: 群邀请, 操作: 'accept' | 'reject') {
+  try {
+    await 发送请求(`/group-invitations/${encodeURIComponent(邀请.邀请编号)}/${操作}`, { method: 'POST' })
+    await 刷新()
+    if (操作 == 'accept') 打开群聊(邀请.群组编号)
+  } catch (原因) {
+    uni.showToast({ title: 原因 instanceof Error ? 原因.message : '处理邀请失败', icon: 'none' })
+  }
+}
+
+onShow(() => {
+  当前用户.value = 读取当前用户()
+  void 连接实时消息(当前用户.value)
+  if (取消订阅 == null) 取消订阅 = 订阅实时事件(() => { void 刷新() })
+  void 刷新()
+})
+onHide(() => {
+  取消订阅?.()
+  取消订阅 = null
+})
+</script>
+
+<template>
+  <view class="page">
+    <view class="page-heading row-between">
+      <view><text class="eyebrow">好友与群组</text><text class="title">联系人</text></view>
+      <button class="secondary" @click="刷新">刷新</button>
+    </view>
+    <view v-if="当前用户 == null" class="empty">
+      <text>登录后查看联系人</text>
+      <button class="primary" @click="uni.switchTab({ url: '/pages/wode/wode' })">前往登录</button>
+    </view>
+    <template v-else>
+      <input v-model="搜索" class="field" placeholder="搜索好友或群聊" />
+      <view class="actions">
+        <button class="primary" @click="uni.navigateTo({ url: '/pages/chuanjianqun/chuanjianqun' })">创建群聊</button>
+        <button class="secondary" @click="uni.navigateTo({ url: '/pages/tianjiahaoyou/tianjiahaoyou' })">添加好友</button>
+      </view>
+      <view v-if="错误" class="notice error">{{ 错误 }}</view>
+      <text class="label">好友</text>
+      <view v-for="好友项 in 好友列表.filter((项目) => `${项目.昵称} ${项目.登录名}`.toLowerCase().includes(搜索.toLowerCase()))" :key="好友项.用户编号" class="list-row">
+        <view class="grow clickable" @click="打开好友(好友项)"><text class="card-title">{{ 好友项.昵称 }}</text><text class="muted">@{{ 好友项.登录名 }}</text></view>
+        <button class="text-button" @click="删除好友(好友项)">删除</button>
+      </view>
+      <text class="label">群聊</text>
+      <view v-for="群 in 群组列表.filter((项目) => `${项目.群组名称} ${项目.最近消息 || ''}`.toLowerCase().includes(搜索.toLowerCase()))" :key="群.群组编号" class="list-row clickable" @click="打开群聊(群.群组编号)">
+        <view class="grow"><text class="card-title">{{ 群.群组名称 }}</text><text class="muted">{{ 群.最近消息 || 群.群组公告 || '还没有消息' }} · {{ 群.成员数 }}人</text></view><text class="arrow">›</text>
+      </view>
+      <text class="label">群邀请</text>
+      <view v-for="邀请 in 邀请列表" :key="邀请.邀请编号" class="card">
+        <text class="card-title">{{ 邀请.邀请人昵称 }} 邀请加入 {{ 邀请.群组名称 }}</text>
+        <text class="muted">{{ 格式化时间(邀请.创建时间) }}</text>
+        <view class="actions"><button class="small primary" @click="处理邀请(邀请, 'accept')">加入</button><button class="small secondary" @click="处理邀请(邀请, 'reject')">拒绝</button></view>
+      </view>
+      <view v-if="正在加载" class="empty">正在同步联系人…</view>
+    </template>
+  </view>
+</template>

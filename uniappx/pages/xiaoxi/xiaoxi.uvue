@@ -1,0 +1,101 @@
+<script setup lang="ts">
+import { onShow } from '@dcloudio/uni-app'
+import { onHide } from '@dcloudio/uni-app'
+import { ref } from 'vue'
+import type { 消息会话, 用户 } from '../../common/leixing'
+import { 发送请求, 格式化时间, 读取当前用户 } from '../../common/wangluo'
+import { 连接实时消息, 订阅实时事件 } from '../../common/shishi'
+
+type 好友申请 = { 申请编号: string; 申请人编号: string; 登录名: string; 昵称: string; 申请附言: string; 创建时间: string }
+const 当前用户 = ref<用户 | null>(null)
+const 会话列表 = ref<消息会话[]>([])
+const 好友申请列表 = ref<好友申请[]>([])
+const 正在加载 = ref(false)
+const 错误 = ref('')
+const 搜索 = ref('')
+let 取消订阅: (() => void) | null = null
+
+async function 刷新() {
+  if (当前用户.value == null) {
+    会话列表.value = []
+    好友申请列表.value = []
+    return
+  }
+  正在加载.value = true
+  错误.value = ''
+  try {
+    const [会话, 申请] = await Promise.all([
+      发送请求<消息会话[]>('/my/message-conversations'),
+      发送请求<好友申请[]>('/my/friend-requests'),
+    ])
+    会话列表.value = 会话
+    好友申请列表.value = 申请
+  } catch (原因) {
+    错误.value = 原因 instanceof Error ? 原因.message : '加载消息失败'
+  } finally {
+    正在加载.value = false
+  }
+}
+
+function 打开会话(会话: 消息会话) {
+  const 路径 = 会话.会话类型 == '好友'
+    ? `/pages/liaotian/liaotian?friendId=${encodeURIComponent(会话.关联编号)}&nickname=${encodeURIComponent(会话.会话名称)}`
+    : `/pages/liaotian/liaotian?groupId=${encodeURIComponent(会话.会话编号)}`
+  uni.navigateTo({ url: 路径 })
+}
+
+async function 处理申请(申请: 好友申请, 操作: 'accept' | 'reject') {
+  try {
+    await 发送请求(`/my/friend-requests/${encodeURIComponent(申请.申请编号)}/${操作}`, { method: 'POST' })
+    uni.showToast({ title: 操作 == 'accept' ? '已添加好友' : '已拒绝申请', icon: 'success' })
+    await 刷新()
+  } catch (原因) {
+    uni.showToast({ title: 原因 instanceof Error ? 原因.message : '处理申请失败', icon: 'none' })
+  }
+}
+
+onShow(() => {
+  当前用户.value = 读取当前用户()
+  void 连接实时消息(当前用户.value)
+  if (取消订阅 == null) 取消订阅 = 订阅实时事件(() => { void 刷新() })
+  void 刷新()
+})
+onHide(() => {
+  取消订阅?.()
+  取消订阅 = null
+})
+</script>
+
+<template>
+  <view class="page">
+    <view class="page-heading row-between">
+      <view><text class="eyebrow">消息中心</text><text class="title">消息</text></view>
+      <button class="secondary" :disabled="正在加载" @click="刷新">刷新</button>
+    </view>
+    <view v-if="当前用户 == null" class="empty">
+      <text>登录后查看消息</text>
+      <button class="primary" @click="uni.switchTab({ url: '/pages/wode/wode' })">前往登录</button>
+    </view>
+    <template v-else>
+      <input v-model="搜索" class="field" placeholder="搜索会话或消息" />
+      <view v-if="错误" class="notice error">{{ 错误 }}</view>
+      <view v-for="申请 in 好友申请列表" :key="申请.申请编号" class="card">
+        <text class="card-title">{{ 申请.昵称 }} 的好友验证</text>
+        <text class="muted">@{{ 申请.登录名 }} · {{ 申请.申请附言 || '请求添加你为好友' }}</text>
+        <view class="actions">
+          <button class="small primary" @click="处理申请(申请, 'accept')">同意</button>
+          <button class="small secondary" @click="处理申请(申请, 'reject')">拒绝</button>
+        </view>
+      </view>
+      <view v-for="会话 in 会话列表.filter((项目) => `${项目.会话名称} ${项目.最近消息 || ''}`.toLowerCase().includes(搜索.toLowerCase()))" :key="`${会话.会话类型}-${会话.会话编号}`" class="list-row clickable" @click="打开会话(会话)">
+        <view class="grow">
+          <text class="card-title">{{ 会话.会话名称 }}</text>
+          <text class="muted">{{ 会话.最近消息 || '开始聊天吧' }}</text>
+          <text class="muted">{{ 格式化时间(会话.最近消息时间) }} · {{ 会话.会话类型 }}</text>
+        </view>
+        <text class="arrow">›</text>
+      </view>
+      <view v-if="!正在加载 && !错误 && 会话列表.length == 0 && 好友申请列表.length == 0" class="empty">还没有消息</view>
+    </template>
+  </view>
+</template>

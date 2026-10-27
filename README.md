@@ -73,7 +73,7 @@ Get-Process -Id $owner
 
 ## 本机后端连接内网 PostgreSQL / EMQX
 
-要求 Rust stable、Node.js 20+。`rust_houduan/.env.example` 已将 PostgreSQL、MQTT TCP 与 MQTT WebSocket 主机设为 `192.168.1.107`；同机浏览器默认通过 Vite 代理调用 `http://127.0.0.1:8080`。若浏览器从局域网其他设备访问前端，需要将前端 `VITE_API_BASE` 指向运行后端电脑的局域网地址（例如 `http://192.168.1.103:8080/api/v1`），并将后端 `API_BIND` 设为该电脑的局域网 IP、`CORS_ORIGIN` 设为浏览器实际使用的前端来源（例如 `http://192.168.1.103:5173`）。仅允许可信局域网访问该 API，并按需配置主机防火墙。项目 MQTT 使用独立端口 `1884`（TCP）和 `8085`（WebSocket），不修改服务器上其他项目的 EMQX 配置。端口可达不代表数据库/Broker 已认证或 ACL 可用；启动前须完成下面的项目专用 Broker 配置与验收。
+要求 Rust stable、Node.js 20+。`rust_houduan/.env.example` 已将 PostgreSQL、MQTT TCP 与 MQTT WebSocket 主机设为 `192.168.1.107`；同机浏览器默认通过 Vite 代理调用 `http://127.0.0.1:8080`。后端 `CORS_ORIGIN` 支持逗号分隔的多个浏览器来源，例如 `http://localhost:5173,http://127.0.0.1:5173`。若浏览器从局域网其他设备访问前端，需要将前端 `VITE_API_BASE` 指向运行后端电脑的局域网地址（例如 `http://192.168.1.103:8080/api/v1`），并将后端 `API_BIND` 设为该电脑的局域网 IP、`CORS_ORIGIN` 加入浏览器地址栏中实际使用的前端来源（例如 `http://192.168.1.103:5173`）。仅允许可信局域网访问该 API，并按需配置主机防火墙。项目 MQTT 使用独立端口 `1884`（TCP）和 `8085`（WebSocket），不修改服务器上其他项目的 EMQX 配置。端口可达不代表数据库/Broker 已认证或 ACL 可用；启动前须完成下面的项目专用 Broker 配置与验收。
 
 1. 先在开发机创建配置文件：
 

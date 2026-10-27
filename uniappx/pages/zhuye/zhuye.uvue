@@ -1,0 +1,83 @@
+<script setup lang="ts">
+import { onShow } from '@dcloudio/uni-app'
+import { ref } from 'vue'
+import type { 任务, 用户 } from '../../common/leixing'
+import { 创建编号, 发送请求, 格式化时间, 读取当前用户 } from '../../common/wangluo'
+
+const 当前用户 = ref<用户 | null>(null)
+const 委托列表 = ref<任务[]>([])
+const 正在加载 = ref(false)
+const 错误信息 = ref('')
+
+async function 刷新() {
+  正在加载.value = true
+  错误信息.value = ''
+  try {
+    委托列表.value = await 发送请求<任务[]>('/tasks?status=' + encodeURIComponent('待接单'))
+  } catch (原因) {
+    错误信息.value = 原因 instanceof Error ? 原因.message : '加载委托失败'
+  } finally {
+    正在加载.value = false
+  }
+}
+
+function 打开委托(编号: string) {
+  uni.navigateTo({ url: `/pages/weituo/weituo?id=${encodeURIComponent(编号)}` })
+}
+
+async function 接取委托(委托: 任务) {
+  if (!当前用户.value) {
+    uni.switchTab({ url: '/pages/wode/wode' })
+    return
+  }
+  try {
+    await 发送请求(`/tasks/${encodeURIComponent(委托.任务编号)}/claim`, {
+      method: 'POST',
+      headers: { 'Idempotency-Key': 创建编号() },
+    })
+    uni.showToast({ title: '已接取委托', icon: 'success' })
+    await 刷新()
+  } catch (原因) {
+    uni.showToast({ title: 原因 instanceof Error ? 原因.message : '接取失败', icon: 'none' })
+  }
+}
+
+onShow(() => {
+  当前用户.value = 读取当前用户()
+  void 刷新()
+})
+</script>
+
+<template>
+  <view class="page">
+    <view class="page-heading">
+      <text class="eyebrow">正在发生</text>
+      <text class="title">委托广场</text>
+      <text class="muted">{{ 当前用户 == null ? '发现委托，找到一起完成它的人。' : `你好，${当前用户.昵称}，看看有哪些委托适合你。` }}</text>
+    </view>
+    <view class="actions">
+      <button class="primary" @click="uni.navigateTo({ url: '/pages/fabuweituo/fabuweituo' })">＋ 发布委托</button>
+      <button class="secondary" @click="刷新">刷新</button>
+      <button v-if="当前用户 != null" class="secondary" @click="uni.navigateTo({ url: '/pages/woderenwu/woderenwu' })">我的委托</button>
+    </view>
+    <view v-if="错误信息" class="notice error">{{ 错误信息 }}</view>
+    <view v-if="正在加载 && 委托列表.length == 0" class="empty">正在加载委托…</view>
+    <view v-else-if="错误信息" class="empty">
+      <text>委托加载失败</text>
+      <button class="secondary" @click="刷新">重新加载</button>
+    </view>
+    <view v-else-if="委托列表.length == 0" class="empty">暂时没有待接单委托</view>
+    <view v-for="委托 in 委托列表" :key="委托.任务编号" class="card">
+      <view class="row-between">
+        <text class="badge">{{ 委托.任务状态 }}</text>
+        <text class="muted">{{ 格式化时间(委托.创建时间) }}</text>
+      </view>
+      <text class="card-title" @click="打开委托(委托.任务编号)">{{ 委托.标题 }}</text>
+      <text class="body">{{ 委托.描述 || '暂无补充描述' }}</text>
+      <view class="row-between card-footer">
+        <text class="muted">{{ 委托.报酬积分 == null ? '无积分报酬' : `${委托.报酬积分} 积分报酬` }}</text>
+        <button class="small primary" @click="接取委托(委托)">查看 / 接单</button>
+      </view>
+    </view>
+  </view>
+</template>

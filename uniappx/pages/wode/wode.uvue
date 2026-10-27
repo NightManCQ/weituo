@@ -1,0 +1,122 @@
+<script setup lang="ts">
+import { onShow } from '@dcloudio/uni-app'
+import { ref } from 'vue'
+import type { 积分账户, 积分流水, 用户 } from '../../common/leixing'
+import { 发送请求, 读取当前用户, 获取API地址 } from '../../common/wangluo'
+import { 连接实时消息, 断开实时消息 } from '../../common/shishi'
+
+const 当前用户 = ref<用户 | null>(null)
+const 是否注册 = ref(false)
+const 登录名 = ref('')
+const 密码 = ref('')
+const 昵称 = ref('')
+const 正在处理 = ref(false)
+const 积分 = ref<积分账户 | null>(null)
+const 流水 = ref<积分流水[]>([])
+const API地址 = ref('')
+const 积分错误 = ref('')
+
+async function 登录或注册() {
+  if (正在处理.value) return
+  if (登录名.value.trim().length < 3 || 密码.value.length < 10 || (是否注册.value && 昵称.value.trim().length == 0)) {
+    uni.showToast({ title: '请检查登录名、密码长度和昵称', icon: 'none' })
+    return
+  }
+  正在处理.value = true
+  try {
+    const 结果 = await 发送请求<{ 访问令牌: string; 用户: 用户 }>(是否注册.value ? '/auth/register' : '/auth/login', {
+      method: 'POST',
+      data: { login_name: 登录名.value.trim(), password: 密码.value, nickname: 昵称.value.trim() } as UTSJSONObject,
+    })
+    uni.setStorageSync('renwu_token', 结果.访问令牌)
+    uni.setStorageSync('renwu_user', 结果.用户)
+    当前用户.value = 结果.用户
+    await 连接实时消息(结果.用户)
+    uni.showToast({ title: '登录成功', icon: 'success' })
+    await 刷新积分()
+  } catch (原因) {
+    uni.showToast({ title: 原因 instanceof Error ? 原因.message : '登录失败', icon: 'none' })
+  } finally {
+    正在处理.value = false
+  }
+}
+
+async function 刷新积分() {
+  if (当前用户.value == null) return
+  积分错误.value = ''
+  try {
+    const [账户, 账目] = await Promise.all([
+      发送请求<积分账户>('/my/points'),
+      发送请求<积分流水[]>('/my/points/ledger?limit=30'),
+    ])
+    积分.value = 账户
+    流水.value = 账目
+  } catch (原因) {
+    积分错误.value = 原因 instanceof Error ? 原因.message : '积分账户加载失败'
+    console.error('积分账户加载失败', 原因)
+  }
+}
+
+function 退出登录() {
+  uni.removeStorageSync('renwu_token')
+  uni.removeStorageSync('renwu_user')
+  断开实时消息()
+  当前用户.value = null
+  积分.value = null
+  uni.showToast({ title: '已退出登录', icon: 'success' })
+}
+
+function 保存API地址() {
+  const 地址 = API地址.value.trim().replace(/\/+$/, '')
+  if (!地址.startsWith('http://') && !地址.startsWith('https://')) {
+    uni.showToast({ title: 'API 地址必须以 http:// 或 https:// 开头', icon: 'none' })
+    return
+  }
+  uni.setStorageSync('renwu_api_base', 地址)
+  API地址.value = 地址
+  uni.showToast({ title: 'API 地址已保存', icon: 'success' })
+}
+
+onShow(() => {
+  当前用户.value = 读取当前用户()
+  API地址.value = 获取API地址()
+  void 刷新积分()
+})
+</script>
+
+<template>
+  <view class="page">
+    <view class="page-heading"><text class="eyebrow">个人中心</text><text class="title">我</text></view>
+    <view v-if="当前用户 != null" class="card">
+      <text class="card-title">{{ 当前用户.昵称 }}</text>
+      <text class="muted">账号：{{ 当前用户.登录名 }}</text>
+      <text class="muted">用户编号：{{ 当前用户.用户编号 }}</text>
+      <view class="card">
+        <text class="card-title">我的积分</text>
+        <text v-if="积分错误" class="notice error">{{ 积分错误 }}</text>
+        <text class="body">可用 {{ 积分?.可用积分 ?? '—' }} · 托管中 {{ 积分?.冻结积分 ?? '—' }} · 总计 {{ 积分?.总积分 ?? '—' }}</text>
+        <text class="muted">积分不可提现或用户间自由转让。委托验收后发放托管报酬。</text>
+        <view v-for="记录 in 流水" :key="记录.流水编号" class="list-row">
+          <text>{{ 记录.说明 || 记录.交易类型 }}</text><text>{{ 记录.可用变动 > 0 ? '+' : '' }}{{ 记录.可用变动 }}</text>
+        </view>
+      </view>
+      <button class="secondary" @click="刷新积分">刷新积分</button>
+      <button class="secondary" @click="uni.navigateTo({ url: '/pages/woderenwu/woderenwu' })">我的委托</button>
+      <button class="secondary" @click="退出登录">退出登录</button>
+    </view>
+    <view v-else class="card">
+      <text class="card-title">{{ 是否注册 ? '创建账号' : '登录账号' }}</text>
+      <text class="muted">登录后即可发布委托、接单和参与协作。</text>
+      <input v-if="是否注册" v-model="昵称" class="field" placeholder="昵称" maxlength="40" />
+      <input v-model="登录名" class="field" placeholder="登录名" maxlength="64" />
+      <input v-model="密码" class="field" placeholder="密码（至少 10 位）" password maxlength="128" />
+      <button class="primary" :disabled="正在处理" @click="登录或注册">{{ 正在处理 ? '请稍候…' : 是否注册 ? '注册并登录' : '登录' }}</button>
+      <button class="text-button" @click="是否注册 = !是否注册">{{ 是否注册 ? '已有账号？返回登录' : '还没有账号？立即注册' }}</button>
+    </view>
+    <view class="card">
+      <text class="label">API 服务地址</text>
+      <input v-model="API地址" class="field" placeholder="http://服务器地址:8080/api/v1" />
+      <button class="secondary" @click="保存API地址">保存地址</button>
+    </view>
+  </view>
+</template>

@@ -1,0 +1,46 @@
+<script setup lang="ts">
+import { onShow } from '@dcloudio/uni-app'
+import { ref } from 'vue'
+import type { 用户 } from '../../common/leixing'
+import { 发送请求, 读取当前用户 } from '../../common/wangluo'
+
+const 当前用户 = ref<用户 | null>(null)
+const 群名称 = ref('')
+const 正在创建 = ref(false)
+
+async function 创建() {
+  const 名称 = 群名称.value.trim()
+  if (!名称 || 正在创建.value) return
+  正在创建.value = true
+  try {
+    const 结果 = await 发送请求<{ 群组编号: string }>('/groups', {
+      method: 'POST',
+      data: { name: 名称 } as UTSJSONObject,
+    })
+    uni.navigateTo({ url: `/pages/liaotian/liaotian?groupId=${encodeURIComponent(结果.群组编号)}` })
+  } catch (原因) {
+    uni.showToast({ title: 原因 instanceof Error ? 原因.message : '创建群聊失败', icon: 'none' })
+  } finally {
+    正在创建.value = false
+  }
+
+  onShow(() => { 当前用户.value = 读取当前用户() })
+}
+</script>
+
+<template>
+  <view class="page">
+    <view class="page-heading"><text class="eyebrow">联系人</text><text class="title">创建群聊</text></view>
+    <view v-if="当前用户 == null" class="empty">
+      <text>登录后创建群聊</text>
+      <button class="primary" @click="uni.switchTab({ url: '/pages/wode/wode' })">前往登录</button>
+    </view>
+    <view v-else class="card">
+      <text class="label">群聊名称</text>
+      <input v-model="群名称" class="field" maxlength="80" placeholder="给群聊起个名字" />
+      <text class="muted">创建后可在群聊页面邀请好友加入。</text>
+      <button class="primary" :disabled="正在创建 || 群名称.trim().length == 0" @click="创建">{{ 正在创建 ? '创建中…' : '创建群聊' }}</button>
+      <button class="secondary" @click="uni.navigateBack()">取消</button>
+    </view>
+  </view>
+</template>

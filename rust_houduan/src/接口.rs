@@ -33,8 +33,15 @@ use tracing::info;
 use crate::{共享::*, 配置::运行配置};
 
 pub(crate) async fn 启动(状态: 应用状态, 配置: 运行配置) -> Result<()> {
-    let 跨域来源: axum::http::HeaderValue =
-        配置.跨域来源.parse().context("CORS_ORIGIN 格式无效")?;
+    let 跨域来源: Vec<axum::http::HeaderValue> = 配置
+        .跨域来源
+        .split(',')
+        .map(str::trim)
+        .filter(|来源| !来源.is_empty())
+        .map(str::parse)
+        .collect::<Result<_, _>>()
+        .context("CORS_ORIGIN 格式无效")?;
+    anyhow::ensure!(!跨域来源.is_empty(), "CORS_ORIGIN 至少需要配置一个来源");
     let 应用 = Router::new()
         .route("/health", get(健康检查))
         .route("/_AMapService/{*path}", get(代理高德地图服务))

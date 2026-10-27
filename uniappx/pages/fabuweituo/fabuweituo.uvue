@@ -1,0 +1,117 @@
+<script setup lang="ts">
+import { onShow } from '@dcloudio/uni-app'
+import { ref } from 'vue'
+import type { 积分账户, 任务位置, 用户 } from '../../common/leixing'
+import { 发布委托, 发送请求, 读取当前用户, 读取委托位置 } from '../../common/wangluo'
+
+const 当前用户 = ref<用户 | null>(null)
+const 标题 = ref('')
+const 描述 = ref('')
+const 截止日期 = ref('')
+const 截止时分 = ref('18:00')
+const 报酬积分 = ref(0)
+const 位置 = ref<任务位置 | null>(null)
+const 积分 = ref<积分账户 | null>(null)
+const 积分错误 = ref('')
+const 正在提交 = ref(false)
+
+async function 加载积分() {
+  积分错误.value = ''
+  try {
+    积分.value = await 发送请求<积分账户>('/my/points')
+  } catch (原因) {
+    积分错误.value = 原因 instanceof Error ? 原因.message : '积分账户加载失败'
+    console.error('积分账户加载失败', 原因)
+  }
+}
+
+async function 提交() {
+  const 清理标题 = 标题.value.trim()
+  const 积分数 = Number(报酬积分.value)
+  if (!清理标题 || 正在提交.value) return
+  if (!Number.isInteger(积分数) || 积分数 < 0 || 积分数 > 1000000000) {
+    uni.showToast({ title: '积分必须是 0 到 10 亿之间的整数', icon: 'none' })
+    return
+  }
+  正在提交.value = true
+  try {
+    const 截止时间 = 截止日期.value
+      ? `${截止日期.value}T${截止时分.value || '18:00'}:00`
+      : ''
+    await 发布委托(清理标题, 描述.value.trim(), 截止时间, 积分数, 位置.value)
+    uni.showToast({ title: '委托已发布', icon: 'success' })
+    标题.value = ''
+    描述.value = ''
+    截止日期.value = ''
+    截止时分.value = '18:00'
+    报酬积分.value = 0
+    位置.value = null
+    uni.switchTab({ url: '/pages/zhuye/zhuye' })
+  } catch (原因) {
+    uni.showToast({ title: 原因 instanceof Error ? 原因.message : '发布失败', icon: 'none' })
+  } finally {
+    正在提交.value = false
+  }
+}
+
+function 选位置() {
+  uni.navigateTo({ url: '/pages/xuanzedizhi/xuanzedizhi' })
+}
+
+function 设置截止日期(事件: { detail: { value: string } }) {
+  截止日期.value = 事件.detail.value
+}
+
+function 设置截止时分(事件: { detail: { value: string } }) {
+  截止时分.value = 事件.detail.value
+}
+
+onShow(() => {
+  当前用户.value = 读取当前用户()
+  const 结果 = 读取委托位置()
+  if (结果 != null) {
+    位置.value = 结果
+    uni.removeStorageSync('renwu_location')
+  }
+  if (当前用户.value != null) void 加载积分()
+  else {
+    积分.value = null
+    积分错误.value = ''
+  }
+})
+</script>
+
+<template>
+  <view class="page">
+    <view class="page-heading"><text class="eyebrow">发布委托</text><text class="title">发布一个委托</text></view>
+    <view v-if="当前用户 == null" class="empty">
+      <text>登录后发布委托</text>
+      <button class="primary" @click="uni.switchTab({ url: '/pages/wode/wode' })">前往登录</button>
+    </view>
+    <view v-else class="card">
+      <text class="label">委托标题</text>
+      <input v-model="标题" class="field" placeholder="例如：帮忙整理一份活动方案" maxlength="120" />
+      <text class="label">委托说明</text>
+      <textarea v-model="描述" class="field textarea" placeholder="补充背景、交付内容或其他要求…" maxlength="10000" />
+      <text class="label">截止时间（可选）</text>
+      <picker mode="date" :value="截止日期" @change="设置截止日期">
+        <view class="list-row clickable"><text class="grow">{{ 截止日期 || '选择截止日期' }}</text><text class="arrow">›</text></view>
+      </picker>
+      <picker mode="time" :value="截止时分" @change="设置截止时分">
+        <view class="list-row clickable"><text class="grow">{{ 截止时分 }}</text><text class="arrow">›</text></view>
+      </picker>
+      <button v-if="截止日期" class="text-button left" @click="截止日期 = ''">清除截止时间</button>
+      <text class="label">委托报酬（积分）</text>
+      <input v-model="报酬积分" class="field" type="number" placeholder="0 表示无积分报酬" />
+      <text v-if="积分错误" class="notice error">{{ 积分错误 }}</text>
+      <text class="muted">可用 {{ 积分?.可用积分 ?? '—' }} 积分。报酬在发布后托管，验收完成后发放。</text>
+      <view class="location-box">
+        <text class="label">委托地址（可选）</text>
+        <text v-if="位置 != null" class="body">{{ 位置.地址 || [位置.省, 位置.市, 位置.县].filter(Boolean).join(' · ') }} ({{ 位置.经度.toFixed(5) }}, {{ 位置.纬度.toFixed(5) }})</text>
+        <button class="secondary" @click="选位置">{{ 位置 == null ? '选择地址' : '更改地址' }}</button>
+        <button v-if="位置 != null" class="text-button" @click="位置 = null">清除地址</button>
+      </view>
+      <button class="primary" :disabled="正在提交 || 标题.trim().length == 0 || !Number.isInteger(Number(报酬积分)) || Number(报酬积分) < 0 || Number(报酬积分) > 1000000000" @click="提交">{{ 正在提交 ? '正在发布…' : '发布委托' }}</button>
+    </view>
+  </view>
+</template>

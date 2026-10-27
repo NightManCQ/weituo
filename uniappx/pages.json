@@ -1,0 +1,105 @@
+{
+	"pages": [{
+			"path": "pages/xiaoxi/xiaoxi",
+			"style": {
+				"navigationBarTitleText": "消息"
+			}
+		},
+		{
+			"path": "pages/zhuye/zhuye",
+			"style": {
+				"navigationBarTitleText": "委托广场"
+			}
+		},
+		{
+			"path": "pages/lianxiren/lianxiren",
+			"style": {
+				"navigationBarTitleText": "联系人"
+			}
+		},
+		{
+			"path": "pages/shijie/shijie",
+			"style": {
+				"navigationBarTitleText": "世界"
+			}
+		},
+		{
+			"path": "pages/wode/wode",
+			"style": {
+				"navigationBarTitleText": "个人中心"
+			}
+		},
+		{
+			"path": "pages/woderenwu/woderenwu",
+			"style": {
+				"navigationBarTitleText": "我的委托"
+			}
+		},
+		{
+			"path": "pages/fabuweituo/fabuweituo",
+			"style": {
+				"navigationBarTitleText": "发布委托"
+			}
+		},
+		{
+			"path": "pages/weituo/weituo",
+			"style": {
+				"navigationBarTitleText": "委托详情"
+			}
+		},
+		{
+			"path": "pages/liaotian/liaotian",
+			"style": {
+				"navigationBarTitleText": "聊天"
+			}
+		},
+		{
+			"path": "pages/chuanjianqun/chuanjianqun",
+			"style": {
+				"navigationBarTitleText": "创建群聊"
+			}
+		},
+		{
+			"path": "pages/tianjiahaoyou/tianjiahaoyou",
+			"style": {
+				"navigationBarTitleText": "添加好友"
+			}
+		},
+		{
+			"path": "pages/xuanzedizhi/xuanzedizhi",
+			"style": {
+				"navigationBarTitleText": "选择地址"
+			}
+		}
+	],
+	"globalStyle": {
+		"navigationBarTextStyle": "black",
+		"navigationBarTitleText": "委托协作",
+		"navigationBarBackgroundColor": "#F4F6F5",
+		"backgroundColor": "#F4F6F5"
+	},
+	"tabBar": {
+		"color": "#7C8986",
+		"selectedColor": "#087E67",
+		"backgroundColor": "#FFFFFF",
+		"borderStyle": "white",
+		"list": [{
+				"pagePath": "pages/xiaoxi/xiaoxi",
+				"text": "消息"
+			},
+			{
+				"pagePath": "pages/lianxiren/lianxiren",
+				"text": "联系人"
+			},
+			{
+				"pagePath": "pages/shijie/shijie",
+				"text": "世界"
+			},
+			{
+				"pagePath": "pages/wode/wode",
+				"text": "我"
+			}
+		]
+	},
+	"uniIdRouter": {}
+}
