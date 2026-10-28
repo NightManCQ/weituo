@@ -2,6 +2,7 @@
 	import { 连接实时消息 } from './common/实时'
 	import { 使用全局变量 } from "./状态/全局.ts"
 
+	// import { MyApiErrorCode } from "./uni_modules/cq-mqtt"
 	// #ifdef APP-ANDROID || APP-HARMONY
 
 	let firstBackTime = 0
@@ -10,16 +11,18 @@
 		console.log('App Launch')
 		void 连接实时消息()
 
-
+		// console.log("-----????", MyApiErrorCode);
 
 		uni.getSystemInfo({
 			success(结果) {
 				使用全局变量.系统信息 = {
 					设备类型: 结果.deviceType,
 					系统主题: 结果.osTheme,
-					系统: 结果.system,
+					系统名: 结果.osName,
+					系统版本: 结果.osVersion,
 					屏幕宽度: 结果.screenWidth,
 					屏幕高度: 结果.screenHeight,
+					设备品牌: 结果.brand,
 					设备型号: 结果.deviceModel,
 					窗口顶高: 结果.statusBarHeight,
 					窗口底高: 结果.windowBottom,

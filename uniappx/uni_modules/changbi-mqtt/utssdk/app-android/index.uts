@@ -3,16 +3,16 @@
  * 使用 Kotlin 混编避免类型问题
  */
 
-import { 
-  ConnectionOptions, 
-  PublishOptions, 
-  MQTTEvent, 
-  EventCallback, 
-  EventData,
-  ConnectionState, 
-  LogLevel, 
-  QoS,
-  ConnectionQualityStats
+import {
+	ConnectionOptions,
+	PublishOptions,
+	MQTTEvent,
+	EventCallback,
+	EventData,
+	ConnectionState,
+	LogLevel,
+	QoS,
+	ConnectionQualityStats
 } from '../interface.uts'
 
 import { UTSAndroid } from 'io.dcloud.uts'
@@ -26,596 +26,596 @@ import { ConnectionManager, ReconnectConfig } from '../common/ConnectionManager.
 /**
  * 全局变量
  */
-let mqttHelper: MqttHelper | null = null
-let eventListeners: Map<string, Array<EventCallback>> = new Map()
-let logLevel: LogLevel = LogLevel.INFO
+let mqttHelper : MqttHelper | null = null
+let eventListeners : Map<string, Array<EventCallback>> = new Map()
+let logLevel : LogLevel = LogLevel.INFO
 
 // 订阅管理器、消息处理器、状态管理器和连接管理器
-let subscriptionManager: SubscriptionManager = new SubscriptionManager()
-let messageHandler: MessageHandler = new MessageHandler()
-let stateManager: StateManager = new StateManager()
-let connectionManager: ConnectionManager = new ConnectionManager()
+let subscriptionManager : SubscriptionManager = new SubscriptionManager()
+let messageHandler : MessageHandler = new MessageHandler()
+let stateManager : StateManager = new StateManager()
+let connectionManager : ConnectionManager = new ConnectionManager()
 
 // 保存回调函数引用，防止被释放
-let connectCallbackRef: ((sessionPresent: boolean, error: string | null) => void) | null = null
-let messageCallbackRef: ((topic: string, payload: string, qos: number, retain: boolean) => void) | null = null
-let closeCallbackRef: (() => void) | null = null
-let connectionLostCallbackRef: (() => void) | null = null
+let connectCallbackRef : ((sessionPresent : boolean, error : string | null) => void) | null = null
+let messageCallbackRef : ((topic : string, payload : string, qos : number, retain : boolean) => void) | null = null
+let closeCallbackRef : (() => void) | null = null
+let connectionLostCallbackRef : (() => void) | null = null
 
 // 保存用户注册的事件回调，防止被释放
-let userEventCallbacks: Map<string, Array<EventCallback>> = new Map()
+let userEventCallbacks : Map<string, Array<EventCallback>> = new Map()
 
 // 连接质量统计（全局单例）
-let qualityStats: ConnectionQualityStats = {
-  totalPublished: 0,
-  totalReceived: 0,
-  totalQueued: 0,
-  totalQueueFlushed: 0,
-  totalReconnects: 0,
-  lastConnectedAt: null,
-  lastDisconnectedAt: null,
-  avgReconnectMs: 0
+let qualityStats : ConnectionQualityStats = {
+	totalPublished: 0,
+	totalReceived: 0,
+	totalQueued: 0,
+	totalQueueFlushed: 0,
+	totalReconnects: 0,
+	lastConnectedAt: null,
+	lastDisconnectedAt: null,
+	avgReconnectMs: 0
 }
 // 记录断线时间戳，用于计算平均重连耗时
-let disconnectedAtMs: number = 0
+let disconnectedAtMs : number = 0
 // 累计重连耗时总和（用于算平均值）
-let totalReconnectMs: number = 0
+let totalReconnectMs : number = 0
 
 /**
  * 初始化 MQTT Helper
  */
-function initMqttHelper(): void {
-  if (mqttHelper == null) {
-    const context = UTSAndroid.getAppContext()
-    if (context != null) {
-      mqttHelper = MqttHelper.getInstance(context)
-      
-      // 设置状态变化回调
-      stateManager.setStateChangeCallback((state) => {
-        // 根据状态触发相应事件
-        if (state.status === ConnectionStatus.CONNECTED) {
-          // 恢复订阅
-          const subscriptions = subscriptionManager.getSubscriptions()
-          subscriptions.forEach((sub) => {
-            if (mqttHelper != null) {
-              mqttHelper!.subscribe(
-                sub.topic,
-                sub.qos.toInt(),
-                () => {
-                  logMessage(LogLevel.INFO, 'Subscription restored: ' + sub.topic + ' with QoS ' + sub.qos)
-                },
-                (error: string) => {
-                  logMessage(LogLevel.ERROR, 'Failed to restore subscription: ' + sub.topic + ' error: ' + error)
-                }
-              )
-            }
-          })
-          
-          // 补发离线消息队列
-          flushMessageQueue()
+function initMqttHelper() : void {
+	if (mqttHelper == null) {
+		const context = UTSAndroid.getAppContext()
+		if (context != null) {
+			mqttHelper = MqttHelper.getInstance(context)
 
-          const eventData: EventData = {
-            sessionPresent: state.sessionPresent
-          }
-          emitEvent('connect', eventData)
-        } else if (state.status === ConnectionStatus.DISCONNECTED) {
-          const eventData: EventData = {}
-          emitEvent('close', eventData)
-          if (state.lastError !== null) {
-            const errorData: EventData = {
-              error: state.lastError
-            }
-            emitEvent('offline', errorData)
-          }
-        } else if (state.status === ConnectionStatus.RECONNECTING) {
-          const eventData: EventData = {
-            reconnectAttempts: state.reconnectAttempts
-          }
-          emitEvent('reconnect', eventData)
-        }
-      })
-      
-      // 设置重连次数变化回调：ConnectionManager 是唯一权威，StateManager 只做镜像
-      connectionManager.setReconnectAttemptsCallback((attempts: number) => {
-        stateManager.setReconnecting(attempts)
-        logMessage(LogLevel.INFO, 'Reconnecting... (attempt ' + attempts + ')')
-      })
+			// 设置状态变化回调
+			stateManager.setStateChangeCallback((state) => {
+				// 根据状态触发相应事件
+				if (state.status === ConnectionStatus.CONNECTED) {
+					// 恢复订阅
+					const subscriptions = subscriptionManager.getSubscriptions()
+					subscriptions.forEach((sub) => {
+						if (mqttHelper != null) {
+							mqttHelper!.subscribe(
+								sub.topic,
+								sub.qos.toInt(),
+								() => {
+									logMessage(LogLevel.INFO, 'Subscription restored: ' + sub.topic + ' with QoS ' + sub.qos)
+								},
+								(error : string) => {
+									logMessage(LogLevel.ERROR, 'Failed to restore subscription: ' + sub.topic + ' error: ' + error)
+								}
+							)
+						}
+					})
 
-      // 设置重连回调
-      connectionManager.setReconnectCallback(() => {
-        const options = connectionManager.getConnectionOptions()
-        if (options !== null) {
-          // 尝试重连
-          connect(options).then(() => {
-            connectionManager.onReconnectSuccess()
-            stateManager.resetReconnectAttempts()
-          }).catch((e) => {
-            connectionManager.onReconnectFailure()
-            const errMsg = e != null ? (e as Error).message : 'Unknown error'
-            logMessage(LogLevel.ERROR, 'Reconnect failed: ' + errMsg)
-          })
-        }
-      })
-      
-      // 设置达到最大重连次数回调
-      connectionManager.setMaxAttemptsCallback(() => {
-        logMessage(LogLevel.ERROR, 'Max reconnect attempts reached')
-        const eventData: EventData = {
-          error: 'Max reconnect attempts reached'
-        }
-        emitEvent('offline', eventData)
-      })
-      
-      // 设置连接回调 - 保存到全局变量防止被释放
-      connectCallbackRef = (sessionPresent: boolean, error: string | null) => {
-        if (error == null) {
-          stateManager.setConnected(sessionPresent)
-          logMessage(LogLevel.INFO, 'Connected to MQTT broker')
-          // 质量统计：记录连接时间，计算本次重连耗时
-          const now = Date.now()
-          qualityStats.lastConnectedAt = now
-          if (disconnectedAtMs > 0) {
-            const elapsed = now - disconnectedAtMs
-            totalReconnectMs += elapsed
-            qualityStats.totalReconnects++
-            qualityStats.avgReconnectMs = totalReconnectMs / qualityStats.totalReconnects
-            disconnectedAtMs = 0
-          }
-        }
-      }
-      mqttHelper!.setConnectCallback(connectCallbackRef!)
-      
-      // 设置消息回调 - 保存到全局变量防止被释放
-      // 注意：MqttHelper.kt 的 messageCallback 签名已改为 (String, String, Int, Boolean)
-      // Kotlin 层负责将 ByteArray 转换为 UTF-8 字符串，避免 UTS 侧 ArrayBuffer 类型转换崩溃
-      messageCallbackRef = (topic: string, payloadStr: string, qos: number, retain: boolean) => {
-        // 使用 MessageHandler 处理接收到的消息
-        messageHandler.handleIncomingMessage(topic, payloadStr, qos as QoS, retain)
-        qualityStats.totalReceived++
-        
-        // 创建符合 EventData 类型的对象
-        const eventData: EventData = {
-          topic: topic,
-          payload: payloadStr,
-          qos: qos as QoS,
-          retain: retain
-        }
-        emitEvent('message', eventData)
-        logMessage(LogLevel.DEBUG, 'Message received on topic ' + topic)
-      }
-      mqttHelper!.setMessageCallback(messageCallbackRef!)
-      
-      // 设置关闭回调 - 保存到全局变量防止被释放
-      closeCallbackRef = () => {
-        stateManager.setDisconnected()
-        logMessage(LogLevel.INFO, 'Connection closed')
-        // 质量统计：记录断线时间
-        const now = Date.now()
-        qualityStats.lastDisconnectedAt = now
-        if (disconnectedAtMs == 0) {
-          disconnectedAtMs = now
-        }
-      }
-      mqttHelper!.setCloseCallback(closeCallbackRef!)
-      
-      // 设置心跳主动检测回调 - 保存到全局变量防止被释放
-      mqttHelper!.setConnectionCheckCallback((isAlive: boolean) => {
-        const eventData: EventData = {
-          isAlive: isAlive
-        }
-        emitEvent('connection_check', eventData)
-        if (!isAlive) {
-          logMessage(LogLevel.WARN, 'Connection check: dead connection detected')
-        }
-      })
-      
-      // 设置连接丢失回调 - 保存到全局变量防止被释放
-      connectionLostCallbackRef = () => {
-        logMessage(LogLevel.WARN, 'Connection lost, attempting to reconnect...')
-        connectionManager.handleConnectionLost()
-      }
-      mqttHelper!.setConnectionLostCallback(connectionLostCallbackRef!)
-    }
-  }
+					// 补发离线消息队列
+					flushMessageQueue()
+
+					const eventData : EventData = {
+						sessionPresent: state.sessionPresent
+					}
+					emitEvent('connect', eventData)
+				} else if (state.status === ConnectionStatus.DISCONNECTED) {
+					const eventData : EventData = {}
+					emitEvent('close', eventData)
+					if (state.lastError !== null) {
+						const errorData : EventData = {
+							error: state.lastError
+						}
+						emitEvent('offline', errorData)
+					}
+				} else if (state.status === ConnectionStatus.RECONNECTING) {
+					const eventData : EventData = {
+						reconnectAttempts: state.reconnectAttempts
+					}
+					emitEvent('reconnect', eventData)
+				}
+			})
+
+			// 设置重连次数变化回调：ConnectionManager 是唯一权威，StateManager 只做镜像
+			connectionManager.setReconnectAttemptsCallback((attempts : number) => {
+				stateManager.setReconnecting(attempts)
+				logMessage(LogLevel.INFO, 'Reconnecting... (attempt ' + attempts + ')')
+			})
+
+			// 设置重连回调
+			connectionManager.setReconnectCallback(() => {
+				const options = connectionManager.getConnectionOptions()
+				if (options !== null) {
+					// 尝试重连
+					connect(options).then(() => {
+						connectionManager.onReconnectSuccess()
+						stateManager.resetReconnectAttempts()
+					}).catch((e) => {
+						connectionManager.onReconnectFailure()
+						const errMsg = e != null ? (e as Error).message : 'Unknown error'
+						logMessage(LogLevel.ERROR, 'Reconnect failed: ' + errMsg)
+					})
+				}
+			})
+
+			// 设置达到最大重连次数回调
+			connectionManager.setMaxAttemptsCallback(() => {
+				logMessage(LogLevel.ERROR, 'Max reconnect attempts reached')
+				const eventData : EventData = {
+					error: 'Max reconnect attempts reached'
+				}
+				emitEvent('offline', eventData)
+			})
+
+			// 设置连接回调 - 保存到全局变量防止被释放
+			connectCallbackRef = (sessionPresent : boolean, error : string | null) => {
+				if (error == null) {
+					stateManager.setConnected(sessionPresent)
+					logMessage(LogLevel.INFO, 'Connected to MQTT broker')
+					// 质量统计：记录连接时间，计算本次重连耗时
+					const now = Date.now()
+					qualityStats.lastConnectedAt = now
+					if (disconnectedAtMs > 0) {
+						const elapsed = now - disconnectedAtMs
+						totalReconnectMs += elapsed
+						qualityStats.totalReconnects++
+						qualityStats.avgReconnectMs = totalReconnectMs / qualityStats.totalReconnects
+						disconnectedAtMs = 0
+					}
+				}
+			}
+			mqttHelper!.setConnectCallback(connectCallbackRef!)
+
+			// 设置消息回调 - 保存到全局变量防止被释放
+			// 注意：MqttHelper.kt 的 messageCallback 签名已改为 (String, String, Int, Boolean)
+			// Kotlin 层负责将 ByteArray 转换为 UTF-8 字符串，避免 UTS 侧 ArrayBuffer 类型转换崩溃
+			messageCallbackRef = (topic : string, payloadStr : string, qos : number, retain : boolean) => {
+				// 使用 MessageHandler 处理接收到的消息
+				messageHandler.handleIncomingMessage(topic, payloadStr, qos as QoS, retain)
+				qualityStats.totalReceived++
+
+				// 创建符合 EventData 类型的对象
+				const eventData : EventData = {
+					topic: topic,
+					payload: payloadStr,
+					qos: qos as QoS,
+					retain: retain
+				}
+				emitEvent('message', eventData)
+				logMessage(LogLevel.DEBUG, 'Message received on topic ' + topic)
+			}
+			mqttHelper!.setMessageCallback(messageCallbackRef!)
+
+			// 设置关闭回调 - 保存到全局变量防止被释放
+			closeCallbackRef = () => {
+				stateManager.setDisconnected()
+				logMessage(LogLevel.INFO, 'Connection closed')
+				// 质量统计：记录断线时间
+				const now = Date.now()
+				qualityStats.lastDisconnectedAt = now
+				if (disconnectedAtMs == 0) {
+					disconnectedAtMs = now
+				}
+			}
+			mqttHelper!.setCloseCallback(closeCallbackRef!)
+
+			// 设置心跳主动检测回调 - 保存到全局变量防止被释放
+			mqttHelper!.setConnectionCheckCallback((isAlive : boolean) => {
+				const eventData : EventData = {
+					isAlive: isAlive
+				}
+				emitEvent('connection_check', eventData)
+				if (!isAlive) {
+					logMessage(LogLevel.WARN, 'Connection check: dead connection detected')
+				}
+			})
+
+			// 设置连接丢失回调 - 保存到全局变量防止被释放
+			connectionLostCallbackRef = () => {
+				logMessage(LogLevel.WARN, 'Connection lost, attempting to reconnect...')
+				connectionManager.handleConnectionLost()
+			}
+			mqttHelper!.setConnectionLostCallback(connectionLostCallbackRef!)
+		}
+	}
 }
 
 /**
  * 触发事件
  */
-function emitEvent(event: string, data: EventData): void {
-  const listeners = userEventCallbacks.get(event)
-  if (listeners != null) {
-    listeners.forEach((callback) => {
-      try {
-        callback(data)
-      } catch (e) {
-        console.error('Error in event handler for ' + event + ':', e)
-      }
-    })
-  }
+function emitEvent(event : string, data : EventData) : void {
+	const listeners = userEventCallbacks.get(event)
+	if (listeners != null) {
+		listeners.forEach((callback) => {
+			try {
+				callback(data)
+			} catch (e) {
+				console.error('Error in event handler for ' + event + ':', e)
+			}
+		})
+	}
 }
 
 /**
  * 记录日志
  */
-function logMessage(level: LogLevel, message: string): void {
-  if (level >= logLevel) {
-    console.log('[MQTT] ' + message)
-  }
+function logMessage(level : LogLevel, message : string) : void {
+	if (level >= logLevel) {
+		console.log('[MQTT] ' + message)
+	}
 }
 
 /**
  * 连接到 MQTT Broker
  */
-export function connect(options: ConnectionOptions): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
-    try {
-      initMqttHelper()
-      
-      if (mqttHelper == null) {
-        reject(new Error('Failed to initialize MQTT helper'))
-        return
-      }
-      
-      // 开启自动重连
-      connectionManager.enableReconnect()
-      
-      // 保存连接选项用于重连
-      connectionManager.saveConnectionOptions(options)
-      
-      // 配置重连参数
-      if (options.reconnectPeriod != null) {
-        const config = {
-          enabled: true,
-          reconnectPeriod: options.reconnectPeriod,
-          maxReconnectAttempts: 10
-        } as ReconnectConfig
-        connectionManager.setReconnectConfig(config)
-      }
-      if (options.maxReconnectAttempts != null) {
-        const config = {
-          enabled: true,
-          reconnectPeriod: 5000,
-          maxReconnectAttempts: options.maxReconnectAttempts
-        } as ReconnectConfig
-        connectionManager.setReconnectConfig(config)
-      }
-      
-      stateManager.setConnecting()
-      logMessage(LogLevel.INFO, 'Connecting to ' + options.url + '...')
-      
-      const username = options.username != null ? options.username! : null
-      const password = options.password != null ? options.password! : null
-      const clean = options.clean != null ? options.clean : true
-      const timeout = options.connectTimeout != null ? options.connectTimeout : 30000
-      const keepalive = options.keepalive != null ? options.keepalive : 60
-      
-      const allowUntrusted = options.allowUntrusted != null ? options.allowUntrusted! : false
+export function connect(options : ConnectionOptions) : Promise<void> {
+	return new Promise<void>((resolve, reject) => {
+		try {
+			initMqttHelper()
 
-      // Will 消息参数
-      const willTopic: string | null = (options.will != null && options.will!.topic != null) ? options.will!.topic : null
-      const willPayload: string | null = (options.will != null && options.will!.payload != null) ? options.will!.payload : null
-      const willQos: number = (options.will != null && options.will!.qos != null) ? options.will!.qos : 0
-      const willRetain: boolean = (options.will != null && options.will!.retain != null) ? options.will!.retain : false
+			if (mqttHelper == null) {
+				reject(new Error('Failed to initialize MQTT helper'))
+				return
+			}
+			console.log("=====mqtt 开始连接", options);
+			// 开启自动重连
+			connectionManager.enableReconnect()
 
-      mqttHelper!.connect(
-        options.url,
-        options.clientId,
-        username,
-        password,
-        clean,
-        timeout.toInt(),
-        keepalive.toInt(),
-        allowUntrusted,
-        willTopic,
-        willPayload,
-        willQos.toInt(),
-        willRetain,
-        () => {
-          // 连接成功后启动前台保活服务，防止后台被系统杀掉
-          const appContext = UTSAndroid.getAppContext()
-          if (appContext != null) {
-            MqttForegroundService.start(appContext)
-          }
-          resolve()
-        },
-        (error: string) => {
-          stateManager.setDisconnected(error)
-          logMessage(LogLevel.ERROR, 'Connection failed: ' + error)
-          
-          // 触发错误事件
-          const errorData: EventData = {
-            error: error
-          }
-          emitEvent('error', errorData)
-          
-          reject(new Error(error))
-        }
-      )
-      
-    } catch (e) {
-      const errorMsg = 'Connection error: ' + e
-      stateManager.setDisconnected(errorMsg)
-      reject(new Error(errorMsg))
-    }
-  })
+			// 保存连接选项用于重连
+			connectionManager.saveConnectionOptions(options)
+
+			// 配置重连参数
+			if (options.reconnectPeriod != null) {
+				const config = {
+					enabled: true,
+					reconnectPeriod: options.reconnectPeriod,
+					maxReconnectAttempts: 10
+				} as ReconnectConfig
+				connectionManager.setReconnectConfig(config)
+			}
+			if (options.maxReconnectAttempts != null) {
+				const config = {
+					enabled: true,
+					reconnectPeriod: 5000,
+					maxReconnectAttempts: options.maxReconnectAttempts
+				} as ReconnectConfig
+				connectionManager.setReconnectConfig(config)
+			}
+
+			stateManager.setConnecting()
+			logMessage(LogLevel.INFO, 'Connecting to ' + options.url + '...')
+
+			const username = options.username != null ? options.username! : null
+			const password = options.password != null ? options.password! : null
+			const clean = options.clean != null ? options.clean : true
+			const timeout = options.connectTimeout != null ? options.connectTimeout : 30000
+			const keepalive = options.keepalive != null ? options.keepalive : 60
+
+			const allowUntrusted = options.allowUntrusted != null ? options.allowUntrusted! : false
+
+			// Will 消息参数
+			const willTopic : string | null = (options.will != null && options.will!.topic != null) ? options.will!.topic : null
+			const willPayload : string | null = (options.will != null && options.will!.payload != null) ? options.will!.payload : null
+			const willQos : number = (options.will != null && options.will!.qos != null) ? options.will!.qos : 0
+			const willRetain : boolean = (options.will != null && options.will!.retain != null) ? options.will!.retain : false
+
+			mqttHelper!.connect(
+				options.url,
+				options.clientId,
+				username,
+				password,
+				clean,
+				timeout.toInt(),
+				keepalive.toInt(),
+				allowUntrusted,
+				willTopic,
+				willPayload,
+				willQos.toInt(),
+				willRetain,
+				() => {
+					// 连接成功后启动前台保活服务，防止后台被系统杀掉
+					const appContext = UTSAndroid.getAppContext()
+					if (appContext != null) {
+						MqttForegroundService.start(appContext)
+					}
+					resolve()
+				},
+				(error : string) => {
+					stateManager.setDisconnected(error)
+					logMessage(LogLevel.ERROR, 'Connection failed: ' + error)
+
+					// 触发错误事件
+					const errorData : EventData = {
+						error: error
+					}
+					emitEvent('error', errorData)
+
+					reject(new Error(error))
+				}
+			)
+
+		} catch (e) {
+			const errorMsg = 'Connection error: ' + e
+			stateManager.setDisconnected(errorMsg)
+			reject(new Error(errorMsg))
+		}
+	})
 }
 
 /**
  * 断开 MQTT 连接
  */
-export function disconnect(): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
-    try {
-      if (mqttHelper == null) {
-        resolve()
-        return
-      }
-      
-      // 禁用自动重连并取消所有挂起的重连任务
-      connectionManager.disableReconnect()
-      
-      stateManager.setDisconnecting()
-      logMessage(LogLevel.INFO, 'Disconnecting...')
-      
-      mqttHelper!.disconnect(
-        () => {
-          stateManager.setDisconnected()
-          // 主动断开时停止前台保活服务
-          const appContext = UTSAndroid.getAppContext()
-          if (appContext != null) {
-            MqttForegroundService.stop(appContext)
-          }
-          // 清空订阅列表（clean session 时）
-          subscriptionManager.clearSubscriptions()
-          // 重置连接管理器
-          connectionManager.reset()
-          logMessage(LogLevel.INFO, 'Disconnected and cleared subscriptions')
-          resolve()
-        },
-        (error: string) => {
-          stateManager.setDisconnected(error)
-          reject(new Error(error))
-        }
-      )
-      
-    } catch (e) {
-      const errorMsg = 'Disconnect error: ' + e
-      stateManager.setDisconnected(errorMsg)
-      reject(new Error(errorMsg))
-    }
-  })
+export function disconnect() : Promise<void> {
+	return new Promise<void>((resolve, reject) => {
+		try {
+			if (mqttHelper == null) {
+				resolve()
+				return
+			}
+
+			// 禁用自动重连并取消所有挂起的重连任务
+			connectionManager.disableReconnect()
+
+			stateManager.setDisconnecting()
+			logMessage(LogLevel.INFO, 'Disconnecting...')
+
+			mqttHelper!.disconnect(
+				() => {
+					stateManager.setDisconnected()
+					// 主动断开时停止前台保活服务
+					const appContext = UTSAndroid.getAppContext()
+					if (appContext != null) {
+						MqttForegroundService.stop(appContext)
+					}
+					// 清空订阅列表（clean session 时）
+					subscriptionManager.clearSubscriptions()
+					// 重置连接管理器
+					connectionManager.reset()
+					logMessage(LogLevel.INFO, 'Disconnected and cleared subscriptions')
+					resolve()
+				},
+				(error : string) => {
+					stateManager.setDisconnected(error)
+					reject(new Error(error))
+				}
+			)
+
+		} catch (e) {
+			const errorMsg = 'Disconnect error: ' + e
+			stateManager.setDisconnected(errorMsg)
+			reject(new Error(errorMsg))
+		}
+	})
 }
 
 /**
  * 检查是否已连接
  */
-export function isConnected(): boolean {
-  if (mqttHelper != null) {
-    return mqttHelper!.isConnected()
-  }
-  return false
+export function isConnected() : boolean {
+	if (mqttHelper != null) {
+		return mqttHelper!.isConnected()
+	}
+	return false
 }
 
 /**
  * 订阅主题
  */
-export function subscribe(topic: string | string[], qos: QoS = 0): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
-    try {
-      if (mqttHelper == null) {
-        reject(new Error('Client not initialized'))
-        return
-      }
-      
-      const topics = Array.isArray(topic) ? topic : [topic]
-      let completed = 0
-      let hasError = false
-      
-      topics.forEach((t) => {
-        // 检查是否已订阅
-        if (subscriptionManager.hasSubscription(t)) {
-          logMessage(LogLevel.WARN, 'Already subscribed to ' + t)
-          completed++
-          if (completed == topics.length && !hasError) {
-            resolve()
-          }
-          return
-        }
-        
-        mqttHelper!.subscribe(
-          t,
-          qos.toInt(),
-          () => {
-            // 添加到订阅管理器
-            subscriptionManager.addSubscription(t, qos)
-            logMessage(LogLevel.INFO, 'Subscribed to ' + t + ' with QoS ' + qos)
-            completed++
-            if (completed == topics.length && !hasError) {
-              resolve()
-            }
-          },
-          (error: string) => {
-            if (!hasError) {
-              hasError = true
-              reject(new Error(error))
-            }
-          }
-        )
-      })
-      
-    } catch (e) {
-      reject(new Error('Subscribe error: ' + e))
-    }
-  })
+export function subscribe(topic : string | string[], qos : QoS = 0) : Promise<void> {
+	return new Promise<void>((resolve, reject) => {
+		try {
+			if (mqttHelper == null) {
+				reject(new Error('Client not initialized'))
+				return
+			}
+
+			const topics = Array.isArray(topic) ? topic : [topic]
+			let completed = 0
+			let hasError = false
+
+			topics.forEach((t) => {
+				// 检查是否已订阅
+				if (subscriptionManager.hasSubscription(t)) {
+					logMessage(LogLevel.WARN, 'Already subscribed to ' + t)
+					completed++
+					if (completed == topics.length && !hasError) {
+						resolve()
+					}
+					return
+				}
+
+				mqttHelper!.subscribe(
+					t,
+					qos.toInt(),
+					() => {
+						// 添加到订阅管理器
+						subscriptionManager.addSubscription(t, qos)
+						logMessage(LogLevel.INFO, 'Subscribed to ' + t + ' with QoS ' + qos)
+						completed++
+						if (completed == topics.length && !hasError) {
+							resolve()
+						}
+					},
+					(error : string) => {
+						if (!hasError) {
+							hasError = true
+							reject(new Error(error))
+						}
+					}
+				)
+			})
+
+		} catch (e) {
+			reject(new Error('Subscribe error: ' + e))
+		}
+	})
 }
 
 /**
  * 取消订阅主题
  */
-export function unsubscribe(topic: string | string[]): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
-    try {
-      if (mqttHelper == null) {
-        reject(new Error('Client not initialized'))
-        return
-      }
-      
-      const topics = Array.isArray(topic) ? topic : [topic]
-      let completed = 0
-      let hasError = false
-      
-      topics.forEach((t) => {
-        // 检查是否已订阅
-        if (!subscriptionManager.hasSubscription(t)) {
-          logMessage(LogLevel.WARN, 'Not subscribed to ' + t)
-          completed++
-          if (completed == topics.length && !hasError) {
-            resolve()
-          }
-          return
-        }
-        
-        mqttHelper!.unsubscribe(
-          t,
-          () => {
-            // 从订阅管理器移除
-            subscriptionManager.removeSubscription(t)
-            logMessage(LogLevel.INFO, 'Unsubscribed from ' + t)
-            completed++
-            if (completed == topics.length && !hasError) {
-              resolve()
-            }
-          },
-          (error: string) => {
-            if (!hasError) {
-              hasError = true
-              reject(new Error(error))
-            }
-          }
-        )
-      })
-      
-    } catch (e) {
-      reject(new Error('Unsubscribe error: ' + e))
-    }
-  })
+export function unsubscribe(topic : string | string[]) : Promise<void> {
+	return new Promise<void>((resolve, reject) => {
+		try {
+			if (mqttHelper == null) {
+				reject(new Error('Client not initialized'))
+				return
+			}
+
+			const topics = Array.isArray(topic) ? topic : [topic]
+			let completed = 0
+			let hasError = false
+
+			topics.forEach((t) => {
+				// 检查是否已订阅
+				if (!subscriptionManager.hasSubscription(t)) {
+					logMessage(LogLevel.WARN, 'Not subscribed to ' + t)
+					completed++
+					if (completed == topics.length && !hasError) {
+						resolve()
+					}
+					return
+				}
+
+				mqttHelper!.unsubscribe(
+					t,
+					() => {
+						// 从订阅管理器移除
+						subscriptionManager.removeSubscription(t)
+						logMessage(LogLevel.INFO, 'Unsubscribed from ' + t)
+						completed++
+						if (completed == topics.length && !hasError) {
+							resolve()
+						}
+					},
+					(error : string) => {
+						if (!hasError) {
+							hasError = true
+							reject(new Error(error))
+						}
+					}
+				)
+			})
+
+		} catch (e) {
+			reject(new Error('Unsubscribe error: ' + e))
+		}
+	})
 }
 
 /**
  * 发布消息
  * 已连接时直接发送；断线时将消息加入离线队列，重连成功后自动补发。
  */
-export function publish(topic: string, message: string | ArrayBuffer, options?: PublishOptions): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
-    try {
-      const qos = options != null && options.qos != null ? options.qos : 0 as QoS
-      const retain = options != null && options.retain != null ? options.retain : false
-      
-      // 未连接时加入离线队列，不直接报错
-      if (mqttHelper == null || !mqttHelper!.isConnected()) {
-        const pending = messageHandler.queueMessage(topic, message, qos, retain)
-        qualityStats.totalQueued++
-        qualityStats.totalQueued = messageHandler.getTotalQueued()
-        logMessage(LogLevel.WARN, 'Not connected, message queued: ' + topic + ' (queue size: ' + messageHandler.getPendingMessages().length + ')')
-        const queuedData: EventData = {
-          queuedCount: messageHandler.getPendingMessages().length
-        }
-        emitEvent('queued', queuedData)
-        // queued 时 resolve（不 reject），调用方可通过 queued 事件感知
-        resolve()
-        return
-      }
-      
-      let nativePayload: any = message
-      if (typeof message !== 'string') {
-        const view = new Uint8Array(message as ArrayBuffer)
-        const byteArray = new ByteArray(view.length.toInt())  // Number → Int
-        for (let i = 0; i < view.length; i++) {
-          byteArray[i.toInt()] = view[i].toByte()             // i: Number → Int, value: Number → Byte
-        }
-        nativePayload = byteArray
-      }
+export function publish(topic : string, message : string | ArrayBuffer, options ?: PublishOptions) : Promise<void> {
+	return new Promise<void>((resolve, reject) => {
+		try {
+			const qos = options != null && options.qos != null ? options.qos : 0 as QoS
+			const retain = options != null && options.retain != null ? options.retain : false
 
-      mqttHelper!.publish(
-        topic,
-        nativePayload,
-        qos.toInt(),
-        retain,
-        () => {
-          qualityStats.totalPublished++
-          logMessage(LogLevel.DEBUG, 'Published to ' + topic)
-          resolve()
-        },
-        (error: string) => {
-          reject(new Error(error))
-        }
-      )
-      
-    } catch (e) {
-      reject(new Error('Publish error: ' + e))
-    }
-  })
+			// 未连接时加入离线队列，不直接报错
+			if (mqttHelper == null || !mqttHelper!.isConnected()) {
+				const pending = messageHandler.queueMessage(topic, message, qos, retain)
+				qualityStats.totalQueued++
+				qualityStats.totalQueued = messageHandler.getTotalQueued()
+				logMessage(LogLevel.WARN, 'Not connected, message queued: ' + topic + ' (queue size: ' + messageHandler.getPendingMessages().length + ')')
+				const queuedData : EventData = {
+					queuedCount: messageHandler.getPendingMessages().length
+				}
+				emitEvent('queued', queuedData)
+				// queued 时 resolve（不 reject），调用方可通过 queued 事件感知
+				resolve()
+				return
+			}
+
+			let nativePayload : any = message
+			if (typeof message !== 'string') {
+				const view = new Uint8Array(message as ArrayBuffer)
+				const byteArray = new ByteArray(view.length.toInt())  // Number → Int
+				for (let i = 0; i < view.length; i++) {
+					byteArray[i.toInt()] = view[i].toByte()             // i: Number → Int, value: Number → Byte
+				}
+				nativePayload = byteArray
+			}
+
+			mqttHelper!.publish(
+				topic,
+				nativePayload,
+				qos.toInt(),
+				retain,
+				() => {
+					qualityStats.totalPublished++
+					logMessage(LogLevel.DEBUG, 'Published to ' + topic)
+					resolve()
+				},
+				(error : string) => {
+					reject(new Error(error))
+				}
+			)
+
+		} catch (e) {
+			reject(new Error('Publish error: ' + e))
+		}
+	})
 }
 
 /**
  * 补发离线消息队列
  * 重连成功后内部自动调用，也可以手动触发。
  */
-export function flushMessageQueue(): void {
-  const pending = messageHandler.getPendingMessages()
-  if (pending.length == 0) {
-    return
-  }
-  if (mqttHelper == null || !mqttHelper!.isConnected()) {
-    logMessage(LogLevel.WARN, 'flushMessageQueue: not connected, skip')
-    return
-  }
-  
-  logMessage(LogLevel.INFO, 'Flushing ' + pending.length + ' queued messages...')
-  // 取出当前队列快照，清空原队列，逐条发送
-  const snapshot = pending.slice()
-  messageHandler.clearPendingMessages()
-  
-  let flushedCount: number = 0
-  
-  snapshot.forEach((msg) => {
-    let nativePayload: any = msg.payload
-    if (typeof msg.payload !== 'string') {
-      const view = new Uint8Array(msg.payload as ArrayBuffer)
-      const byteArray = new ByteArray(view.length.toInt()) 
-      for (let i = 0; i < view.length; i++) {
-        byteArray[i.toInt()] = view[i].toByte()            
-      }
-      nativePayload = byteArray
-    }
+export function flushMessageQueue() : void {
+	const pending = messageHandler.getPendingMessages()
+	if (pending.length == 0) {
+		return
+	}
+	if (mqttHelper == null || !mqttHelper!.isConnected()) {
+		logMessage(LogLevel.WARN, 'flushMessageQueue: not connected, skip')
+		return
+	}
 
-    mqttHelper!.publish(
-      msg.topic,
-      nativePayload,
-      (msg.qos as number).toInt(),
-      msg.retain,
-      () => {
-        flushedCount++
-        qualityStats.totalPublished++
-        qualityStats.totalQueueFlushed++
-        messageHandler.incrementFlushed(1)
-        // 全部补发完成时触发事件
-        if (flushedCount == snapshot.length) {
-          logMessage(LogLevel.INFO, 'Queue flushed: ' + flushedCount + ' messages sent')
-          const eventData: EventData = {
-            flushedCount: flushedCount
-          }
-          emitEvent('queue_flushed', eventData)
-        }
-      },
-      (error: string) => {
-        // 发送失败的消息重新入队
-        messageHandler.queueMessage(msg.topic, msg.payload, msg.qos, msg.retain)
-        logMessage(LogLevel.ERROR, 'Flush failed for ' + msg.topic + ': ' + error)
-      }
-    )
-  })
+	logMessage(LogLevel.INFO, 'Flushing ' + pending.length + ' queued messages...')
+	// 取出当前队列快照，清空原队列，逐条发送
+	const snapshot = pending.slice()
+	messageHandler.clearPendingMessages()
+
+	let flushedCount : number = 0
+
+	snapshot.forEach((msg) => {
+		let nativePayload : any = msg.payload
+		if (typeof msg.payload !== 'string') {
+			const view = new Uint8Array(msg.payload as ArrayBuffer)
+			const byteArray = new ByteArray(view.length.toInt())
+			for (let i = 0; i < view.length; i++) {
+				byteArray[i.toInt()] = view[i].toByte()
+			}
+			nativePayload = byteArray
+		}
+
+		mqttHelper!.publish(
+			msg.topic,
+			nativePayload,
+			(msg.qos as number).toInt(),
+			msg.retain,
+			() => {
+				flushedCount++
+				qualityStats.totalPublished++
+				qualityStats.totalQueueFlushed++
+				messageHandler.incrementFlushed(1)
+				// 全部补发完成时触发事件
+				if (flushedCount == snapshot.length) {
+					logMessage(LogLevel.INFO, 'Queue flushed: ' + flushedCount + ' messages sent')
+					const eventData : EventData = {
+						flushedCount: flushedCount
+					}
+					emitEvent('queue_flushed', eventData)
+				}
+			},
+			(error : string) => {
+				// 发送失败的消息重新入队
+				messageHandler.queueMessage(msg.topic, msg.payload, msg.qos, msg.retain)
+				logMessage(LogLevel.ERROR, 'Flush failed for ' + msg.topic + ': ' + error)
+			}
+		)
+	})
 }
 
 /**
@@ -623,130 +623,130 @@ export function flushMessageQueue(): void {
  * 使用 @UTSJS.keepAlive 装饰器，使回调函数可以持续触发
  */
 @UTSJS.keepAlive
-export function on(event: MQTTEvent, callback: EventCallback): void {
-  // 保存到专门的全局变量中，防止回调被释放
-  let listeners = userEventCallbacks.get(event)
-  if (listeners == null) {
-    listeners = []
-    userEventCallbacks.set(event, listeners)
-  }
-  listeners.push(callback)
+export function on(event : MQTTEvent, callback : EventCallback) : void {
+	// 保存到专门的全局变量中，防止回调被释放
+	let listeners = userEventCallbacks.get(event)
+	if (listeners == null) {
+		listeners = []
+		userEventCallbacks.set(event, listeners)
+	}
+	listeners.push(callback)
 }
 
 /**
  * 移除事件监听器
  */
-export function off(event: MQTTEvent, callback?: EventCallback): void {
-  if (callback == null) {
-    userEventCallbacks.delete(event)
-  } else {
-    const listeners = userEventCallbacks.get(event)
-    if (listeners != null) {
-      const index = listeners.indexOf(callback)
-      if (index > -1) {
-        listeners.splice(index, 1)
-      }
-    }
-  }
+export function off(event : MQTTEvent, callback ?: EventCallback) : void {
+	if (callback == null) {
+		userEventCallbacks.delete(event)
+	} else {
+		const listeners = userEventCallbacks.get(event)
+		if (listeners != null) {
+			const index = listeners.indexOf(callback)
+			if (index > -1) {
+				listeners.splice(index, 1)
+			}
+		}
+	}
 }
 
 /**
  * 获取连接状态
  */
-export function getConnectionState(): any {
-  const state = stateManager.getConnectionState()
-  // 转换为兼容的格式
-  return {
-    status: state.status.toString(),
-    connectedAt: state.connectedAt,
-    lastError: state.lastError,
-    reconnectAttempts: state.reconnectAttempts,
-    sessionPresent: state.sessionPresent
-  }
+export function getConnectionState() : any {
+	const state = stateManager.getConnectionState()
+	// 转换为兼容的格式
+	return {
+		status: state.status.toString(),
+		connectedAt: state.connectedAt,
+		lastError: state.lastError,
+		reconnectAttempts: state.reconnectAttempts,
+		sessionPresent: state.sessionPresent
+	}
 }
 
 /**
  * 设置日志级别
  */
-export function setLogLevel(level: LogLevel): void {
-  logLevel = level
+export function setLogLevel(level : LogLevel) : void {
+	logLevel = level
 }
 
 /**
  * 获取所有订阅
  */
-export function getSubscriptions(): any[] {
-  const subs = subscriptionManager.getSubscriptions()
-  // 转换为 any[] 类型
-  const result: any[] = []
-  for (let i = 0; i < subs.length; i++) {
-    result.push(subs[i])
-  }
-  return result
+export function getSubscriptions() : any[] {
+	const subs = subscriptionManager.getSubscriptions()
+	// 转换为 any[] 类型
+	const result : any[] = []
+	for (let i = 0; i < subs.length; i++) {
+		result.push(subs[i])
+	}
+	return result
 }
 
 /**
  * 获取订阅数量
  */
-export function getSubscriptionCount(): number {
-  return subscriptionManager.getSubscriptionCount()
+export function getSubscriptionCount() : number {
+	return subscriptionManager.getSubscriptionCount()
 }
 
 /**
  * 检查是否已订阅某个主题
  */
-export function hasSubscription(topic: string): boolean {
-  return subscriptionManager.hasSubscription(topic)
+export function hasSubscription(topic : string) : boolean {
+	return subscriptionManager.hasSubscription(topic)
 }
 
 /**
  * 获取消息队列统计信息
  */
-export function getMessageQueueStats(): UTSJSONObject {
-  return messageHandler.getQueueStats()
+export function getMessageQueueStats() : UTSJSONObject {
+	return messageHandler.getQueueStats()
 }
 
 /**
  * 清空消息队列
  */
-export function clearMessageQueues(): void {
-  messageHandler.clearPendingMessages()
-  messageHandler.clearReceivedMessages()
-  logMessage(LogLevel.INFO, 'Message queues cleared')
+export function clearMessageQueues() : void {
+	messageHandler.clearPendingMessages()
+	messageHandler.clearReceivedMessages()
+	logMessage(LogLevel.INFO, 'Message queues cleared')
 }
 
 /**
  * 获取连接质量统计
  */
-export function getConnectionQualityStats(): ConnectionQualityStats {
-  // 同步最新的队列计数
-  qualityStats.totalQueued = messageHandler.getTotalQueued()
-  qualityStats.totalQueueFlushed = messageHandler.getTotalFlushed()
-  return {
-    totalPublished: qualityStats.totalPublished,
-    totalReceived: qualityStats.totalReceived,
-    totalQueued: qualityStats.totalQueued,
-    totalQueueFlushed: qualityStats.totalQueueFlushed,
-    totalReconnects: qualityStats.totalReconnects,
-    lastConnectedAt: qualityStats.lastConnectedAt,
-    lastDisconnectedAt: qualityStats.lastDisconnectedAt,
-    avgReconnectMs: qualityStats.avgReconnectMs
-  }
+export function getConnectionQualityStats() : ConnectionQualityStats {
+	// 同步最新的队列计数
+	qualityStats.totalQueued = messageHandler.getTotalQueued()
+	qualityStats.totalQueueFlushed = messageHandler.getTotalFlushed()
+	return {
+		totalPublished: qualityStats.totalPublished,
+		totalReceived: qualityStats.totalReceived,
+		totalQueued: qualityStats.totalQueued,
+		totalQueueFlushed: qualityStats.totalQueueFlushed,
+		totalReconnects: qualityStats.totalReconnects,
+		lastConnectedAt: qualityStats.lastConnectedAt,
+		lastDisconnectedAt: qualityStats.lastDisconnectedAt,
+		avgReconnectMs: qualityStats.avgReconnectMs
+	}
 }
 
 /**
  * 重置连接质量统计
  */
-export function resetConnectionQualityStats(): void {
-  qualityStats.totalPublished = 0
-  qualityStats.totalReceived = 0
-  qualityStats.totalQueued = 0
-  qualityStats.totalQueueFlushed = 0
-  qualityStats.totalReconnects = 0
-  qualityStats.lastConnectedAt = null
-  qualityStats.lastDisconnectedAt = null
-  qualityStats.avgReconnectMs = 0
-  totalReconnectMs = 0
-  disconnectedAtMs = 0
-  logMessage(LogLevel.INFO, 'Quality stats reset')
+export function resetConnectionQualityStats() : void {
+	qualityStats.totalPublished = 0
+	qualityStats.totalReceived = 0
+	qualityStats.totalQueued = 0
+	qualityStats.totalQueueFlushed = 0
+	qualityStats.totalReconnects = 0
+	qualityStats.lastConnectedAt = null
+	qualityStats.lastDisconnectedAt = null
+	qualityStats.avgReconnectMs = 0
+	totalReconnectMs = 0
+	disconnectedAtMs = 0
+	logMessage(LogLevel.INFO, 'Quality stats reset')
 }

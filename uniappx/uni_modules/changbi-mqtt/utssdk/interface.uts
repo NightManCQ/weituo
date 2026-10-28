@@ -3,7 +3,7 @@
  */
 
 // QoS 服务质量等级
-export type QoS = 0 | 1 | 2
+export type QoS = 0 | 1 | 2 | 3
 
 // 日志级别
 export enum LogLevel {
