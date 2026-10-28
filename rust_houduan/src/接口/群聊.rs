@@ -508,7 +508,7 @@ pub(super) async fn 邀请群成员(
            VALUES ($1, 'group.invitation_created', $2, $3)"#,
     )
     .bind(事件编号)
-    .bind(format!("u/{目标用户登录名}"))
+    .bind(构造用户通知主题(内容.用户编号))
     .bind(事件)
     .execute(&mut *事务)
     .await?;

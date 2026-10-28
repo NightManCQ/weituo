@@ -43,6 +43,16 @@ export type 消息会话 = {
   成员数: number | null
 }
 
+export type 群邀请 = {
+  邀请编号: string
+  群组编号: string
+  群组名称: string
+  邀请人编号: string
+  邀请人昵称: string
+  创建时间: string
+  过期时间: string
+}
+
 export type 群消息 = {
   消息编号: string
   群组编号: string

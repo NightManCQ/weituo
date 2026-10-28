@@ -213,6 +213,10 @@ pub(crate) fn 是安全的_mqtt账号主题段(账号: &str) -> bool {
             .any(|字符| matches!(字符, '/' | '+' | '#' | '\0'))
 }
 
+pub(crate) fn 构造用户通知主题(用户编号: Uuid) -> String {
+    format!("u/{用户编号}")
+}
+
 pub(crate) fn 构造任务事件主题(
     关联群组编号: Option<Uuid>,
     发布者登录名: &str,
@@ -229,7 +233,9 @@ pub(crate) fn 构造任务事件主题(
 
 #[cfg(test)]
 mod mqtt_账号主题测试 {
-    use super::{是安全的_mqtt账号主题段, 构造任务事件主题};
+    use super::{
+        是安全的_mqtt账号主题段, 构造任务事件主题, 构造用户通知主题
+    };
     use uuid::Uuid;
 
     #[test]
@@ -252,6 +258,12 @@ mod mqtt_账号主题测试 {
         );
         assert_eq!(构造任务事件主题(None, "changqing").unwrap(), "u/changqing");
         assert!(构造任务事件主题(None, "unsafe/account").is_err());
+    }
+
+    #[test]
+    fn 用户通知主题使用稳定的用户编号() {
+        let 用户编号 = Uuid::new_v4();
+        assert_eq!(构造用户通知主题(用户编号), format!("u/{用户编号}"));
     }
 }
 

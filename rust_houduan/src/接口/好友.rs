@@ -368,7 +368,7 @@ pub(super) async fn 创建好友申请(
            VALUES ($1, 'friend.request_created', $2, $3)"#,
     )
     .bind(事件编号)
-    .bind(format!("u/{目标用户登录名}"))
+    .bind(构造用户通知主题(申请.目标用户编号))
     .bind(事件)
     .execute(&mut *事务)
     .await?;

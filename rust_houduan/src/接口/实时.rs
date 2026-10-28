@@ -58,6 +58,7 @@ pub(super) async fn 获取实时凭据(
         })
         .collect();
     主题列表.push(format!("u/{登录名}"));
+    主题列表.push(构造用户通知主题(用户.编号));
     let 消息令牌 = encode(
         &Header::default(),
         &消息令牌声明 {
