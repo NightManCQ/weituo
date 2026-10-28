@@ -1,5 +1,5 @@
 <script setup lang="ts">
-	import { onHide, onLoad, onPageScroll, onShow } from '@dcloudio/uni-app'
+	import { onHide, onLoad, onShow } from '@dcloudio/uni-app'
 	import { nextTick, ref } from 'vue'
 	import type { 好友消息, 群消息, 用户 } from '../../common/leixing'
 	import { 创建编号, 发送请求, 格式化时间, 读取当前用户 } from '../../common/wangluo'
@@ -28,16 +28,13 @@
 	const 好友消息列表 = ref<好友消息[]>([])
 	const 好友列表 = ref<好友[]>([])
 	const 消息正文 = ref('')
+	const 键盘高度 = ref(0)
 	const 好友消息待确认 = ref<{ 客户端消息编号 : string; 正文 : string } | null>(null)
 	const 邀请用户编号 = ref('')
 	const 正在加载 = ref(false)
 	const 正在发送 = ref(false)
 	const 错误 = ref('')
 	const 群管理面板已展开 = ref(false)
-	const 接近底部 = ref(true)
-	let 页面内容高度 = 0
-	let 页面滚动高度 = 0
-	let 页面视口高度 = 0
 	let 正在刷新 = false
 	let 取消订阅 : (() => void) | null = null
 
@@ -71,31 +68,16 @@
 
 	function 滚动到最新消息() {
 		nextTick(() => {
-			uni.createSelectorQuery().select('.chat-shell').boundingClientRect((位置) => {
+			uni.createSelectorQuery().select('.liao_tian_rong_qi').boundingClientRect((位置) => {
 				if (位置 == null) return
-				页面内容高度 = 位置.height
-				页面滚动高度 = Math.max(页面内容高度 - 页面视口高度, 0)
-				接近底部.value = true
-				uni.pageScrollTo({ scrollTop: 页面滚动高度, duration: 0 })
+				const 页面视口高度 = uni.getSystemInfoSync().windowHeight
+				const 最新消息滚动位置 = Math.max(位置.height - 页面视口高度, 0)
+				uni.pageScrollTo({ scrollTop: 最新消息滚动位置, duration: 0 })
 			}).exec()
 		})
 	}
 
-	function 更新是否接近底部() {
-		接近底部.value = 页面内容高度 - 页面滚动高度 - 页面视口高度 <= 440
-	}
-
-	function 更新页面高度() {
-		nextTick(() => {
-			uni.createSelectorQuery().select('.chat-shell').boundingClientRect((位置) => {
-				if (位置 == null) return
-				页面内容高度 = 位置.height
-				更新是否接近底部()
-			}).exec()
-		})
-	}
-
-	function 合并好友消息(消息列表 : 好友消息[]) : 好友消息[] {
+	function 合并好友消息(消息列表 : 好友消息[]): 好友消息[] {
 		const 去重消息 = 消息列表.filter((消息, 索引, 列表) =>
 			列表.findIndex((候选) =>
 				候选.消息编号 == 消息.消息编号 ||
@@ -112,8 +94,7 @@
 		)
 		if (已有消息) return
 		好友消息列表.value = 合并好友消息([...好友消息列表.value, 消息])
-		if (接近底部.value) 滚动到最新消息()
-		else 更新页面高度()
+		滚动到最新消息()
 	}
 
 	function 处理好友实时事件(事件 : 实时事件) {
@@ -207,8 +188,7 @@
 			创建时间,
 		}].sort((左侧, 右侧) => 左侧.群内序号 - 右侧.群内序号).slice(-100)
 		当前群组.最后消息序号 = Math.max(当前群组.最后消息序号, 群内序号)
-		if (接近底部.value) 滚动到最新消息()
-		else 更新页面高度()
+		滚动到最新消息()
 	}
 
 	async function 刷新() {
@@ -233,7 +213,6 @@
 					发送请求<群详情>(`/groups/${encodeURIComponent(群编号)}`),
 					发送请求<群消息[]>(`/groups/${encodeURIComponent(群编号)}/messages?limit=100`),
 				])
-				const 首次加载 = 群消息列表.value.length == 0
 				群组.value = 详情
 				const 合并消息 = [...群消息列表.value, ...消息]
 				群消息列表.value = 合并消息.filter((项目, 索引, 列表) =>
@@ -242,15 +221,12 @@
 						候选.客户端消息编号 == 项目.客户端消息编号,
 					) == 索引,
 				).sort((左侧, 右侧) => 左侧.群内序号 - 右侧.群内序号).slice(-100)
-				if (首次加载 || 接近底部.value) 滚动到最新消息()
-				else 更新页面高度()
+				滚动到最新消息()
 				if (详情.关联任务编号 == null) 好友列表.value = await 发送请求<好友[]>('/my/friends')
 			} else if (好友编号.value) {
 				const 消息 = await 发送请求<好友消息[]>(`/my/friends/${encodeURIComponent(好友编号.value)}/messages?limit=200`)
-				const 首次加载 = 好友消息列表.value.length == 0
 				好友消息列表.value = 合并好友消息([...好友消息列表.value, ...消息])
-				if (首次加载 || 接近底部.value) 滚动到最新消息()
-				else 更新页面高度()
+				滚动到最新消息()
 			}
 		} catch (原因) {
 			错误.value = 原因 instanceof Error ? 原因.message : '加载聊天失败'
@@ -348,18 +324,18 @@
 		uni.navigateBack({ fail: () => uni.switchTab({ url: '/pages/xiaoxi/xiaoxi' }) })
 	}
 
+	function 处理键盘高度变化(事件 : { detail : { height : number } }) {
+		键盘高度.value = Math.max(事件.detail.height, 0)
+		滚动到最新消息()
+	}
+
 	let 任务编号 = ''
 	onLoad((参数) => {
-		页面视口高度 = uni.getSystemInfoSync().windowHeight
 		当前用户.value = 读取当前用户()
 		群组编号.value = 参数['groupId'] as string || ''
 		好友编号.value = 参数['friendId'] as string || ''
 		联系人昵称.value = decodeURIComponent(参数['nickname'] as string || '好友')
 		任务编号 = 参数['taskId'] as string || ''
-	})
-	onPageScroll((事件) => {
-		页面滚动高度 = 事件.scrollTop
-		更新是否接近底部()
 	})
 	onShow(() => {
 		if (取消订阅 == null) {
@@ -467,10 +443,12 @@
 		<!-- -if="好友编号 || 群组?.群组状态 == '正常'" -->
 		<template v-else>
 			<view class="liao_tian_bian_ji_zhan_wei"></view>
-			<view class="liao_tian_bian_ji_lan">
+			<view class="liao_tian_bian_ji_lan" :style="`bottom:${键盘高度}px`">
 				<input v-model="消息正文" class="liao_tian_shu_ru_kuang" maxlength="4000"
 					:placeholder="好友消息待确认 != null ? '发送失败，可重试原消息' : '输入消息'" confirm-type="send"
-					:disabled="好友消息待确认 != null" @confirm="发送" />
+					:adjust-position="true" :confirm-hold="true" :hold-keyboard="true"
+					:disabled="好友消息待确认 != null" @confirm="发送"
+					@keyboardheightchange="处理键盘高度变化" />
 				<button class="liao_tian_fa_song"
 					:class="{ 'liao_tian_fa_song_jin_yong': 正在发送 || 消息正文.trim().length == 0 }"
 					:disabled="正在发送 || 消息正文.trim().length == 0" @click="发送">

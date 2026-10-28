@@ -4,70 +4,272 @@ import { ref } from 'vue'
 import type { 用户 } from '../../common/leixing'
 import { 发送请求, 读取当前用户 } from '../../common/wangluo'
 
-type 搜索结果 = { 用户编号: string; 登录名: string; 昵称: string; 好友状态: string }
+type 好友状态 = '已是好友' | '待你处理' | '已发送申请' | '可添加'
+type 用户搜索结果 = {
+  用户编号: string
+  登录名: string
+  昵称: string
+  好友状态: 好友状态
+}
+
 const 当前用户 = ref<用户 | null>(null)
-const 登录名 = ref('')
-const 附言 = ref('')
-const 结果 = ref<搜索结果 | null>(null)
+const 登录名查询 = ref('')
+const 申请附言 = ref('')
+const 搜索结果 = ref<用户搜索结果 | null>(null)
 const 正在搜索 = ref(false)
-const 正在发送 = ref(false)
+const 正在处理 = ref(false)
+const 错误信息 = ref('')
+const 提示信息 = ref('')
+let 搜索序号 = 0
 
 async function 搜索用户() {
   if (当前用户.value == null) return
-  const 查询 = 登录名.value.trim()
-  if (!查询) return
+  const 当前搜索序号 = ++搜索序号
+  const 登录名 = 登录名查询.value.trim()
+  搜索结果.value = null
+  错误信息.value = ''
+  提示信息.value = ''
+  if (!登录名) {
+    正在搜索.value = false
+    错误信息.value = '请输入要搜索的完整登录名'
+    return
+  }
+
   正在搜索.value = true
   try {
-    const 用户列表 = await 发送请求<搜索结果[]>(`/my/friends/search?login_name=${encodeURIComponent(查询)}`)
-    结果.value = 用户列表[0] || null
-    if (结果.value == null) uni.showToast({ title: '没有找到该登录名对应的用户', icon: 'none' })
+    const 用户列表 = await 发送请求<用户搜索结果[]>(
+      `/my/friends/search?login_name=${encodeURIComponent(登录名)}`,
+    )
+    if (当前搜索序号 != 搜索序号) return
+    搜索结果.value = 用户列表[0] ?? null
+    if (搜索结果.value == null) 提示信息.value = '没有找到该登录名对应的用户'
   } catch (原因) {
-    uni.showToast({ title: 原因 instanceof Error ? 原因.message : '搜索失败', icon: 'none' })
+    if (当前搜索序号 == 搜索序号) {
+      错误信息.value = 原因 instanceof Error ? 原因.message : '搜索用户失败'
+    }
   } finally {
-    正在搜索.value = false
+    if (当前搜索序号 == 搜索序号) 正在搜索.value = false
   }
 }
 
-async function 发送申请() {
-  if (当前用户.value == null || 结果.value == null || 正在发送.value) return
-  正在发送.value = true
+async function 发送好友申请() {
+  const 用户 = 搜索结果.value
+  if (
+    当前用户.value == null ||
+    用户 == null ||
+    用户.好友状态 != '可添加' ||
+    正在处理.value
+  ) return
+
+  正在处理.value = true
+  错误信息.value = ''
+  提示信息.value = ''
   try {
     await 发送请求('/my/friend-requests', {
       method: 'POST',
-      data: { target_user_id: 结果.value.用户编号, message: 附言.value.trim() } as UTSJSONObject,
+      data: {
+        target_user_id: 用户.用户编号,
+        message: 申请附言.value.trim(),
+      } as UTSJSONObject,
     })
-    uni.showToast({ title: '好友申请已发送', icon: 'success' })
-    await 搜索用户()
+    搜索结果.value = { ...用户, 好友状态: '已发送申请' }
+    申请附言.value = ''
+    提示信息.value = '好友申请已发送，可在消息列表中查看处理进度'
   } catch (原因) {
-    uni.showToast({ title: 原因 instanceof Error ? 原因.message : '发送申请失败', icon: 'none' })
+    错误信息.value = 原因 instanceof Error ? 原因.message : '发送好友申请失败'
   } finally {
-    正在发送.value = false
+    正在处理.value = false
   }
-
-  onShow(() => { 当前用户.value = 读取当前用户() })
 }
+
+function 返回联系人() {
+  uni.navigateBack({ fail: () => uni.switchTab({ url: '/pages/lianxiren/lianxiren' }) })
+}
+
+onShow(() => {
+  const 已登录用户 = 读取当前用户()
+  if (已登录用户?.用户编号 != 当前用户.value?.用户编号) {
+    搜索序号 += 1
+    正在搜索.value = false
+    搜索结果.value = null
+    申请附言.value = ''
+    错误信息.value = ''
+    提示信息.value = ''
+  }
+  当前用户.value = 已登录用户
+})
 </script>
 
 <template>
   <view class="ye_mian">
-    <view class="ye_mian_biao_ti"><text class="fu_biao_ti">联系人</text><text class="biao_ti">添加好友</text></view>
+    <view class="ye_mian_biao_ti">
+      <text class="fu_biao_ti">联系人</text>
+      <text class="biao_ti">添加好友</text>
+    </view>
+
     <view v-if="当前用户 == null" class="kong_zhuang_tai">
-      <text>登录后添加好友</text>
+      <text class="ka_pian_biao_ti">登录后添加好友</text>
       <button class="zhu_yao_an_niu" @click="uni.switchTab({ url: '/pages/wode/wode' })">前往登录</button>
     </view>
-    <view v-else class="ka_pian">
-      <text class="biao_qian">用户登录名</text>
-      <input v-model="登录名" class="shu_ru_kuang" maxlength="64" placeholder="输入完整登录名" />
-      <button class="zhu_yao_an_niu" :disabled="正在搜索" @click="搜索用户">{{ 正在搜索 ? '搜索中…' : '搜索' }}</button>
-    </view>
-    <view v-if="结果 != null" class="ka_pian">
-      <text class="ka_pian_biao_ti">{{ 结果.昵称 }} (@{{ 结果.登录名 }})</text>
-      <text class="fu_zhu_wen_ben">{{ 结果.好友状态 }}</text>
-      <template v-if="结果.好友状态 == '可添加'">
-        <input v-model="附言" class="shu_ru_kuang" maxlength="200" placeholder="验证消息（可选）" />
-        <button class="zhu_yao_an_niu" :disabled="正在发送" @click="发送申请">{{ 正在发送 ? '发送中…' : '发送好友申请' }}</button>
-      </template>
-    </view>
-    <button class="wen_ben_an_niu ju_zuo" @click="uni.navigateBack()">返回联系人</button>
+
+    <template v-else>
+      <view class="tian_jia_hao_you_biao_dan">
+        <text class="biao_qian">用户登录名</text>
+        <view class="tian_jia_hao_you_sou_suo_hang">
+          <input
+            v-model="登录名查询"
+            class="shu_ru_kuang tian_jia_hao_you_deng_lu_ming"
+            maxlength="64"
+            placeholder="输入完整登录名"
+            confirm-type="search"
+            @confirm="搜索用户"
+          />
+          <button class="zhu_yao_an_niu tian_jia_hao_you_sou_suo_an_niu"
+            :disabled="正在搜索" @click="搜索用户">
+            {{ 正在搜索 ? '搜索中…' : '搜索' }}
+          </button>
+        </view>
+      </view>
+
+      <view v-if="错误信息" class="tian_jia_hao_you_ti_shi tian_jia_hao_you_cuo_wu">
+        {{ 错误信息 }}
+      </view>
+      <view v-if="提示信息" class="tian_jia_hao_you_ti_shi tian_jia_hao_you_cheng_gong">
+        {{ 提示信息 }}
+      </view>
+
+      <view v-if="搜索结果 != null" class="tian_jia_hao_you_jie_guo">
+        <view class="tian_jia_hao_you_tou_xiang">
+          {{ 搜索结果.昵称.slice(0, 1) }}
+        </view>
+        <view class="tian_jia_hao_you_yong_hu">
+          <text class="ka_pian_biao_ti">{{ 搜索结果.昵称 }}</text>
+          <text class="fu_zhu_wen_ben">@{{ 搜索结果.登录名 }}</text>
+        </view>
+        <text v-if="搜索结果.好友状态 != '可添加'" class="tian_jia_hao_you_zhuang_tai">
+          {{ 搜索结果.好友状态 }}
+        </text>
+        <view v-else class="tian_jia_hao_you_shen_qing">
+          <input
+            v-model="申请附言"
+            class="shu_ru_kuang tian_jia_hao_you_shen_qing_shu_ru_kuang"
+            maxlength="200"
+            placeholder="验证消息（可选）"
+          />
+          <button class="zhu_yao_an_niu tian_jia_hao_you_shen_qing_an_niu"
+            :disabled="正在处理" @click="发送好友申请">
+            {{ 正在处理 ? '发送中…' : '发送好友申请' }}
+          </button>
+        </view>
+      </view>
+
+      <button class="wen_ben_an_niu ju_zuo tian_jia_hao_you_fan_hui" @click="返回联系人">
+        返回联系人
+      </button>
+    </template>
   </view>
 </template>
+
+<style>
+  .tian_jia_hao_you_biao_dan {
+    margin: 10px 0;
+    padding: 16px;
+    border: 1px solid #e8edeb;
+    border-radius: 14px;
+    background-color: #ffffff;
+  }
+
+  .tian_jia_hao_you_sou_suo_hang {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .tian_jia_hao_you_deng_lu_ming {
+    flex: 1;
+    min-width: 0;
+    margin-right: 8px;
+  }
+
+  .tian_jia_hao_you_sou_suo_an_niu {
+    min-width: 72px;
+  }
+
+  .tian_jia_hao_you_ti_shi {
+    margin: 10px 0;
+    padding: 11px 13px;
+    border-radius: 9px;
+    font-size: 13px;
+  }
+
+  .tian_jia_hao_you_cuo_wu {
+    background-color: #fff0ec;
+    color: #a84229;
+  }
+
+  .tian_jia_hao_you_cheng_gong {
+    background-color: #e7f4ef;
+    color: #126b56;
+  }
+
+  .tian_jia_hao_you_jie_guo {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    margin: 10px 0;
+    padding: 16px;
+    border: 1px solid #e8edeb;
+    border-radius: 14px;
+    background-color: #ffffff;
+  }
+
+  .tian_jia_hao_you_tou_xiang {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    min-width: 42px;
+    height: 42px;
+    margin-right: 12px;
+    border-radius: 21px;
+    background-color: #e7f4ef;
+    color: #087e67;
+    font-size: 18px;
+    font-weight: 700;
+  }
+
+  .tian_jia_hao_you_yong_hu {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 100px;
+  }
+
+  .tian_jia_hao_you_zhuang_tai {
+    margin-left: auto;
+    color: #7c8986;
+    font-size: 13px;
+  }
+
+  .tian_jia_hao_you_shen_qing {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    margin-top: 12px;
+  }
+
+  .tian_jia_hao_you_shen_qing_shu_ru_kuang {
+    width: 100%;
+  }
+
+  .tian_jia_hao_you_shen_qing_an_niu {
+    align-self: flex-start;
+  }
+
+  .tian_jia_hao_you_fan_hui {
+    margin-top: 12px;
+  }
+</style>

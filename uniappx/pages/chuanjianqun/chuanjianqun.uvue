@@ -7,40 +7,99 @@ import { 发送请求, 读取当前用户 } from '../../common/wangluo'
 const 当前用户 = ref<用户 | null>(null)
 const 群名称 = ref('')
 const 正在创建 = ref(false)
+const 错误信息 = ref('')
 
-async function 创建() {
+async function 创建群聊() {
   const 名称 = 群名称.value.trim()
-  if (!名称 || 正在创建.value) return
+  if (当前用户.value == null || 正在创建.value) return
+  if (!名称) {
+    错误信息.value = '请输入群聊名称'
+    return
+  }
+
   正在创建.value = true
+  错误信息.value = ''
   try {
     const 结果 = await 发送请求<{ 群组编号: string }>('/groups', {
       method: 'POST',
       data: { name: 名称 } as UTSJSONObject,
     })
-    uni.navigateTo({ url: `/pages/liaotian/liaotian?groupId=${encodeURIComponent(结果.群组编号)}` })
+    uni.navigateTo({
+      url: `/pages/liaotian/liaotian?groupId=${encodeURIComponent(结果.群组编号)}`,
+      fail: (原因) => {
+        错误信息.value = 原因.errMsg || '群聊已创建，但打开群聊页面失败'
+      },
+    })
   } catch (原因) {
-    uni.showToast({ title: 原因 instanceof Error ? 原因.message : '创建群聊失败', icon: 'none' })
+    错误信息.value = 原因 instanceof Error ? 原因.message : '创建群聊失败'
   } finally {
     正在创建.value = false
   }
-
-  onShow(() => { 当前用户.value = 读取当前用户() })
 }
+
+function 取消创建() {
+  uni.navigateBack({ fail: () => uni.switchTab({ url: '/pages/lianxiren/lianxiren' }) })
+}
+
+onShow(() => {
+  当前用户.value = 读取当前用户()
+})
 </script>
 
 <template>
   <view class="ye_mian">
-    <view class="ye_mian_biao_ti"><text class="fu_biao_ti">联系人</text><text class="biao_ti">创建群聊</text></view>
+    <view class="ye_mian_biao_ti">
+      <text class="fu_biao_ti">联系人</text>
+      <text class="biao_ti">创建群聊</text>
+    </view>
+
     <view v-if="当前用户 == null" class="kong_zhuang_tai">
-      <text>登录后创建群聊</text>
+      <text class="ka_pian_biao_ti">登录后创建群聊</text>
       <button class="zhu_yao_an_niu" @click="uni.switchTab({ url: '/pages/wode/wode' })">前往登录</button>
     </view>
-    <view v-else class="ka_pian">
+
+    <view v-else class="chuan_jian_qun_biao_dan">
       <text class="biao_qian">群聊名称</text>
-      <input v-model="群名称" class="shu_ru_kuang" maxlength="80" placeholder="给群聊起个名字" />
-      <text class="fu_zhu_wen_ben">创建后可在群聊页面邀请好友加入。</text>
-      <button class="zhu_yao_an_niu" :disabled="正在创建 || 群名称.trim().length == 0" @click="创建">{{ 正在创建 ? '创建中…' : '创建群聊' }}</button>
-      <button class="ci_yao_an_niu" @click="uni.navigateBack()">取消</button>
+      <input
+        v-model="群名称"
+        class="shu_ru_kuang"
+        maxlength="80"
+        placeholder="给群聊起个名字"
+        confirm-type="done"
+        @confirm="创建群聊"
+      />
+      <view v-if="错误信息" class="chuan_jian_qun_cuo_wu">{{ 错误信息 }}</view>
+      <view class="chuan_jian_qun_cao_zuo">
+        <button class="ci_yao_an_niu" :disabled="正在创建" @click="取消创建">取消</button>
+        <button class="zhu_yao_an_niu" :disabled="正在创建" @click="创建群聊">
+          {{ 正在创建 ? '创建中…' : '创建群聊' }}
+        </button>
+      </view>
     </view>
   </view>
 </template>
+
+<style>
+  .chuan_jian_qun_biao_dan {
+    display: flex;
+    flex-direction: column;
+    margin: 10px 0;
+    padding: 16px;
+    border: 1px solid #e8edeb;
+    border-radius: 14px;
+    background-color: #ffffff;
+  }
+
+  .chuan_jian_qun_cuo_wu {
+    margin: 4px 0;
+    color: #a84229;
+    font-size: 13px;
+  }
+
+  .chuan_jian_qun_cao_zuo {
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-end;
+    margin-top: 8px;
+  }
+</style>
