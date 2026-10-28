@@ -29,18 +29,18 @@ async function 创建() {
 </script>
 
 <template>
-  <view class="page">
-    <view class="page-heading"><text class="eyebrow">联系人</text><text class="title">创建群聊</text></view>
-    <view v-if="当前用户 == null" class="empty">
+  <view class="ye_mian">
+    <view class="ye_mian_biao_ti"><text class="fu_biao_ti">联系人</text><text class="biao_ti">创建群聊</text></view>
+    <view v-if="当前用户 == null" class="kong_zhuang_tai">
       <text>登录后创建群聊</text>
-      <button class="primary" @click="uni.switchTab({ url: '/pages/wode/wode' })">前往登录</button>
+      <button class="zhu_yao_an_niu" @click="uni.switchTab({ url: '/pages/wode/wode' })">前往登录</button>
     </view>
-    <view v-else class="card">
-      <text class="label">群聊名称</text>
-      <input v-model="群名称" class="field" maxlength="80" placeholder="给群聊起个名字" />
-      <text class="muted">创建后可在群聊页面邀请好友加入。</text>
-      <button class="primary" :disabled="正在创建 || 群名称.trim().length == 0" @click="创建">{{ 正在创建 ? '创建中…' : '创建群聊' }}</button>
-      <button class="secondary" @click="uni.navigateBack()">取消</button>
+    <view v-else class="ka_pian">
+      <text class="biao_qian">群聊名称</text>
+      <input v-model="群名称" class="shu_ru_kuang" maxlength="80" placeholder="给群聊起个名字" />
+      <text class="fu_zhu_wen_ben">创建后可在群聊页面邀请好友加入。</text>
+      <button class="zhu_yao_an_niu" :disabled="正在创建 || 群名称.trim().length == 0" @click="创建">{{ 正在创建 ? '创建中…' : '创建群聊' }}</button>
+      <button class="ci_yao_an_niu" @click="uni.navigateBack()">取消</button>
     </view>
   </view>
 </template>

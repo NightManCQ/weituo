@@ -84,38 +84,38 @@ onHide(() => {
 </script>
 
 <template>
-  <view class="page">
-    <view class="page-heading row-between">
-      <view><text class="eyebrow">好友与群组</text><text class="title">联系人</text></view>
-      <button class="secondary" @click="刷新">刷新</button>
+  <view class="ye_mian">
+    <view class="ye_mian_biao_ti liang_duan_dui_qi">
+      <view><text class="fu_biao_ti">好友与群组</text><text class="biao_ti">联系人</text></view>
+      <button class="ci_yao_an_niu" @click="刷新">刷新</button>
     </view>
-    <view v-if="当前用户 == null" class="empty">
+    <view v-if="当前用户 == null" class="kong_zhuang_tai">
       <text>登录后查看联系人</text>
-      <button class="primary" @click="uni.switchTab({ url: '/pages/wode/wode' })">前往登录</button>
+      <button class="zhu_yao_an_niu" @click="uni.switchTab({ url: '/pages/wode/wode' })">前往登录</button>
     </view>
     <template v-else>
-      <input v-model="搜索" class="field" placeholder="搜索好友或群聊" />
-      <view class="actions">
-        <button class="primary" @click="uni.navigateTo({ url: '/pages/chuanjianqun/chuanjianqun' })">创建群聊</button>
-        <button class="secondary" @click="uni.navigateTo({ url: '/pages/tianjiahaoyou/tianjiahaoyou' })">添加好友</button>
+      <input v-model="搜索" class="shu_ru_kuang" placeholder="搜索好友或群聊" />
+      <view class="cao_zuo_zu">
+        <button class="zhu_yao_an_niu" @click="uni.navigateTo({ url: '/pages/chuanjianqun/chuanjianqun' })">创建群聊</button>
+        <button class="ci_yao_an_niu" @click="uni.navigateTo({ url: '/pages/tianjiahaoyou/tianjiahaoyou' })">添加好友</button>
       </view>
-      <view v-if="错误" class="notice error">{{ 错误 }}</view>
-      <text class="label">好友</text>
-      <view v-for="好友项 in 好友列表.filter((项目) => `${项目.昵称} ${项目.登录名}`.toLowerCase().includes(搜索.toLowerCase()))" :key="好友项.用户编号" class="list-row">
-        <view class="grow clickable" @click="打开好友(好友项)"><text class="card-title">{{ 好友项.昵称 }}</text><text class="muted">@{{ 好友项.登录名 }}</text></view>
-        <button class="text-button" @click="删除好友(好友项)">删除</button>
+      <view v-if="错误" class="ti_shi_xin_xi cuo_wu">{{ 错误 }}</view>
+      <text class="biao_qian">好友</text>
+      <view v-for="好友项 in 好友列表.filter((项目) => `${项目.昵称} ${项目.登录名}`.toLowerCase().includes(搜索.toLowerCase()))" :key="好友项.用户编号" class="lie_biao_hang">
+        <view class="zhan_kai ke_dian_ji" @click="打开好友(好友项)"><text class="ka_pian_biao_ti">{{ 好友项.昵称 }}</text><text class="fu_zhu_wen_ben">@{{ 好友项.登录名 }}</text></view>
+        <button class="wen_ben_an_niu" @click="删除好友(好友项)">删除</button>
       </view>
-      <text class="label">群聊</text>
-      <view v-for="群 in 群组列表.filter((项目) => `${项目.群组名称} ${项目.最近消息 || ''}`.toLowerCase().includes(搜索.toLowerCase()))" :key="群.群组编号" class="list-row clickable" @click="打开群聊(群.群组编号)">
-        <view class="grow"><text class="card-title">{{ 群.群组名称 }}</text><text class="muted">{{ 群.最近消息 || 群.群组公告 || '还没有消息' }} · {{ 群.成员数 }}人</text></view><text class="arrow">›</text>
+      <text class="biao_qian">群聊</text>
+      <view v-for="群 in 群组列表.filter((项目) => `${项目.群组名称} ${项目.最近消息 || ''}`.toLowerCase().includes(搜索.toLowerCase()))" :key="群.群组编号" class="lie_biao_hang ke_dian_ji" @click="打开群聊(群.群组编号)">
+        <view class="zhan_kai"><text class="ka_pian_biao_ti">{{ 群.群组名称 }}</text><text class="fu_zhu_wen_ben">{{ 群.最近消息 || 群.群组公告 || '还没有消息' }} · {{ 群.成员数 }}人</text></view><text class="jian_tou">›</text>
       </view>
-      <text class="label">群邀请</text>
-      <view v-for="邀请 in 邀请列表" :key="邀请.邀请编号" class="card">
-        <text class="card-title">{{ 邀请.邀请人昵称 }} 邀请加入 {{ 邀请.群组名称 }}</text>
-        <text class="muted">{{ 格式化时间(邀请.创建时间) }}</text>
-        <view class="actions"><button class="small primary" @click="处理邀请(邀请, 'accept')">加入</button><button class="small secondary" @click="处理邀请(邀请, 'reject')">拒绝</button></view>
+      <text class="biao_qian">群邀请</text>
+      <view v-for="邀请 in 邀请列表" :key="邀请.邀请编号" class="ka_pian">
+        <text class="ka_pian_biao_ti">{{ 邀请.邀请人昵称 }} 邀请加入 {{ 邀请.群组名称 }}</text>
+        <text class="fu_zhu_wen_ben">{{ 格式化时间(邀请.创建时间) }}</text>
+        <view class="cao_zuo_zu"><button class="xiao_hao zhu_yao_an_niu" @click="处理邀请(邀请, 'accept')">加入</button><button class="xiao_hao ci_yao_an_niu" @click="处理邀请(邀请, 'reject')">拒绝</button></view>
       </view>
-      <view v-if="正在加载" class="empty">正在同步联系人…</view>
+      <view v-if="正在加载" class="kong_zhuang_tai">正在同步联系人…</view>
     </template>
   </view>
 </template>

@@ -82,36 +82,36 @@ onShow(() => {
 </script>
 
 <template>
-  <view class="page">
-    <view class="page-heading"><text class="eyebrow">发布委托</text><text class="title">发布一个委托</text></view>
-    <view v-if="当前用户 == null" class="empty">
+  <view class="ye_mian">
+    <view class="ye_mian_biao_ti"><text class="fu_biao_ti">发布委托</text><text class="biao_ti">发布一个委托</text></view>
+    <view v-if="当前用户 == null" class="kong_zhuang_tai">
       <text>登录后发布委托</text>
-      <button class="primary" @click="uni.switchTab({ url: '/pages/wode/wode' })">前往登录</button>
+      <button class="zhu_yao_an_niu" @click="uni.switchTab({ url: '/pages/wode/wode' })">前往登录</button>
     </view>
-    <view v-else class="card">
-      <text class="label">委托标题</text>
-      <input v-model="标题" class="field" placeholder="例如：帮忙整理一份活动方案" maxlength="120" />
-      <text class="label">委托说明</text>
-      <textarea v-model="描述" class="field textarea" placeholder="补充背景、交付内容或其他要求…" maxlength="10000" />
-      <text class="label">截止时间（可选）</text>
+    <view v-else class="ka_pian">
+      <text class="biao_qian">委托标题</text>
+      <input v-model="标题" class="shu_ru_kuang" placeholder="例如：帮忙整理一份活动方案" maxlength="120" />
+      <text class="biao_qian">委托说明</text>
+      <textarea v-model="描述" class="shu_ru_kuang duo_xing_shu_ru_kuang" placeholder="补充背景、交付内容或其他要求…" maxlength="10000" />
+      <text class="biao_qian">截止时间（可选）</text>
       <picker mode="date" :value="截止日期" @change="设置截止日期">
-        <view class="list-row clickable"><text class="grow">{{ 截止日期 || '选择截止日期' }}</text><text class="arrow">›</text></view>
+        <view class="lie_biao_hang ke_dian_ji"><text class="zhan_kai">{{ 截止日期 || '选择截止日期' }}</text><text class="jian_tou">›</text></view>
       </picker>
       <picker mode="time" :value="截止时分" @change="设置截止时分">
-        <view class="list-row clickable"><text class="grow">{{ 截止时分 }}</text><text class="arrow">›</text></view>
+        <view class="lie_biao_hang ke_dian_ji"><text class="zhan_kai">{{ 截止时分 }}</text><text class="jian_tou">›</text></view>
       </picker>
-      <button v-if="截止日期" class="text-button left" @click="截止日期 = ''">清除截止时间</button>
-      <text class="label">委托报酬（积分）</text>
-      <input v-model="报酬积分" class="field" type="number" placeholder="0 表示无积分报酬" />
-      <text v-if="积分错误" class="notice error">{{ 积分错误 }}</text>
-      <text class="muted">可用 {{ 积分?.可用积分 ?? '—' }} 积分。报酬在发布后托管，验收完成后发放。</text>
-      <view class="location-box">
-        <text class="label">委托地址（可选）</text>
-        <text v-if="位置 != null" class="body">{{ 位置.地址 || [位置.省, 位置.市, 位置.县].filter(Boolean).join(' · ') }} ({{ 位置.经度.toFixed(5) }}, {{ 位置.纬度.toFixed(5) }})</text>
-        <button class="secondary" @click="选位置">{{ 位置 == null ? '选择地址' : '更改地址' }}</button>
-        <button v-if="位置 != null" class="text-button" @click="位置 = null">清除地址</button>
+      <button v-if="截止日期" class="wen_ben_an_niu ju_zuo" @click="截止日期 = ''">清除截止时间</button>
+      <text class="biao_qian">委托报酬（积分）</text>
+      <input v-model="报酬积分" class="shu_ru_kuang" type="number" placeholder="0 表示无积分报酬" />
+      <text v-if="积分错误" class="ti_shi_xin_xi cuo_wu">{{ 积分错误 }}</text>
+      <text class="fu_zhu_wen_ben">可用 {{ 积分?.可用积分 ?? '—' }} 积分。报酬在发布后托管，验收完成后发放。</text>
+      <view class="di_zhi_xin_xi">
+        <text class="biao_qian">委托地址（可选）</text>
+        <text v-if="位置 != null" class="zheng_wen">{{ 位置.地址 || [位置.省, 位置.市, 位置.县].filter(Boolean).join(' · ') }} ({{ 位置.经度.toFixed(5) }}, {{ 位置.纬度.toFixed(5) }})</text>
+        <button class="ci_yao_an_niu" @click="选位置">{{ 位置 == null ? '选择地址' : '更改地址' }}</button>
+        <button v-if="位置 != null" class="wen_ben_an_niu" @click="位置 = null">清除地址</button>
       </view>
-      <button class="primary" :disabled="正在提交 || 标题.trim().length == 0 || !Number.isInteger(Number(报酬积分)) || Number(报酬积分) < 0 || Number(报酬积分) > 1000000000" @click="提交">{{ 正在提交 ? '正在发布…' : '发布委托' }}</button>
+      <button class="zhu_yao_an_niu" :disabled="正在提交 || 标题.trim().length == 0 || !Number.isInteger(Number(报酬积分)) || Number(报酬积分) < 0 || Number(报酬积分) > 1000000000" @click="提交">{{ 正在提交 ? '正在发布…' : '发布委托' }}</button>
     </view>
   </view>
 </template>

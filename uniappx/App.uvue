@@ -1,5 +1,6 @@
 <script setup>
 	import { 连接实时消息 } from './common/实时'
+	import { 使用全局变量 } from "./状态/全局.ts"
 
 	// #ifdef APP-ANDROID || APP-HARMONY
 
@@ -9,6 +10,25 @@
 		console.log('App Launch')
 		void 连接实时消息()
 
+
+
+		uni.getSystemInfo({
+			success(结果) {
+				使用全局变量.系统信息 = {
+					设备类型: 结果.deviceType,
+					系统主题: 结果.osTheme,
+					系统: 结果.system,
+					屏幕宽度: 结果.screenWidth,
+					屏幕高度: 结果.screenHeight,
+					设备型号: 结果.deviceModel,
+					窗口顶高: 结果.statusBarHeight,
+					窗口底高: 结果.windowBottom,
+					系统语言: 结果.osLanguage,
+
+				}
+				console.log("系统信息", 使用全局变量.系统信息, 结果);
+			}
+		})
 	})
 
 	onAppShow(() => {
@@ -43,36 +63,36 @@
 	// #endif
 </script>
 
-<style>
+<style lang="scss">
 	page {
 		background-color: #f4f6f5;
 		color: #1b2427;
 		font-size: 14px;
 	}
 
-	.page {
+	.ye_mian {
 		padding: 18px 16px 30px;
 	}
 
-	.page-heading {
+	.ye_mian_biao_ti {
 		display: flex;
 		flex-direction: column;
 		margin: 4px 0 18px;
 	}
 
-	.eyebrow {
+	.fu_biao_ti {
 		color: #087e67;
 		font-size: 12px;
 		font-weight: 700;
 	}
 
-	.title {
+	.biao_ti {
 		color: #1b2427;
 		font-size: 25px;
 		font-weight: 700;
 	}
 
-	.card {
+	.ka_pian {
 		display: flex;
 		flex-direction: column;
 		margin: 10px 0;
@@ -82,26 +102,26 @@
 		background-color: #ffffff;
 	}
 
-	.card-title {
+	.ka_pian_biao_ti {
 		color: #1b2427;
 		font-size: 16px;
 		font-weight: 700;
 		margin: 6px 0;
 	}
 
-	.body {
+	.zheng_wen {
 		color: #34423d;
 		font-size: 14px;
 		line-height: 1.6;
 	}
 
-	.muted {
+	.fu_zhu_wen_ben {
 		color: #7c8986;
 		font-size: 12px;
 		line-height: 1.6;
 	}
 
-	.label {
+	.biao_qian {
 		display: flex;
 		margin-top: 10px;
 		color: #566460;
@@ -109,7 +129,7 @@
 		font-weight: 600;
 	}
 
-	.field {
+	.shu_ru_kuang {
 		width: 100%;
 		min-height: 42px;
 		margin: 6px 0;
@@ -121,12 +141,12 @@
 		font-size: 14px;
 	}
 
-	.textarea {
+	.duo_xing_shu_ru_kuang {
 		min-height: 110px;
 	}
 
-	.primary,
-	.secondary {
+	.zhu_yao_an_niu,
+	.ci_yao_an_niu {
 		min-height: 38px;
 		margin: 4px 4px 4px 0;
 		padding: 0 14px;
@@ -135,24 +155,24 @@
 		font-weight: 600;
 	}
 
-	.primary {
+	.zhu_yao_an_niu {
 		border: 0;
 		background-color: #087e67;
 		color: #ffffff;
 	}
 
-	.secondary {
+	.ci_yao_an_niu {
 		border: 1px solid #c9e0d7;
 		background-color: #ffffff;
 		color: #087e67;
 	}
 
-	.small {
+	.xiao_hao {
 		min-height: 32px;
 		font-size: 12px;
 	}
 
-	.text-button {
+	.wen_ben_an_niu {
 		margin: 4px 0;
 		border: 0;
 		background-color: transparent;
@@ -160,32 +180,32 @@
 		font-size: 13px;
 	}
 
-	.left {
+	.ju_zuo {
 		align-self: flex-start;
 	}
 
-	.actions,
-	.row-between,
-	.compose,
-	.list-row,
-	.filters {
+	.cao_zuo_zu,
+	.liang_duan_dui_qi,
+	.bian_ji_lan,
+	.lie_biao_hang,
+	.shaixuan_lan {
 		display: flex;
 		flex-direction: row;
 		align-items: center;
 		flex-wrap: wrap;
 	}
 
-	.row-between {
+	.liang_duan_dui_qi {
 		justify-content: space-between;
 	}
 
-	.grow {
+	.zhan_kai {
 		flex: 1;
 		min-width: 0;
 	}
 
-	.badge,
-	.chip {
+	.biao_ji,
+	.fen_lei_biao_qian {
 		padding: 5px 9px;
 		border-radius: 14px;
 		background-color: #e7f4ef;
@@ -193,39 +213,39 @@
 		font-size: 12px;
 	}
 
-	.chip {
+	.fen_lei_biao_qian {
 		border: 1px solid #c9e0d7;
 	}
 
-	.card-footer {
+	.ka_pian_di_bu {
 		margin-top: 12px;
 	}
 
-	.list-row {
+	.lie_biao_hang {
 		justify-content: space-between;
 		min-height: 50px;
 		padding: 9px 2px;
 		border-bottom: 1px solid #edf1ef;
 	}
 
-	.arrow {
+	.jian_tou {
 		color: #7c8986;
 		font-size: 22px;
 	}
 
-	.notice {
+	.ti_shi_xin_xi {
 		margin: 8px 0;
 		padding: 11px 13px;
 		border-radius: 8px;
 		font-size: 13px;
 	}
 
-	.error {
+	.cuo_wu {
 		background-color: #fff0ec;
 		color: #a84229;
 	}
 
-	.empty {
+	.kong_zhuang_tai {
 		display: flex;
 		flex-direction: column;
 		align-items: center;
@@ -234,7 +254,7 @@
 		text-align: center;
 	}
 
-	.location-box {
+	.di_zhi_xin_xi {
 		display: flex;
 		flex-direction: column;
 		margin: 8px 0;
@@ -243,12 +263,12 @@
 		border-radius: 9px;
 	}
 
-	.chat-page {
+	.liao_tian_ye {
 		display: flex;
 		flex-direction: column;
 	}
 
-	.message-list {
+	.xiao_xi_lie_biao {
 		height: 360px;
 		margin: 8px 0;
 		padding: 10px;
@@ -257,7 +277,7 @@
 		background-color: #ffffff;
 	}
 
-	.message {
+	.xiao_xi {
 		display: flex;
 		flex-direction: column;
 		margin: 8px 0;
@@ -266,12 +286,12 @@
 		background-color: #f4f6f5;
 	}
 
-	.compose {
+	.bian_ji_lan {
 		flex-wrap: nowrap;
 		padding-bottom: 10px;
 	}
 
-	.compose-field {
+	.bian_ji_shu_ru_kuang {
 		margin: 0;
 	}
 </style>

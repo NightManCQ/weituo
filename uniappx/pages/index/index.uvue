@@ -1,7 +1,7 @@
 <template>
 	<view>
-		<image class="logo" src="/static/logo.png"></image>
-		<text class="title">{{title}}</text>
+		<image class="biao_zhi" src="/static/logo.png"></image>
+		<text class="biao_ti">{{title}}</text>
 	</view>
 </template>
 
@@ -9,14 +9,14 @@
 	const title = ref('Hello')
 </script>
 
-<style>
-	.logo {
+<style lang="scss">
+	.biao_zhi {
 		height: 100px;
 		width: 100px;
 		margin: 100px auto 25px auto;
 	}
 
-	.title {
+	.biao_ti {
 		font-size: 18px;
 		color: #8f8f94;
 		text-align: center;

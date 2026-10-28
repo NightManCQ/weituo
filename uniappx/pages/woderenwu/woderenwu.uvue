@@ -81,47 +81,47 @@ onShow(() => {
 </script>
 
 <template>
-  <view class="page">
-    <view class="page-heading">
-      <text class="eyebrow">委托管理</text>
-      <text class="title">我的委托</text>
-      <text class="muted">{{ 归属 == 'published' ? '查看你发布的委托及处理进度。' : '查看你接单的委托及处理进度。' }}</text>
+  <view class="ye_mian">
+    <view class="ye_mian_biao_ti">
+      <text class="fu_biao_ti">委托管理</text>
+      <text class="biao_ti">我的委托</text>
+      <text class="fu_zhu_wen_ben">{{ 归属 == 'published' ? '查看你发布的委托及处理进度。' : '查看你接单的委托及处理进度。' }}</text>
     </view>
-    <view v-if="当前用户 == null" class="empty">
+    <view v-if="当前用户 == null" class="kong_zhuang_tai">
       <text>登录后查看我的委托</text>
-      <button class="primary" @click="uni.switchTab({ url: '/pages/wode/wode' })">前往登录</button>
+      <button class="zhu_yao_an_niu" @click="uni.switchTab({ url: '/pages/wode/wode' })">前往登录</button>
     </view>
     <view v-else>
-    <view class="actions">
-      <button class="secondary" @click="归属 = 归属 == 'published' ? 'claimed' : 'published'; 刷新()">{{ 归属 == 'published' ? '切换到接单委托' : '切换到发布委托' }}</button>
-      <button class="secondary" @click="刷新">刷新</button>
+    <view class="cao_zuo_zu">
+      <button class="ci_yao_an_niu" @click="归属 = 归属 == 'published' ? 'claimed' : 'published'; 刷新()">{{ 归属 == 'published' ? '切换到接单委托' : '切换到发布委托' }}</button>
+      <button class="ci_yao_an_niu" @click="刷新">刷新</button>
     </view>
-    <view class="filters">
-      <button class="chip" @click="分类 = 'all'; 刷新()">全部</button>
-      <button class="chip" @click="分类 = 'ongoing'; 刷新()">进行中</button>
-      <button class="chip" @click="分类 = 'completed'; 刷新()">已完成</button>
+    <view class="shaixuan_lan">
+      <button class="fen_lei_biao_qian" @click="分类 = 'all'; 刷新()">全部</button>
+      <button class="fen_lei_biao_qian" @click="分类 = 'ongoing'; 刷新()">进行中</button>
+      <button class="fen_lei_biao_qian" @click="分类 = 'completed'; 刷新()">已完成</button>
     </view>
-    <view v-if="错误信息" class="notice error">{{ 错误信息 }}</view>
-    <view v-if="正在加载 && 任务列表.length == 0" class="empty">正在加载委托…</view>
-    <view v-else-if="错误信息 && 任务列表.length == 0" class="empty">
+    <view v-if="错误信息" class="ti_shi_xin_xi cuo_wu">{{ 错误信息 }}</view>
+    <view v-if="正在加载 && 任务列表.length == 0" class="kong_zhuang_tai">正在加载委托…</view>
+    <view v-else-if="错误信息 && 任务列表.length == 0" class="kong_zhuang_tai">
       <text>委托加载失败</text>
-      <button class="secondary" @click="刷新">重新加载</button>
+      <button class="ci_yao_an_niu" @click="刷新">重新加载</button>
     </view>
-    <view v-else-if="任务列表.length == 0" class="empty">此分类下暂无委托</view>
-    <view v-for="委托 in 任务列表" :key="委托.任务编号" class="card">
-      <view class="row-between"><text class="badge">{{ 委托.任务状态 }}</text><text class="muted">{{ 格式化时间(委托.创建时间) }}</text></view>
-      <text class="card-title" @click="uni.navigateTo({ url: `/pages/weituo/weituo?id=${encodeURIComponent(委托.任务编号)}` })">{{ 委托.标题 }}</text>
-      <text class="body">{{ 委托.描述 }}</text>
-      <view class="actions">
-        <button v-if="归属 == 'claimed' && 委托.任务状态 == '已接单'" class="small primary" @click="操作(委托, 'start')">开始任务</button>
-        <button v-if="归属 == 'claimed' && 委托.任务状态 == '已接单'" class="small secondary" @click="操作(委托, 'release')">释放委托</button>
-        <button v-if="归属 == 'claimed' && 委托.任务状态 == '进行中'" class="small primary" @click="操作(委托, 'complete')">提交完成</button>
-        <button v-if="归属 == 'published' && 委托.任务状态 == '待验收'" class="small primary" @click="操作(委托, 'accept-completion')">确认验收</button>
-        <button v-if="归属 == 'published' && ['待接单', '已接单'].includes(委托.任务状态)" class="small secondary" @click="操作(委托, 'cancel')">取消委托</button>
-        <button v-if="委托.接单者编号 != null" class="small secondary" @click="uni.navigateTo({ url: `/pages/liaotian/liaotian?taskId=${encodeURIComponent(委托.任务编号)}` })">查看消息</button>
+    <view v-else-if="任务列表.length == 0" class="kong_zhuang_tai">此分类下暂无委托</view>
+    <view v-for="委托 in 任务列表" :key="委托.任务编号" class="ka_pian">
+      <view class="liang_duan_dui_qi"><text class="biao_ji">{{ 委托.任务状态 }}</text><text class="fu_zhu_wen_ben">{{ 格式化时间(委托.创建时间) }}</text></view>
+      <text class="ka_pian_biao_ti" @click="uni.navigateTo({ url: `/pages/weituo/weituo?id=${encodeURIComponent(委托.任务编号)}` })">{{ 委托.标题 }}</text>
+      <text class="zheng_wen">{{ 委托.描述 }}</text>
+      <view class="cao_zuo_zu">
+        <button v-if="归属 == 'claimed' && 委托.任务状态 == '已接单'" class="xiao_hao zhu_yao_an_niu" @click="操作(委托, 'start')">开始任务</button>
+        <button v-if="归属 == 'claimed' && 委托.任务状态 == '已接单'" class="xiao_hao ci_yao_an_niu" @click="操作(委托, 'release')">释放委托</button>
+        <button v-if="归属 == 'claimed' && 委托.任务状态 == '进行中'" class="xiao_hao zhu_yao_an_niu" @click="操作(委托, 'complete')">提交完成</button>
+        <button v-if="归属 == 'published' && 委托.任务状态 == '待验收'" class="xiao_hao zhu_yao_an_niu" @click="操作(委托, 'accept-completion')">确认验收</button>
+        <button v-if="归属 == 'published' && ['待接单', '已接单'].includes(委托.任务状态)" class="xiao_hao ci_yao_an_niu" @click="操作(委托, 'cancel')">取消委托</button>
+        <button v-if="委托.接单者编号 != null" class="xiao_hao ci_yao_an_niu" @click="uni.navigateTo({ url: `/pages/liaotian/liaotian?taskId=${encodeURIComponent(委托.任务编号)}` })">查看消息</button>
       </view>
     </view>
-    <button v-if="任务列表.length > 0 && 任务列表.length < 委托总数" class="secondary" :disabled="正在加载" @click="加载更多">
+    <button v-if="任务列表.length > 0 && 任务列表.length < 委托总数" class="ci_yao_an_niu" :disabled="正在加载" @click="加载更多">
       {{ 正在加载 ? '加载中…' : `加载更多（${任务列表.length}/${委托总数}）` }}
     </button>
     </view>

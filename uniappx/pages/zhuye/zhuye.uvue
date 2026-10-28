@@ -49,34 +49,34 @@ onShow(() => {
 </script>
 
 <template>
-  <view class="page">
-    <view class="page-heading">
-      <text class="eyebrow">正在发生</text>
-      <text class="title">委托广场</text>
-      <text class="muted">{{ 当前用户 == null ? '发现委托，找到一起完成它的人。' : `你好，${当前用户.昵称}，看看有哪些委托适合你。` }}</text>
+  <view class="ye_mian">
+    <view class="ye_mian_biao_ti">
+      <text class="fu_biao_ti">正在发生</text>
+      <text class="biao_ti">委托广场</text>
+      <text class="fu_zhu_wen_ben">{{ 当前用户 == null ? '发现委托，找到一起完成它的人。' : `你好，${当前用户.昵称}，看看有哪些委托适合你。` }}</text>
     </view>
-    <view class="actions">
-      <button class="primary" @click="uni.navigateTo({ url: '/pages/fabuweituo/fabuweituo' })">＋ 发布委托</button>
-      <button class="secondary" @click="刷新">刷新</button>
-      <button v-if="当前用户 != null" class="secondary" @click="uni.navigateTo({ url: '/pages/woderenwu/woderenwu' })">我的委托</button>
+    <view class="cao_zuo_zu">
+      <button class="zhu_yao_an_niu" @click="uni.navigateTo({ url: '/pages/fabuweituo/fabuweituo' })">＋ 发布委托</button>
+      <button class="ci_yao_an_niu" @click="刷新">刷新</button>
+      <button v-if="当前用户 != null" class="ci_yao_an_niu" @click="uni.navigateTo({ url: '/pages/woderenwu/woderenwu' })">我的委托</button>
     </view>
-    <view v-if="错误信息" class="notice error">{{ 错误信息 }}</view>
-    <view v-if="正在加载 && 委托列表.length == 0" class="empty">正在加载委托…</view>
-    <view v-else-if="错误信息" class="empty">
+    <view v-if="错误信息" class="ti_shi_xin_xi cuo_wu">{{ 错误信息 }}</view>
+    <view v-if="正在加载 && 委托列表.length == 0" class="kong_zhuang_tai">正在加载委托…</view>
+    <view v-else-if="错误信息" class="kong_zhuang_tai">
       <text>委托加载失败</text>
-      <button class="secondary" @click="刷新">重新加载</button>
+      <button class="ci_yao_an_niu" @click="刷新">重新加载</button>
     </view>
-    <view v-else-if="委托列表.length == 0" class="empty">暂时没有待接单委托</view>
-    <view v-for="委托 in 委托列表" :key="委托.任务编号" class="card">
-      <view class="row-between">
-        <text class="badge">{{ 委托.任务状态 }}</text>
-        <text class="muted">{{ 格式化时间(委托.创建时间) }}</text>
+    <view v-else-if="委托列表.length == 0" class="kong_zhuang_tai">暂时没有待接单委托</view>
+    <view v-for="委托 in 委托列表" :key="委托.任务编号" class="ka_pian">
+      <view class="liang_duan_dui_qi">
+        <text class="biao_ji">{{ 委托.任务状态 }}</text>
+        <text class="fu_zhu_wen_ben">{{ 格式化时间(委托.创建时间) }}</text>
       </view>
-      <text class="card-title" @click="打开委托(委托.任务编号)">{{ 委托.标题 }}</text>
-      <text class="body">{{ 委托.描述 || '暂无补充描述' }}</text>
-      <view class="row-between card-footer">
-        <text class="muted">{{ 委托.报酬积分 == null ? '无积分报酬' : `${委托.报酬积分} 积分报酬` }}</text>
-        <button class="small primary" @click="接取委托(委托)">查看 / 接单</button>
+      <text class="ka_pian_biao_ti" @click="打开委托(委托.任务编号)">{{ 委托.标题 }}</text>
+      <text class="zheng_wen">{{ 委托.描述 || '暂无补充描述' }}</text>
+      <view class="liang_duan_dui_qi ka_pian_di_bu">
+        <text class="fu_zhu_wen_ben">{{ 委托.报酬积分 == null ? '无积分报酬' : `${委托.报酬积分} 积分报酬` }}</text>
+        <button class="xiao_hao zhu_yao_an_niu" @click="接取委托(委托)">查看 / 接单</button>
       </view>
     </view>
   </view>

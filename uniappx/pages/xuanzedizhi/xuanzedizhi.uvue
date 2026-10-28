@@ -32,13 +32,13 @@ function 选择当前位置() {
 </script>
 
 <template>
-  <view class="page">
-    <view class="page-heading"><text class="eyebrow">委托位置</text><text class="title">选择委托地址</text></view>
-    <view class="card">
-      <text class="body">使用系统地图搜索地点并选择位置。选择后会将地点名称和经纬度带回委托表单。</text>
-      <text v-if="错误" class="notice error">{{ 错误 }}</text>
-      <button class="primary" :disabled="正在定位" @click="选择当前位置">{{ 正在定位 ? '正在打开地图…' : '打开地图选点' }}</button>
-      <button class="secondary" @click="uni.navigateBack()">取消</button>
+  <view class="ye_mian">
+    <view class="ye_mian_biao_ti"><text class="fu_biao_ti">委托位置</text><text class="biao_ti">选择委托地址</text></view>
+    <view class="ka_pian">
+      <text class="zheng_wen">使用系统地图搜索地点并选择位置。选择后会将地点名称和经纬度带回委托表单。</text>
+      <text v-if="错误" class="ti_shi_xin_xi cuo_wu">{{ 错误 }}</text>
+      <button class="zhu_yao_an_niu" :disabled="正在定位" @click="选择当前位置">{{ 正在定位 ? '正在打开地图…' : '打开地图选点' }}</button>
+      <button class="ci_yao_an_niu" @click="uni.navigateBack()">取消</button>
     </view>
   </view>
 </template>

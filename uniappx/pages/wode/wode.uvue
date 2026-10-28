@@ -86,38 +86,38 @@
 </script>
 
 <template>
-	<view class="page">
-		<view class="page-heading"><text class="eyebrow">个人中心</text><text class="title">我</text></view>
-		<view v-if="当前用户 != null" class="card">
-			<text class="card-title">{{ 当前用户.昵称 }}</text>
-			<text class="muted">账号：{{ 当前用户.登录名 }}</text>
-			<text class="muted">用户编号：{{ 当前用户.用户编号 }}</text>
-			<view class="card">
-				<text class="card-title">我的积分</text>
-				<text v-if="积分错误" class="notice error">{{ 积分错误 }}</text>
-				<text class="body">可用 {{ 积分?.可用积分 ?? '—' }} · 托管中 {{ 积分?.冻结积分 ?? '—' }} · 总计 {{ 积分?.总积分 ?? '—' }}</text>
-				<text class="muted">积分不可提现或用户间自由转让。委托验收后发放托管报酬。</text>
-				<view v-for="记录 in 流水" :key="记录.流水编号" class="list-row">
+	<view class="ye_mian">
+		<view class="ye_mian_biao_ti"><text class="fu_biao_ti">个人中心</text><text class="biao_ti">我</text></view>
+		<view v-if="当前用户 != null" class="ka_pian">
+			<text class="ka_pian_biao_ti">{{ 当前用户.昵称 }}</text>
+			<text class="fu_zhu_wen_ben">账号：{{ 当前用户.登录名 }}</text>
+			<text class="fu_zhu_wen_ben">用户编号：{{ 当前用户.用户编号 }}</text>
+			<view class="ka_pian">
+				<text class="ka_pian_biao_ti">我的积分</text>
+				<text v-if="积分错误" class="ti_shi_xin_xi cuo_wu">{{ 积分错误 }}</text>
+				<text class="zheng_wen">可用 {{ 积分?.可用积分 ?? '—' }} · 托管中 {{ 积分?.冻结积分 ?? '—' }} · 总计 {{ 积分?.总积分 ?? '—' }}</text>
+				<text class="fu_zhu_wen_ben">积分不可提现或用户间自由转让。委托验收后发放托管报酬。</text>
+				<view v-for="记录 in 流水" :key="记录.流水编号" class="lie_biao_hang">
 					<text>{{ 记录.说明 || 记录.交易类型 }}</text><text>{{ 记录.可用变动 > 0 ? '+' : '' }}{{ 记录.可用变动 }}</text>
 				</view>
 			</view>
-			<button class="secondary" @click="刷新积分">刷新积分</button>
-			<button class="secondary" @click="uni.navigateTo({ url: '/pages/woderenwu/woderenwu' })">我的委托</button>
-			<button class="secondary" @click="退出登录">退出登录</button>
+			<button class="ci_yao_an_niu" @click="刷新积分">刷新积分</button>
+			<button class="ci_yao_an_niu" @click="uni.navigateTo({ url: '/pages/woderenwu/woderenwu' })">我的委托</button>
+			<button class="ci_yao_an_niu" @click="退出登录">退出登录</button>
 		</view>
-		<view v-else class="card">
-			<text class="card-title">{{ 是否注册 ? '创建账号' : '登录账号' }}</text>
-			<text class="muted">登录后即可发布委托、接单和参与协作。</text>
-			<input v-if="是否注册" v-model="昵称" class="field" placeholder="昵称" maxlength="40" />
-			<input v-model="登录名" class="field" placeholder="登录名" maxlength="64" />
-			<input v-model="密码" class="field" placeholder="密码（至少 10 位）" password maxlength="128" />
-			<button class="primary" :disabled="正在处理" @click="登录或注册">{{ 正在处理 ? '请稍候…' : 是否注册 ? '注册并登录' : '登录' }}</button>
-			<button class="text-button" @click="是否注册 = !是否注册">{{ 是否注册 ? '已有账号？返回登录' : '还没有账号？立即注册' }}</button>
+		<view v-else class="ka_pian">
+			<text class="ka_pian_biao_ti">{{ 是否注册 ? '创建账号' : '登录账号' }}</text>
+			<text class="fu_zhu_wen_ben">登录后即可发布委托、接单和参与协作。</text>
+			<input v-if="是否注册" v-model="昵称" class="shu_ru_kuang" placeholder="昵称" maxlength="40" />
+			<input v-model="登录名" class="shu_ru_kuang" placeholder="登录名" maxlength="64" />
+			<input v-model="密码" class="shu_ru_kuang" placeholder="密码（至少 10 位）" password maxlength="128" />
+			<button class="zhu_yao_an_niu" :disabled="正在处理" @click="登录或注册">{{ 正在处理 ? '请稍候…' : 是否注册 ? '注册并登录' : '登录' }}</button>
+			<button class="wen_ben_an_niu" @click="是否注册 = !是否注册">{{ 是否注册 ? '已有账号？返回登录' : '还没有账号？立即注册' }}</button>
 		</view>
-		<view class="card">
-			<text class="label">API 服务地址</text>
-			<input v-model="API地址" class="field" placeholder="http://服务器地址:8080/api/v1" />
-			<button class="secondary" @click="保存API地址">保存地址</button>
+		<view class="ka_pian">
+			<text class="biao_qian">API 服务地址</text>
+			<input v-model="API地址" class="shu_ru_kuang" placeholder="http://服务器地址:8080/api/v1" />
+			<button class="ci_yao_an_niu" @click="保存API地址">保存地址</button>
 		</view>
 	</view>
 </template>

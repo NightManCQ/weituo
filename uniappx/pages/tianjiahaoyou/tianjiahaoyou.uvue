@@ -49,25 +49,25 @@ async function 发送申请() {
 </script>
 
 <template>
-  <view class="page">
-    <view class="page-heading"><text class="eyebrow">联系人</text><text class="title">添加好友</text></view>
-    <view v-if="当前用户 == null" class="empty">
+  <view class="ye_mian">
+    <view class="ye_mian_biao_ti"><text class="fu_biao_ti">联系人</text><text class="biao_ti">添加好友</text></view>
+    <view v-if="当前用户 == null" class="kong_zhuang_tai">
       <text>登录后添加好友</text>
-      <button class="primary" @click="uni.switchTab({ url: '/pages/wode/wode' })">前往登录</button>
+      <button class="zhu_yao_an_niu" @click="uni.switchTab({ url: '/pages/wode/wode' })">前往登录</button>
     </view>
-    <view v-else class="card">
-      <text class="label">用户登录名</text>
-      <input v-model="登录名" class="field" maxlength="64" placeholder="输入完整登录名" />
-      <button class="primary" :disabled="正在搜索" @click="搜索用户">{{ 正在搜索 ? '搜索中…' : '搜索' }}</button>
+    <view v-else class="ka_pian">
+      <text class="biao_qian">用户登录名</text>
+      <input v-model="登录名" class="shu_ru_kuang" maxlength="64" placeholder="输入完整登录名" />
+      <button class="zhu_yao_an_niu" :disabled="正在搜索" @click="搜索用户">{{ 正在搜索 ? '搜索中…' : '搜索' }}</button>
     </view>
-    <view v-if="结果 != null" class="card">
-      <text class="card-title">{{ 结果.昵称 }} (@{{ 结果.登录名 }})</text>
-      <text class="muted">{{ 结果.好友状态 }}</text>
+    <view v-if="结果 != null" class="ka_pian">
+      <text class="ka_pian_biao_ti">{{ 结果.昵称 }} (@{{ 结果.登录名 }})</text>
+      <text class="fu_zhu_wen_ben">{{ 结果.好友状态 }}</text>
       <template v-if="结果.好友状态 == '可添加'">
-        <input v-model="附言" class="field" maxlength="200" placeholder="验证消息（可选）" />
-        <button class="primary" :disabled="正在发送" @click="发送申请">{{ 正在发送 ? '发送中…' : '发送好友申请' }}</button>
+        <input v-model="附言" class="shu_ru_kuang" maxlength="200" placeholder="验证消息（可选）" />
+        <button class="zhu_yao_an_niu" :disabled="正在发送" @click="发送申请">{{ 正在发送 ? '发送中…' : '发送好友申请' }}</button>
       </template>
     </view>
-    <button class="text-button left" @click="uni.navigateBack()">返回联系人</button>
+    <button class="wen_ben_an_niu ju_zuo" @click="uni.navigateBack()">返回联系人</button>
   </view>
 </template>

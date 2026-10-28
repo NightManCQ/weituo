@@ -45,23 +45,23 @@ onLoad((参数) => {
 </script>
 
 <template>
-  <view class="page">
-    <button class="text-button left" @click="uni.navigateBack()">← 返回</button>
-    <view v-if="正在加载" class="empty">正在加载委托详情…</view>
-    <view v-else-if="错误" class="notice error">{{ 错误 }} <button class="text-button" @click="加载">重试</button></view>
-    <view v-else-if="委托 != null" class="card">
-      <text class="badge">{{ 委托.任务状态 }}</text>
-      <text class="title">{{ 委托.标题 }}</text>
-      <text class="label">委托说明</text>
-      <text class="body">{{ 委托.描述 || '委托方暂未提供补充说明。' }}</text>
-      <text class="label">委托报酬</text>
-      <text class="body">{{ 委托.报酬积分 == null ? '无积分报酬' : `${委托.报酬积分} 积分` }}</text>
-      <text class="label">发布于</text><text class="body">{{ 格式化时间(委托.创建时间) }}</text>
-      <text class="label">截止时间</text><text class="body">{{ 委托.截止时间 == null ? '未设置' : 格式化时间(委托.截止时间) }}</text>
-      <text class="label">委托地址</text>
-      <text class="body">{{ 委托.位置 == null ? '未填写' : [委托.位置.省, 委托.位置.市, 委托.位置.县, 委托.位置.地址].filter(Boolean).join(' · ') }}</text>
-      <button v-if="当前用户 != null && 委托.任务状态 == '待接单' && 委托.发布者编号 != 当前用户.用户编号 && 委托.报酬积分 != null" class="primary" @click="执行('claim')">接取委托</button>
-      <button v-if="当前用户 != null && (委托.发布者编号 == 当前用户.用户编号 || 委托.接单者编号 == 当前用户.用户编号)" class="secondary" @click="uni.navigateTo({ url: `/pages/liaotian/liaotian?taskId=${encodeURIComponent(委托.任务编号)}` })">打开委托会话</button>
+  <view class="ye_mian">
+    <button class="wen_ben_an_niu ju_zuo" @click="uni.navigateBack()">← 返回</button>
+    <view v-if="正在加载" class="kong_zhuang_tai">正在加载委托详情…</view>
+    <view v-else-if="错误" class="ti_shi_xin_xi cuo_wu">{{ 错误 }} <button class="wen_ben_an_niu" @click="加载">重试</button></view>
+    <view v-else-if="委托 != null" class="ka_pian">
+      <text class="biao_ji">{{ 委托.任务状态 }}</text>
+      <text class="biao_ti">{{ 委托.标题 }}</text>
+      <text class="biao_qian">委托说明</text>
+      <text class="zheng_wen">{{ 委托.描述 || '委托方暂未提供补充说明。' }}</text>
+      <text class="biao_qian">委托报酬</text>
+      <text class="zheng_wen">{{ 委托.报酬积分 == null ? '无积分报酬' : `${委托.报酬积分} 积分` }}</text>
+      <text class="biao_qian">发布于</text><text class="zheng_wen">{{ 格式化时间(委托.创建时间) }}</text>
+      <text class="biao_qian">截止时间</text><text class="zheng_wen">{{ 委托.截止时间 == null ? '未设置' : 格式化时间(委托.截止时间) }}</text>
+      <text class="biao_qian">委托地址</text>
+      <text class="zheng_wen">{{ 委托.位置 == null ? '未填写' : [委托.位置.省, 委托.位置.市, 委托.位置.县, 委托.位置.地址].filter(Boolean).join(' · ') }}</text>
+      <button v-if="当前用户 != null && 委托.任务状态 == '待接单' && 委托.发布者编号 != 当前用户.用户编号 && 委托.报酬积分 != null" class="zhu_yao_an_niu" @click="执行('claim')">接取委托</button>
+      <button v-if="当前用户 != null && (委托.发布者编号 == 当前用户.用户编号 || 委托.接单者编号 == 当前用户.用户编号)" class="ci_yao_an_niu" @click="uni.navigateTo({ url: `/pages/liaotian/liaotian?taskId=${encodeURIComponent(委托.任务编号)}` })">打开委托会话</button>
     </view>
   </view>
 </template>

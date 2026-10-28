@@ -2,19 +2,19 @@
 </script>
 
 <template>
-  <view class="page">
-    <view class="page-heading"><text class="eyebrow">探索与发现</text><text class="title">世界</text></view>
-    <view class="card clickable" @click="uni.switchTab({ url: '/pages/zhuye/zhuye' })">
-      <text class="card-title">委托广场</text>
-      <text class="muted">浏览正在招募的委托，发现可以参与的机会。</text>
+  <view class="ye_mian">
+    <view class="ye_mian_biao_ti"><text class="fu_biao_ti">探索与发现</text><text class="biao_ti">世界</text></view>
+    <view class="ka_pian ke_dian_ji" @click="uni.switchTab({ url: '/pages/zhuye/zhuye' })">
+      <text class="ka_pian_biao_ti">委托广场</text>
+      <text class="fu_zhu_wen_ben">浏览正在招募的委托，发现可以参与的机会。</text>
     </view>
-    <view class="card clickable" @click="uni.navigateTo({ url: '/pages/woderenwu/woderenwu' })">
-      <text class="card-title">我的委托</text>
-      <text class="muted">查看发布和接单的委托及处理进度。</text>
+    <view class="ka_pian ke_dian_ji" @click="uni.navigateTo({ url: '/pages/woderenwu/woderenwu' })">
+      <text class="ka_pian_biao_ti">我的委托</text>
+      <text class="fu_zhu_wen_ben">查看发布和接单的委托及处理进度。</text>
     </view>
-    <view class="card clickable" @click="uni.navigateTo({ url: '/pages/fabuweituo/fabuweituo' })">
-      <text class="card-title">发布委托</text>
-      <text class="muted">发布需求，寻找协作伙伴。</text>
+    <view class="ka_pian ke_dian_ji" @click="uni.navigateTo({ url: '/pages/fabuweituo/fabuweituo' })">
+      <text class="ka_pian_biao_ti">发布委托</text>
+      <text class="fu_zhu_wen_ben">发布需求，寻找协作伙伴。</text>
     </view>
   </view>
 </template>
