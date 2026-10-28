@@ -413,18 +413,15 @@ pub(super) async fn 邀请群成员(
             "委托群成员由委托接单关系管理".into(),
         ));
     }
-    let 目标用户登录名: String = sqlx::query_scalar(
-        r#"SELECT "登录名" FROM "用户"
+    let 目标用户有效: Option<i32> = sqlx::query_scalar(
+        r#"SELECT 1 FROM "用户"
            WHERE "用户编号" = $1 AND "账号状态" = '正常'"#,
     )
     .bind(内容.用户编号)
     .fetch_optional(&mut *事务)
-    .await?
-    .ok_or_else(|| 应用错误::未找到("用户不存在或已停用".into()))?;
-    if !是安全的_mqtt账号主题段(&目标用户登录名) {
-        return Err(应用错误::请求错误(
-            "目标用户登录名包含 MQTT 主题不支持的字符".into(),
-        ));
+    .await?;
+    if 目标用户有效.is_none() {
+        return Err(应用错误::未找到("用户不存在或已停用".into()));
     }
     let 已是好友 = sqlx::query(
         r#"SELECT 1 FROM "好友关系"

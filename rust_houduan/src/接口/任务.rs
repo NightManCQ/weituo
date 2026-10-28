@@ -810,9 +810,8 @@ async fn 查询任务事件主题(
     任务编号: Uuid,
 ) -> Result<String, 应用错误> {
     let 记录 = sqlx::query(
-        r#"SELECT g."群组编号", u."登录名"
+        r#"SELECT g."群组编号", t."发布者编号"
            FROM "任务" t
-           JOIN "用户" u ON u."用户编号" = t."发布者编号"
            LEFT JOIN "群_群组" g ON g."关联任务编号" = t."任务编号"
            WHERE t."任务编号" = $1"#,
     )
@@ -821,8 +820,8 @@ async fn 查询任务事件主题(
     .await?
     .ok_or_else(|| 应用错误::未找到("任务不存在，无法生成实时主题".into()))?;
     let 群组编号: Option<Uuid> = 记录.get("群组编号");
-    let 发布者登录名: String = 记录.get("登录名");
-    Ok(构造任务事件主题(群组编号, &发布者登录名)?)
+    let 发布者编号: Uuid = 记录.get("发布者编号");
+    Ok(构造任务事件主题(群组编号, 发布者编号))
 }
 
 pub(super) async fn 接取任务(

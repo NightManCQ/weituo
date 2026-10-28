@@ -206,58 +206,33 @@ pub(crate) struct 消息访问控制 {
     pub(crate) 订阅权限: Vec<String>,
 }
 
-pub(crate) fn 是安全的_mqtt账号主题段(账号: &str) -> bool {
-    !账号.is_empty()
-        && !账号
-            .chars()
-            .any(|字符| matches!(字符, '/' | '+' | '#' | '\0'))
-}
-
 pub(crate) fn 构造用户通知主题(用户编号: Uuid) -> String {
     format!("u/{用户编号}")
 }
 
 pub(crate) fn 构造任务事件主题(
-    关联群组编号: Option<Uuid>,
-    发布者登录名: &str,
-) -> anyhow::Result<String> {
-    if let Some(群组编号) = 关联群组编号 {
-        return Ok(format!("q/{群组编号}"));
-    }
-    anyhow::ensure!(
-        是安全的_mqtt账号主题段(发布者登录名),
-        "发布者登录名不能安全地用作 MQTT 主题段"
-    );
-    Ok(format!("u/{发布者登录名}"))
+    关联群组编号: Option<Uuid>, 发布者编号: Uuid
+) -> String {
+    关联群组编号.map_or_else(
+        || 构造用户通知主题(发布者编号),
+        |群组编号| format!("q/{群组编号}"),
+    )
 }
 
 #[cfg(test)]
-mod mqtt_账号主题测试 {
-    use super::{
-        是安全的_mqtt账号主题段, 构造任务事件主题, 构造用户通知主题
-    };
+mod mqtt_主题测试 {
+    use super::{构造任务事件主题, 构造用户通知主题};
     use uuid::Uuid;
 
     #[test]
-    fn 账号可作为单个通知主题段() {
-        assert!(是安全的_mqtt账号主题段("changqing"));
-        assert!(是安全的_mqtt账号主题段("用户.账号_01"));
-        assert!(!是安全的_mqtt账号主题段(""));
-        assert!(!是安全的_mqtt账号主题段("user/account"));
-        assert!(!是安全的_mqtt账号主题段("user+test"));
-        assert!(!是安全的_mqtt账号主题段("user#"));
-        assert!(!是安全的_mqtt账号主题段("user\0test"));
-    }
-
-    #[test]
-    fn 委托任务事件优先使用关联群主题() {
+    fn 委托任务事件按群组或用户编号生成主题() {
         let 群组编号 = Uuid::new_v4();
+        let 用户编号 = Uuid::new_v4();
         assert_eq!(
-            构造任务事件主题(Some(群组编号), "changqing").unwrap(),
+            构造任务事件主题(Some(群组编号), 用户编号),
             format!("q/{群组编号}")
         );
-        assert_eq!(构造任务事件主题(None, "changqing").unwrap(), "u/changqing");
-        assert!(构造任务事件主题(None, "unsafe/account").is_err());
+        assert_eq!(构造任务事件主题(None, 用户编号), format!("u/{用户编号}"));
     }
 
     #[test]

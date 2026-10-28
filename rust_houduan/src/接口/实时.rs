@@ -25,18 +25,15 @@ pub(super) async fn 获取实时凭据(
             "MQTT_JWT_SECRET 至少需要 32 字节"
         )));
     }
-    let 登录名: String = sqlx::query_scalar(
-        r#"SELECT "登录名" FROM "用户"
+    let 用户有效: Option<i32> = sqlx::query_scalar(
+        r#"SELECT 1 FROM "用户"
            WHERE "用户编号" = $1 AND "账号状态" = '正常'"#,
     )
     .bind(用户.编号)
     .fetch_optional(&状态.数据库)
-    .await?
-    .ok_or_else(|| 应用错误::未授权("账号不存在或已停用".into()))?;
-    if !是安全的_mqtt账号主题段(&登录名) {
-        return Err(应用错误::请求错误(
-            "登录名包含 MQTT 主题不支持的字符，无法建立实时连接".into(),
-        ));
+    .await?;
+    if 用户有效.is_none() {
+        return Err(应用错误::未授权("账号不存在或已停用".into()));
     }
     let 群组记录集 = sqlx::query(
         r#"SELECT g."群组编号"
@@ -57,7 +54,6 @@ pub(super) async fn 获取实时凭据(
             format!("q/{群组编号}")
         })
         .collect();
-    主题列表.push(format!("u/{登录名}"));
     主题列表.push(构造用户通知主题(用户.编号));
     let 消息令牌 = encode(
         &Header::default(),

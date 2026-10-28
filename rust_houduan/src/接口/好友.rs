@@ -285,19 +285,15 @@ pub(super) async fn 创建好友申请(
     if 附言.chars().count() > 200 {
         return Err(应用错误::请求错误("申请附言最多 200 个字符".into()));
     }
-    let 目标用户登录名: Option<String> = sqlx::query_scalar(
-        r#"SELECT "登录名" FROM "用户"
+    let 目标用户有效: Option<i32> = sqlx::query_scalar(
+        r#"SELECT 1 FROM "用户"
            WHERE "用户编号" = $1 AND "账号状态" = '正常'"#,
     )
     .bind(申请.目标用户编号)
     .fetch_optional(&状态.数据库)
     .await?;
-    let 目标用户登录名 =
-        目标用户登录名.ok_or_else(|| 应用错误::未找到("用户不存在或已停用".into()))?;
-    if !是安全的_mqtt账号主题段(&目标用户登录名) {
-        return Err(应用错误::请求错误(
-            "目标用户登录名包含 MQTT 主题不支持的字符".into(),
-        ));
+    if 目标用户有效.is_none() {
+        return Err(应用错误::未找到("用户不存在或已停用".into()));
     }
     let (用户甲, 用户乙) = 好友编号对(当前编号, 申请.目标用户编号);
     let 已是好友 = sqlx::query(
@@ -592,9 +588,7 @@ pub(super) async fn 发送私聊消息(
     let mut 事务 = 状态.数据库.begin().await?;
     let 好友状态 = sqlx::query(
         r#"SELECT sender."昵称" AS "发送者昵称",
-                  sender."登录名" AS "发送者登录名",
-                  recipient."昵称" AS "好友昵称",
-                  recipient."登录名" AS "好友登录名"
+                  recipient."昵称" AS "好友昵称"
            FROM "好友关系" f
            JOIN "用户" sender ON sender."用户编号" = $1 AND sender."账号状态" = '正常'
            JOIN "用户" recipient ON recipient."用户编号" = $2 AND recipient."账号状态" = '正常'
@@ -609,15 +603,7 @@ pub(super) async fn 发送私聊消息(
     .await?
     .ok_or_else(|| 应用错误::禁止访问("只有正常账号之间的好友可以发送私聊".into()))?;
     let 发送者昵称: String = 好友状态.get("发送者昵称");
-    let 发送者登录名: String = 好友状态.get("发送者登录名");
     let 好友昵称: String = 好友状态.get("好友昵称");
-    let 好友登录名: String = 好友状态.get("好友登录名");
-    if !是安全的_mqtt账号主题段(&发送者登录名) || !是安全的_mqtt账号主题段(&好友登录名)
-    {
-        return Err(应用错误::请求错误(
-            "好友登录名包含 MQTT 主题不支持的字符".into(),
-        ));
-    }
     let mut 待发布事件编号 = Vec::with_capacity(2);
     let 会话编号: Uuid = sqlx::query(
         r#"INSERT INTO "私聊会话" ("会话编号", "用户甲编号", "用户乙编号")
@@ -668,11 +654,6 @@ pub(super) async fn 发送私聊消息(
             } else {
                 发送者昵称.clone()
             };
-            let 通知账号 = if 通知用户编号 == 当前编号 {
-                发送者登录名.clone()
-            } else {
-                好友登录名.clone()
-            };
             let 事件 = serde_json::json!({
                 "事件编号": 事件编号,
                 "事件类型": "friend.message_created",
@@ -697,7 +678,7 @@ pub(super) async fn 发送私聊消息(
                    VALUES ($1, 'friend.message_created', $2, $3)"#,
             )
             .bind(事件编号)
-            .bind(format!("u/{通知账号}"))
+            .bind(构造用户通知主题(通知用户编号))
             .bind(事件)
             .execute(&mut *事务)
             .await?;
