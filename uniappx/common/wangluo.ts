@@ -73,7 +73,7 @@ export function 发送请求<T>(路径 : string, 选项 : 请求选项 = {}) : P
 		}
 		const 令牌 = 获取令牌()
 		if (令牌.length > 0) 请求头['Authorization'] = `Bearer ${令牌}`
-		// console.log("???????????", `${获取API地址()}${路径}`);
+		console.log("-----------网路请求", `${获取API地址()}${路径}`);
 		uni.request({
 			url: `${获取API地址()}${路径}`,
 			method: 选项.method || 'GET',

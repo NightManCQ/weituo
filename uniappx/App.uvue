@@ -2,9 +2,8 @@
 	import { 连接实时消息 } from './common/实时'
 	import { 使用全局变量 } from "./状态/全局.ts"
 
-	// import { MyApiErrorCode } from "./uni_modules/cq-mqtt"
 	// #ifdef APP-ANDROID || APP-HARMONY
-
+	import * as 原生插件 from '@/uni_modules/cq-mqtt'
 	let firstBackTime = 0
 	// #endif
 	onLaunch(() => {

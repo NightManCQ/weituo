@@ -306,9 +306,9 @@ function Web连接MQTT(参数 : MQTT连接参数) : Promise<void> {
 export const emqx = {
 	connect(参数 : MQTT连接参数) : Promise<void> {
 
+		console.log("________________________________mqtt连接参数", 参数);
 		// #ifdef APP-ANDROID
-		console.log("________________________________连接参数", 参数);
-		return 原生Mqtt.connect(参数)
+		return 原生Mqtt.连接(参数)
 		// #endif
 		// #ifdef H5
 
@@ -319,7 +319,7 @@ export const emqx = {
 	},
 	disconnect() : Promise<void> {
 		// #ifdef APP-ANDROID
-		return 原生Mqtt.disconnect()
+		return 原生Mqtt.断开连接()
 		// #endif
 		// #ifdef H5
 		const 旧连接 = Web连接
@@ -336,7 +336,7 @@ export const emqx = {
 	},
 	isConnected() : boolean {
 		// #ifdef APP-ANDROID
-		return 原生Mqtt.isConnected()
+		return 原生Mqtt.是否已连接()
 		// #endif
 		// #ifdef H5
 		return Web已连接
@@ -345,7 +345,7 @@ export const emqx = {
 	},
 	subscribe(主题 : string | string[], qos : 0 | 1 | 2 = 0) : Promise<void> {
 		// #ifdef APP-ANDROID
-		return 原生Mqtt.subscribe(主题, qos)
+		return 原生Mqtt.订阅(主题, qos)
 		// #endif
 		// #ifdef H5
 		return Web订阅(主题, qos)
@@ -354,7 +354,7 @@ export const emqx = {
 	},
 	unsubscribe(主题 : string | string[]) : Promise<void> {
 		// #ifdef APP-ANDROID
-		return 原生Mqtt.unsubscribe(主题)
+		return 原生Mqtt.取消订阅(主题)
 		// #endif
 		// #ifdef H5
 		return Web取消订阅(主题)
@@ -363,7 +363,7 @@ export const emqx = {
 	},
 	publish(主题 : string, payload : string | ArrayBuffer) : Promise<void> {
 		// #ifdef APP-ANDROID
-		return 原生Mqtt.publish(主题, payload, { qos: 1 })
+		return 原生Mqtt.发布(主题, payload, { qos: 1 })
 		// #endif
 		// #ifdef H5
 		if (!Web已连接) return Promise.reject(new Error('MQTT 尚未连接'))
@@ -376,7 +376,7 @@ export const emqx = {
 	},
 	on(事件 : MQTT事件, 回调 : MQTT回调) {
 		// #ifdef APP-ANDROID
-		原生Mqtt.on(事件, 回调)
+		原生Mqtt.注册事件监听(事件, 回调)
 		// #endif
 		// #ifdef H5
 		if (!MQTT监听器.has(事件)) MQTT监听器.set(事件, new Set<MQTT回调>())
@@ -385,7 +385,7 @@ export const emqx = {
 	},
 	off(事件 : MQTT事件, 回调 ?: MQTT回调) {
 		// #ifdef APP-ANDROID
-		原生Mqtt.off(事件, 回调)
+		原生Mqtt.移除事件监听(事件, 回调)
 		// #endif
 		// #ifdef H5
 		if (回调 == null) MQTT监听器.delete(事件)

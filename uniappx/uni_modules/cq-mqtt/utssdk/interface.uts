@@ -7,21 +7,21 @@
  * myApi 异步函数的参数，在type里定义函数需要的参数以及api成功、失败的相关回调函数。
  */
 export type MyApiOptions = {
-  paramA : boolean
-  success ?: (res : MyApiResult) => void
-  fail ?: (res : MyApiFail) => void
-  complete ?: (res : any) => void
+	paramA : boolean
+	success ?: (res : MyApiResult) => void
+	fail ?: (res : MyApiFail) => void
+	complete ?: (res : any) => void
 }
-
+export const 啊变量 = "你好"
 /**
  * 函数返回结果
  * 可以是void, 基本数据类型，自定义type, 或者其他类型。
  * [可选实现]
  */
 export type MyApiResult = {
-  fieldA : number,
-  fieldB : boolean,
-  fieldC : string
+	fieldA : number,
+	fieldB : boolean,
+	fieldC : string
 }
 
 /**
@@ -35,7 +35,7 @@ export type MyApiErrorCode = 9010001 | 9010002;
  * myApi 的错误回调参数
  */
 export interface MyApiFail extends IUniError {
-  errCode : MyApiErrorCode
+	errCode : MyApiErrorCode
 };
 
 /* 异步函数定义 */
