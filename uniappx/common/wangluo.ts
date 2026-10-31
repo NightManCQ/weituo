@@ -1,6 +1,6 @@
 import type { 任务, 任务位置, 用户 } from './leixing'
 
-const 默认API地址 = import.meta.env.VITE_API_URL || 凭据.消息地址
+const 默认API地址 = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1'
 
 type 请求选项 = {
 	method ?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'

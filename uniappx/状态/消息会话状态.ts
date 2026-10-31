@@ -25,6 +25,8 @@ export const 使用消息会话状态 = defineStore('消息会话', () => {
 		正在加载.value = true
 		try {
 			const 列表 = await 发送请求<消息会话[]>('/my/message-conversations')
+
+			console.log("????????????????????????-------------", 列表);
 			if (当前请求序号 !== 请求序号) return
 			会话列表.value = 列表
 			加载错误.value = ''

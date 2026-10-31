@@ -1,0 +1,138 @@
+/**
+ * cq-mqtt 插件 · 前端 SQLite 引擎 · Android 底层实现
+ *
+ * 直接调用 android.database.sqlite.*，不借助 Room/SQLCipher 等三方库，
+ * 因此 config.json 里不需要任何 dependencies，也不会增加包体积。
+ *
+ * 约定：
+ * 1. 错误信息统一为 [错误码]描述，上层用 解析SQLite错误() 还原；
+ * 2. 写操作（INSERT/UPDATE/DELETE/DDL）走 execSQL，支持 ? 绑定且允许 null；
+ * 3. 查询走 rawQuery，Android 的 selectionArgs 只接受 String 且不能含 null，
+ *    因此查询遇到 null 参数会直接报错提示改写 SQL（例如改成 IS NULL）。
+ */
+
+import SQLiteDatabase from 'android.database.sqlite.SQLiteDatabase'
+import Cursor from 'android.database.Cursor'
+import File from 'java.io.File'
+import Context from 'android.content.Context'
+import Base64 from 'android.util.Base64'
+import { UTSAndroid } from 'io.dcloud.uts'
+
+import {
+	SQLite值,
+	SQLite数据行,
+	SQL语句,
+	打开数据库参数,
+	打开数据库结果,
+	执行结果,
+	查询结果,
+	批量执行结果
+} from '../interface.uts'
+
+/* ---------- 运行时状态 ---------- */
+
+/** 已打开的数据库：数据库名 -> 连接 */
+const 已开库 : Map<string, SQLiteDatabase> = new Map()
+/** 数据库文件路径缓存：数据库名 -> 绝对路径 */
+const 路径表 : Map<string, string> = new Map()
+/** 事务标记：数据库名 -> 是否已开启手动事务 */
+const 事务标记 : Map<string, boolean> = new Map()
+/** 键值表已建标记，避免重复执行 DDL */
+const 键值表已建 : Map<string, boolean> = new Map()
+
+/* 错误码前缀写成字符串常量，避免拼接时 UTS 的类型推断问题 */
+const 错_参数缺失 = '[9010001]'
+const 错_未打开 = '[9010002]'
+const 错_无上下文 = '[9010003]'
+const 错_打开失败 = '[9010004]'
+const 错_执行失败 = '[9010005]'
+const 错_查询失败 = '[9010006]'
+const 错_关闭失败 = '[9010007]'
+const 错_删除失败 = '[9010008]'
+const 错_事务未开 = '[9010009]'
+const 错_事务禁止 = '[9010010]'
+const 错_空参数 = '[9010011]'
+const 错_键值失败 = '[9010012]'
+const 错_事务重复 = '[9010013]'
+
+const 空文本 = ''
+
+/* ---------- 内部工具 ---------- */
+
+/** 取异常的可读文本 */
+function 原文(异常 : any) : string {
+	if (异常 == null) {
+		return 空文本
+	}
+	return 空文本 + 异常
+}
+
+/** 取应用上下文 */
+function 取上下文() : Context {
+	const 上下文 = UTSAndroid.getAppContext()
+	if (上下文 == null) {
+		throw new Error(错_无上下文 + '无法获取应用上下文')
+	}
+	return 上下文!
+}
+
+/** 检查数据库名是否合法 */
+function 校验库名(数据库名 : string) : void {
+	if (数据库名 == null || 数据库名.length == 0) {
+		throw new Error(错_参数缺失 + '数据库名不能为空')
+	}
+}
+
+/** 保证目标文件的父目录存在 */
+function 确保父目录(目标 : File) : void {
+	const 父目录 = 目标.getParentFile()
+	if (父目录 == null) {
+		return
+	}
+	const 目录 = 父目录!
+	if (目录.exists() == false) {
+		目录.mkdirs()
+	}
+}
+
+/** 把业务传入的参数数组转成 Object 数组，供 execSQL 使用 */
+function 绑定写参数(参数 : Array<SQLite值> | null) : Array<any> {
+	const 结果 : Array<any> = []
+	if (参数 == null) {
+		return 结果
+	}
+	for (let 序号 = 0; 序号 < 参数.length; 序号++) {
+		const 原值 = 参数[序号]
+		if (原值 == null) {
+			结果.push(null)
+		} else if (typeof 原值 == 'boolean') {
+			结果.push(原值 == true ? 1 : 0)
+		} else if (typeof 原值 == 'number') {
+			结果.push(原值)
+		} else {
+			结果.push(空文本 + 原值)
+		}
+	}
+	return 结果
+}
+
+/** 把业务传入的参数数组转成文本数组，供 rawQuery 使用 */
+function 绑定读参数(参数 : Array<SQLite值> | null) : Array<string> {
+	const 结果 : Array<string> = []
+	if (参数 == null) {
+		return 结果
+	}
+	for (let 序号 = 0; 序号 < 参数.length; 序号++) {
+		const 原值 = 参数[序号]
+		if (原值 == null) {
+			throw new Error(错_空参数 + '第 ' + (序号 + 1) + ' 个查询参数为 null，请改写 SQL')
+		} else if (typeof 原值 == 'boolean') {
+			结果.push(原值 == true ? '1' : '0')
+		} else if (typeof 原值 == 'number') {
+			结果.push(空文本 + 原值)
+		} else {
+			结果.push(空文本 + 原值)
+		}
+	}
+	return 结果
+}

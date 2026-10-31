@@ -1,3 +1,5 @@
+use std::env;
+
 use argon2::{
     Argon2,
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString, rand_core::OsRng},
@@ -89,10 +91,14 @@ pub(super) async fn 验证可选身份(
     后续处理.run(请求).await
 }
 
-fn 签发访问令牌(用户编号: Uuid, 密钥: &str) -> Result<String, 应用错误> {
+fn 签发访问令牌(用户编号: Uuid, 密钥: &str, 主题列表: Vec<String>) -> Result<String, 应用错误> {
     let 令牌内容 = 令牌声明 {
         主体: 用户编号,
         过期时间: None,
+        访问控制: Some(消息访问控制 {
+            发布权限: Vec::new(),
+            订阅权限: 主题列表,
+        }),
     };
     encode(
         &Header::default(),
@@ -100,6 +106,34 @@ fn 签发访问令牌(用户编号: Uuid, 密钥: &str) -> Result<String, 应用
         &EncodingKey::from_secret(密钥.as_bytes()),
     )
     .map_err(|e| 应用错误::内部错误(e.into()))
+}
+
+async fn 查询用户消息主题(
+    数据库: &sqlx::PgPool,
+    用户编号: Uuid,
+) -> Result<Vec<String>, 应用错误> {
+    let 群组编号列表: Vec<Uuid> = sqlx::query_scalar(
+        r#"SELECT g."群组编号"
+           FROM "群_成员" m
+           JOIN "群_群组" g ON g."群组编号" = m."群组编号"
+           WHERE m."用户编号" = $1
+             AND m."成员状态" = '有效'
+             AND g."群组状态" = '正常'
+           ORDER BY g."群组编号""#,
+    )
+    .bind(用户编号)
+    .fetch_all(数据库)
+    .await?;
+    let mut 主题列表 = 群组编号列表
+        .into_iter()
+        .map(|群组编号| format!("q/{群组编号}"))
+        .collect::<Vec<_>>();
+    主题列表.push(构造用户通知主题(用户编号));
+    Ok(主题列表)
+}
+
+fn 获取消息地址() -> String {
+    env::var("MQTT_PUBLIC_URL").unwrap_or_else(|_| "ws://localhost:9001/mqtt".into())
 }
 
 pub(super) async fn 注册用户(
@@ -159,13 +193,15 @@ pub(super) async fn 注册用户(
         登录名: 记录.get("登录名"),
         昵称: 记录.get("昵称"),
     };
-    let 令牌 = 签发访问令牌(用户.用户编号, &状态.令牌密钥)?;
+    let 主题列表 = 查询用户消息主题(&状态.数据库, 用户.用户编号).await?;
+    let 令牌 = 签发访问令牌(用户.用户编号, &状态.令牌密钥, 主题列表)?;
     Ok((
         StatusCode::CREATED,
         Json(认证响应 {
             访问令牌: 令牌,
             令牌类型: "Bearer",
             用户,
+            消息地址: 获取消息地址(),
         }),
     ))
 }
@@ -196,11 +232,13 @@ pub(super) async fn 登录用户(
         登录名: 记录.get("登录名"),
         昵称: 记录.get("昵称"),
     };
-    let 令牌 = 签发访问令牌(用户.用户编号, &状态.令牌密钥)?;
+    let 主题列表 = 查询用户消息主题(&状态.数据库, 用户.用户编号).await?;
+    let 令牌 = 签发访问令牌(用户.用户编号, &状态.令牌密钥, 主题列表)?;
     Ok(Json(认证响应 {
         访问令牌: 令牌,
         令牌类型: "Bearer",
         用户,
+        消息地址: 获取消息地址(),
     }))
 }
 
@@ -215,7 +253,8 @@ mod 访问令牌测试 {
     fn 访问令牌不包含过期时间且可通过校验() {
         let 用户编号 = Uuid::new_v4();
         let 密钥 = "测试用的访问令牌签名密钥";
-        let 令牌 = 签发访问令牌(用户编号, 密钥).expect("访问令牌应能签发");
+        let 令牌 = 签发访问令牌(用户编号, 密钥, vec![format!("u/{用户编号}")])
+            .expect("访问令牌应能签发");
         let mut 校验规则 = Validation::default();
         校验规则.required_spec_claims.remove("exp");
 

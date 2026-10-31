@@ -6,6 +6,7 @@
 import {
 	ConnectionOptions,
 	PublishOptions,
+	MQTT订阅消息,
 	MQTTEvent,
 	EventCallback,
 	EventData,
@@ -44,6 +45,7 @@ let 连接丢失回调引用 : (() => void) | null = null
 
 // 保存用户注册的事件回调，防止被释放
 let 用户事件回调 : Map<string, Array<EventCallback>> = new Map()
+let 主题订阅消息回调 : Map<string, Array<(消息 : MQTT订阅消息) => void>> = new Map()
 
 // 连接质量统计（全局单例）
 let 质量统计 : ConnectionQualityStats = {
@@ -181,6 +183,10 @@ function 初始化助手() : void {
 					retain: 保留标志
 				}
 				触发事件('message', 事件数据)
+				主题订阅消息回调.get(主题)?.forEach((回调) => {
+					try { 回调(事件数据 as MQTT订阅消息) }
+					catch (原因) { console.error('主题订阅消息处理失败: ' + 原因) }
+				})
 				记录日志(LogLevel.DEBUG, 'Message received on topic ' + 主题)
 			}
 			助手!.setMessageCallback(消息回调引用!)
@@ -368,6 +374,7 @@ export function 断开连接() : Promise<void> {
 					}
 					// 清空订阅列表（clean session 时）
 					订阅管理器.clearSubscriptions()
+					主题订阅消息回调.clear()
 					// 重置连接管理器
 					连接管理器.reset()
 					记录日志(LogLevel.INFO, 'Disconnected and cleared subscriptions')
@@ -481,6 +488,7 @@ export function 取消订阅(主题 : string | string[]) : Promise<void> {
 					() => {
 						// 从订阅管理器移除
 						订阅管理器.removeSubscription(主题项)
+						主题订阅消息回调.delete(主题项)
 						记录日志(LogLevel.INFO, 'Unsubscribed from ' + 主题项)
 						已完成数++
 						if (已完成数 == 主题列表.length && !有错误) {

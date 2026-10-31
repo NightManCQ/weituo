@@ -81,6 +81,8 @@ pub(crate) struct 令牌声明 {
     pub(crate) 主体: Uuid,
     #[serde(rename = "exp", skip_serializing_if = "Option::is_none")]
     pub(crate) 过期时间: Option<usize>,
+    #[serde(rename = "acl", default, skip_serializing_if = "Option::is_none")]
+    pub(crate) 访问控制: Option<消息访问控制>,
 }
 
 #[derive(Clone, Debug)]
@@ -94,6 +96,7 @@ pub(crate) struct 认证响应 {
     pub(crate) 访问令牌: String,
     pub(crate) 令牌类型: &'static str,
     pub(crate) 用户: 用户视图,
+    pub(crate) 消息地址: String,
 }
 
 #[derive(Serialize)]
@@ -180,14 +183,6 @@ pub(crate) struct 任务列表查询 {
     pub(crate) 数量上限: Option<i64>,
 }
 
-#[derive(Serialize)]
-pub(crate) struct 实时连接信息 {
-    pub(crate) 消息地址: String,
-    pub(crate) 消息令牌: String,
-    pub(crate) 主题列表: Vec<String>,
-    pub(crate) 说明: &'static str,
-}
-
 #[derive(Serialize, Deserialize)]
 pub(crate) struct 消息令牌声明 {
     #[serde(rename = "exp", skip_serializing_if = "Option::is_none")]
@@ -198,7 +193,7 @@ pub(crate) struct 消息令牌声明 {
     pub(crate) 访问控制: 消息访问控制,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct 消息访问控制 {
     #[serde(rename = "pub")]
     pub(crate) 发布权限: Vec<String>,
@@ -291,9 +286,10 @@ mod 响应字段测试 {
             访问令牌: "token".into(),
             令牌类型: "Bearer",
             用户,
+            消息地址: "wss://example.invalid/mqtt".into(),
         })
         .expect("认证响应应可序列化");
-        校验字段(&认证数据, &["访问令牌", "令牌类型", "用户"]);
+        校验字段(&认证数据, &["访问令牌", "令牌类型", "用户", "消息地址"]);
         校验字段(&认证数据["用户"], &["用户编号", "登录名", "昵称"]);
 
         let 任务数据 = serde_json::to_value(任务视图 {
@@ -327,15 +323,6 @@ mod 响应字段测试 {
             ],
         );
 
-        let 实时数据 = serde_json::to_value(实时连接信息 {
-            消息地址: "wss://example.invalid/mqtt".into(),
-            消息令牌: "token".into(),
-            主题列表: Vec::new(),
-            说明: "说明",
-        })
-        .expect("实时凭据响应应可序列化");
-        校验字段(&实时数据, &["消息地址", "消息令牌", "主题列表", "说明"]);
-
         let 错误数据 = serde_json::to_value(接口错误 {
             消息: "错误".into(),
         })
@@ -348,6 +335,7 @@ mod 响应字段测试 {
         let 用户令牌 = serde_json::to_value(令牌声明 {
             主体: Uuid::nil(),
             过期时间: None,
+            访问控制: None,
         })
         .expect("用户令牌声明应可序列化");
         assert!(用户令牌.get("exp").is_none());

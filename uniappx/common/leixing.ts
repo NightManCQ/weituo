@@ -43,6 +43,7 @@ export type 消息会话 = {
   成员数: number | null
   邀请人编号?: string | null
   过期时间?: string | null
+  MQTT主题: string
 }
 
 export type 群邀请 = {

@@ -68,6 +68,7 @@ export type 消息会话 = {
   最近消息时间: string
   会话状态: string | null
   成员数: number | null
+  MQTT主题: string
 }
 
 export type 群组 = {
@@ -115,6 +116,7 @@ export type 认证结果 = {
   访问令牌: string
   令牌类型: string
   用户: 用户
+  消息地址: string
 }
 
 export type 任务操作 = 'claim' | 'start' | 'complete' | 'accept-completion' | 'cancel' | 'release'

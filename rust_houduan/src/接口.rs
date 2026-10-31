@@ -2,8 +2,6 @@
 mod 任务;
 #[path = "接口/好友.rs"]
 mod 好友;
-#[path = "接口/实时.rs"]
-mod 实时;
 #[path = "接口/消息.rs"]
 mod 消息;
 #[path = "接口/积分.rs"]
@@ -129,7 +127,6 @@ pub(crate) async fn 启动(状态: 应用状态, 配置: 运行配置) -> Result
             "/api/v1/admin/users/{id}/points",
             post(积分::管理员发放积分),
         )
-        .route("/api/v1/realtime/credentials", post(实时::获取实时凭据))
         .route("/api/v1/admin/users/{id}/disable", post(管理::禁用用户))
         .route("/api/v1/admin/users/{id}/enable", post(管理::启用用户))
         .layer(middleware::from_fn_with_state(

@@ -9,7 +9,6 @@ export type {
   MQTT回调,
   MQTT连接参数,
   MQTT遗嘱消息,
-  实时凭据,
   实时事件,
   实时监听器,
 } from './实时.类型'

@@ -322,6 +322,7 @@ export function 使用任务工作台() {
       当前用户.value = 认证结果.用户
       消息会话状态.设置身份(令牌.value, 当前用户.value.用户编号)
       localStorage.setItem(用户令牌存储键, 令牌.value)
+      localStorage.setItem("renwu_mqtt_url", 认证结果.消息地址)
       localStorage.setItem(用户资料存储键, JSON.stringify(当前用户.value))
       await 加载任务()
       await 加载我的任务()

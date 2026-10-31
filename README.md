@@ -163,7 +163,6 @@ Get-Process -Id $owner
 | DELETE | `/api/v1/groups/{group_id}/leave` | 是；退出群组（群主须先转让身份） |
 | GET | `/api/v1/my/points` | 是；查询积分账户余额 |
 | GET | `/api/v1/my/points/ledger` | 是；查询积分流水 |
-| POST | `/api/v1/realtime/credentials` | 是 |
 | POST | `/api/v1/admin/users/{id}/disable` | 运营员/管理员 |
 | POST | `/api/v1/admin/users/{id}/enable` | 运营员/管理员 |
 | POST | `/api/v1/admin/users/{id}/points` | 运营员/管理员；审计发放积分 |

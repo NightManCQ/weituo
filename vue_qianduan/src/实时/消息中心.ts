@@ -10,11 +10,6 @@ export type 实时事件 = {
   原始事件: Record<string, unknown>;
 };
 
-type 实时凭据 = {
-  消息地址: string;
-  消息令牌: string;
-  主题列表: string[];
-};
 
 type 实时监听器 = (事件: 实时事件) => void;
 type 连接状态监听器 = (状态: "connecting" | "connected" | "reconnecting" | "error", 消息?: string) => void;
@@ -74,14 +69,20 @@ export async function 连接全局实时服务(
   通知连接状态("connecting");
 
   const 连接任务 = (async () => {
-    const 凭据 = await 发送请求<实时凭据>("/realtime/credentials", { method: "POST" }, 令牌);
+    const 会话列表 = await 发送请求<Array<{ MQTT主题: string }>>("/my/message-conversations", {}, 令牌);
     if (代数 !== 连接代数) return;
 
-    const MQTT地址 = import.meta.env.VITE_MQTT_URL || 凭据.消息地址;
+    const 主题列表 = [...new Set([
+      `u/${用户编号}`,
+      ...会话列表.map(会话 => 会话.MQTT主题),
+    ])];
+    const MQTT地址 = import.meta.env.VITE_MQTT_URL
+      || localStorage.getItem("renwu_mqtt_url")
+      || "ws://localhost:9001/mqtt";
     const 新客户端 = mqtt.connect(MQTT地址, {
       clientId: `${用户登录名}`,
       username: 用户编号,
-      password: 凭据.消息令牌,
+      password: 令牌,
       clean: true,
       reconnectPeriod: 3000,
       connectTimeout: 8000,
@@ -91,11 +92,11 @@ export async function 连接全局实时服务(
 
     新客户端.on("connect", () => {
       if (客户端 !== 新客户端) return;
-      if (!凭据.主题列表.length) {
+      if (!主题列表.length) {
         通知连接状态("connected", "实时连接成功，当前没有可订阅的主题");
         return;
       }
-      新客户端.subscribe(凭据.主题列表, { qos: 1 }, (原因, 授权主题) => {
+      新客户端.subscribe(主题列表, { qos: 1 }, (原因, 授权主题) => {
         if (客户端 !== 新客户端) return;
         const 被拒绝主题 = 授权主题?.filter((主题) => (主题.qos as number) === 128) ?? [];
         if (原因 || 被拒绝主题.length) {

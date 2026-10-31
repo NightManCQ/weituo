@@ -1,41 +1,52 @@
-/* 此规范为 uni 规范，可以按照自己的需要选择是否实现 */
-import { MyApiErrorCode, MyApiFail } from "./interface.uts"
 /**
- * 错误主题
- * 注意：错误主题一般为插件名称，每个组件不同，需要使用时请更改。
- * [可选实现]
+ * cq-mqtt 插件 · 前端 SQLite 引擎 · 错误定义
+ *
+ * 按 uni 插件错误码规范，统一以 901xxxx 编号。
+ * 注意：UTS 的 UniError 并非异常对象，不能直接 throw，
+ * 因此底层统一抛出 Error，错误信息以 [错误码] 开头，
+ * 业务层用 解析SQLite错误() 转成结构化 SQLite失败 对象。
  */
-export const UniErrorSubject = 'uts-api';
 
+import { SQLite错误码, SQLite失败 } from './interface.uts'
+
+/** 错误主题 */
+export const SQLite错误主题 = 'cq-mqtt-sqlite'
+
+/** 错误码与文案对照表 */
+export const SQLite错误信息 : Map<SQLite错误码, string> = new Map([
+	[9010001, '参数缺失或不合法'],
+	[9010002, '数据库尚未打开'],
+	[9010003, '获取应用上下文失败'],
+	[9010004, '打开数据库失败'],
+	[9010005, '执行 SQL 失败'],
+	[9010006, '查询失败'],
+	[9010007, '关闭数据库失败'],
+	[9010008, '删除数据库失败'],
+	[9010009, '事务尚未开启'],
+	[9010010, '事务进行中不允许执行该操作'],
+	[9010011, '查询参数不支持 null，请改写 SQL'],
+	[9010012, '键值表操作失败'],
+	[9010013, '事务已经开启，请勿重复开启'],
+	[9010099, '未知错误']
+])
 
 /**
- * 错误信息
- * @UniError
- * [可选实现]
+ * 失败对象实现
+ * 用于异步接口的 fail 回调，以及 解析SQLite错误() 的返回值
  */
-export const MyAPIErrors : Map<MyApiErrorCode, string> = new Map([
-  /**
-   * 错误码及对应的错误信息
-   */
-  [9010001, 'custom error mseeage1'],
-  [9010002, 'custom error mseeage2'],
-]);
+export class SQLite失败实现 extends UniError implements SQLite失败 {
 
+	override errCode : SQLite错误码
 
-/**
- * 错误对象实现
- */
-export class MyApiFailImpl extends UniError implements MyApiFail {
-  
-  override errCode: MyApiErrorCode
-
-  /**
-   * 错误对象构造函数
-   */
-  constructor(errCode : MyApiErrorCode) {
-    super();
-    this.errSubject = UniErrorSubject;
-    this.errCode = errCode;
-    this.errMsg = MyAPIErrors.get(errCode) ?? "";
-  }
+	constructor(errCode : SQLite错误码, 附加信息 : string) {
+		super()
+		this.errSubject = SQLite错误主题
+		this.errCode = errCode
+		const 文案 = SQLite错误信息.get(errCode) ?? ''
+		if (附加信息.length > 0) {
+			this.errMsg = 文案 + ' | ' + 附加信息
+		} else {
+			this.errMsg = 文案
+		}
+	}
 }

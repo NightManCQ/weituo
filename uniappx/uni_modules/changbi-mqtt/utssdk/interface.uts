@@ -61,6 +61,21 @@ export type PublishOptions = {
   retain?: boolean
 }
 
+export type MQTT订阅消息 = {
+  topic?: string
+  payload?: string | ArrayBuffer
+  qos?: QoS
+  retain?: boolean
+}
+
+export type MQTT订阅参数 = {
+  主题: string
+  服务质量?: QoS
+  成功?: () => void
+  失败?: (错误: Error) => void
+  消息: (消息: MQTT订阅消息) => void
+}
+
 // 错误信息
 export type ErrorInfo = {
   code: number
