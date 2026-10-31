@@ -2,7 +2,7 @@
 import { onShow } from '@dcloudio/uni-app'
 import { onHide } from '@dcloudio/uni-app'
 import { ref } from 'vue'
-import type { 群邀请, 用户 } from '../../common/leixing'
+import type { 群邀请, 用户, 消息会话 } from '../../common/leixing'
 import { 发送请求, 格式化时间, 读取当前用户 } from '../../common/wangluo'
 import { 订阅实时事件 } from '../../common/实时'
 
@@ -22,14 +22,22 @@ async function 刷新() {
   正在加载.value = true
   错误.value = ''
   try {
-    const [好友, 群组, 邀请] = await Promise.all([
+    const [好友, 群组, 会话] = await Promise.all([
       发送请求<好友[]>('/my/friends'),
       发送请求<群组[]>('/my/groups'),
-      发送请求<群邀请[]>('/my/group-invitations'),
+      发送请求<消息会话[]>('/my/message-conversations'),
     ])
     好友列表.value = 好友
     群组列表.value = 群组
-    邀请列表.value = 邀请
+    邀请列表.value = 会话.filter((项目) => 项目.会话类型 == '群邀请').map((项目) => ({
+      邀请编号: 项目.会话编号,
+      群组编号: 项目.关联编号,
+      群组名称: 项目.会话名称,
+      邀请人编号: 项目.邀请人编号 || '',
+      邀请人昵称: 项目.联系人昵称 || '',
+      创建时间: 项目.最近消息时间,
+      过期时间: 项目.过期时间 || '',
+    }))
   } catch (原因) {
     错误.value = 原因 instanceof Error ? 原因.message : '加载联系人失败'
   } finally {

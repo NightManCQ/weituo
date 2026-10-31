@@ -18,6 +18,8 @@ pub(super) struct 消息会话视图 {
     pub(super) 最近消息时间: DateTime<Utc>,
     pub(super) 会话状态: Option<String>,
     pub(super) 成员数: Option<i64>,
+    pub(super) 邀请人编号: Option<Uuid>,
+    pub(super) 过期时间: Option<DateTime<Utc>>,
 }
 
 pub(super) async fn 查询我的消息会话(
@@ -52,7 +54,9 @@ pub(super) async fn 查询我的消息会话(
                       t."任务状态" AS "会话状态",
                       (SELECT count(*) FROM "群_成员" active
                        WHERE active."群组编号" = g."群组编号"
-                         AND active."成员状态" = '有效') AS "成员数"
+                         AND active."成员状态" = '有效') AS "成员数",
+                      NULL::uuid AS "邀请人编号",
+                      NULL::timestamptz AS "过期时间"
                FROM "任务" t
                JOIN "群_群组" g ON g."关联任务编号" = t."任务编号"
                                   AND g."群组状态" = '正常'
@@ -78,6 +82,30 @@ pub(super) async fn 查询我的消息会话(
            )
            UNION ALL
            (
+               SELECT '群邀请'::text AS "会话类型",
+                      i."邀请编号" AS "会话编号",
+                      i."群组编号" AS "关联编号",
+                      g."群组名称" AS "会话名称",
+                      inviter."昵称" AS "联系人昵称",
+                      '群聊邀请'::text AS "会话说明",
+                      ('邀请你加入群聊：' || g."群组名称") AS "最近消息",
+                      i."创建时间" AS "最近消息时间",
+                      '待接受'::text AS "会话状态",
+                      NULL::bigint AS "成员数",
+                      i."邀请人编号" AS "邀请人编号",
+                      i."过期时间" AS "过期时间"
+               FROM "群_邀请" i
+               JOIN "群_群组" g ON g."群组编号" = i."群组编号"
+               JOIN "用户" inviter ON inviter."用户编号" = i."邀请人编号"
+               WHERE i."受邀用户编号" = $1
+                 AND i."邀请状态" = '待接受'
+                 AND i."过期时间" > now()
+                 AND g."群组状态" = '正常'
+               ORDER BY i."创建时间" DESC
+               LIMIT 100
+           )
+           UNION ALL
+           (
                SELECT '好友'::text AS "会话类型",
                       s."会话编号",
                       contact."用户编号" AS "关联编号",
@@ -87,7 +115,9 @@ pub(super) async fn 查询我的消息会话(
                       latest."消息正文" AS "最近消息",
                       COALESCE(latest."创建时间", s."创建时间") AS "最近消息时间",
                       NULL::text AS "会话状态",
-                      NULL::bigint AS "成员数"
+                      NULL::bigint AS "成员数",
+                      NULL::uuid AS "邀请人编号",
+                      NULL::timestamptz AS "过期时间"
                FROM "私聊会话" s
                JOIN "好友关系" f
                  ON f."用户甲编号" = s."用户甲编号"
@@ -121,7 +151,9 @@ pub(super) async fn 查询我的消息会话(
                       NULL::text AS "会话状态",
                       (SELECT count(*) FROM "群_成员" active
                        WHERE active."群组编号" = g."群组编号"
-                         AND active."成员状态" = '有效') AS "成员数"
+                         AND active."成员状态" = '有效') AS "成员数",
+                      NULL::uuid AS "邀请人编号",
+                      NULL::timestamptz AS "过期时间"
                FROM "群_群组" g
                JOIN "群_成员" member
                  ON member."群组编号" = g."群组编号"
@@ -162,6 +194,8 @@ pub(super) async fn 查询我的消息会话(
                 最近消息时间: 记录.get("最近消息时间"),
                 会话状态: 记录.get("会话状态"),
                 成员数: 记录.get("成员数"),
+                邀请人编号: 记录.get("邀请人编号"),
+                过期时间: 记录.get("过期时间"),
             })
             .collect(),
     ))

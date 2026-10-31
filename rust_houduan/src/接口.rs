@@ -49,7 +49,6 @@ pub(crate) async fn 启动(状态: 应用状态, 配置: 运行配置) -> Result
         .route("/api/v1/auth/login", post(认证::登录用户))
         .route("/api/v1/groups", post(群聊::创建群组))
         .route("/api/v1/my/groups", get(群聊::查询我的群组))
-        .route("/api/v1/my/group-invitations", get(群聊::查询群邀请))
         .route("/api/v1/groups/{group_id}", get(群聊::查询群详情))
         .route(
             "/api/v1/groups/{group_id}/invitations",

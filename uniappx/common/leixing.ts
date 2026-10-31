@@ -31,7 +31,7 @@ export type 任务 = {
 }
 
 export type 消息会话 = {
-  会话类型: '委托' | '好友' | '群聊'
+  会话类型: '委托' | '好友' | '群聊' | '群邀请'
   会话编号: string
   关联编号: string
   会话名称: string
@@ -41,6 +41,8 @@ export type 消息会话 = {
   最近消息时间: string
   会话状态: string | null
   成员数: number | null
+  邀请人编号?: string | null
+  过期时间?: string | null
 }
 
 export type 群邀请 = {

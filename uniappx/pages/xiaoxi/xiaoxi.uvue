@@ -25,9 +25,7 @@
 	const { 会话列表, 正在加载, 加载错误 } = storeToRefs(会话状态)
 	const 当前用户 = ref<用户 | null>(null)
 	const 好友申请列表 = ref<好友申请[]>([])
-	const 群邀请列表 = ref<群邀请[]>([])
 	const 好友申请正在加载 = ref(false)
-	const 群邀请正在加载 = ref(false)
 	const 正在处理申请编号 = ref('')
 	const 正在处理邀请编号 = ref('')
 	const 好友申请错误 = ref('')
@@ -36,13 +34,12 @@
 	const 搜索词 = ref('')
 	const 当前分类 = ref<消息分类>('全部')
 	let 申请加载序号 = 0
-	let 邀请加载序号 = 0
 	let 取消订阅申请 : (() => void) | null = null
 
 	const 分类列表: 消息分类[] = ['全部', '好友验证', '群邀请', '好友', '群聊', '委托']
 
 	const 消息列表 = computed<消息列表项[]>(() => [
-		...会话列表.value.map((会话) => ({
+		...会话列表.value.filter((会话) => 会话.会话类型 != '群邀请').map((会话) => ({
 			类型: '会话' as const,
 			键: `${会话.会话类型}:${会话.会话编号}`,
 			时间: 会话.最近消息时间,
@@ -54,11 +51,19 @@
 			时间: 申请.创建时间,
 			申请,
 		})),
-		...群邀请列表.value.map((邀请) => ({
+		...会话列表.value.filter((会话) => 会话.会话类型 == '群邀请').map((会话) => ({
 			类型: '群邀请' as const,
-			键: `群邀请:${邀请.邀请编号}`,
-			时间: 邀请.创建时间,
-			邀请,
+			键: `群邀请:${会话.会话编号}`,
+			时间: 会话.最近消息时间,
+			邀请: {
+				邀请编号: 会话.会话编号,
+				群组编号: 会话.关联编号,
+				群组名称: 会话.会话名称,
+				邀请人编号: 会话.邀请人编号 || '',
+				邀请人昵称: 会话.联系人昵称 || '',
+				创建时间: 会话.最近消息时间,
+				过期时间: 会话.过期时间 || '',
+			} satisfies 群邀请,
 		})),
 	].sort((左侧, 右侧) => {
 		const 左侧时间 = new Date(左侧.时间).getTime()
@@ -137,37 +142,10 @@
 		}
 	}
 
-	async function 加载群邀请() {
-		const 用户编号 = 当前用户.value?.用户编号
-		const 加载序号 = ++邀请加载序号
-		if (!用户编号) {
-			群邀请列表.value = []
-			群邀请错误.value = ''
-			群邀请正在加载.value = false
-			return
-		}
-
-		群邀请正在加载.value = true
-		try {
-			const 邀请 = await 发送请求<群邀请[]>('/my/group-invitations')
-			if (加载序号 == 邀请加载序号) {
-				群邀请列表.value = 邀请
-				群邀请错误.value = ''
-			}
-		} catch (原因) {
-			if (加载序号 == 邀请加载序号) {
-				群邀请错误.value = 原因 instanceof Error ? 原因.message : '加载群邀请失败'
-			}
-		} finally {
-			if (加载序号 == 邀请加载序号) 群邀请正在加载.value = false
-		}
-	}
-
 	function 刷新消息() {
 		if (当前用户.value == null) return
 		void 会话状态.刷新会话列表()
 		void 加载好友申请()
-		void 加载群邀请()
 	}
 
 	function 打开会话(事件 : { currentTarget : { dataset : Record<string, unknown> } }) {
@@ -225,7 +203,7 @@
 			操作反馈.value = 操作 == 'accept'
 				? `已加入群聊：${邀请.群组名称}`
 				: '已拒绝群聊邀请'
-			await 加载群邀请()
+			await 会话状态.刷新会话列表()
 			if (操作 == 'accept') {
 				void 会话状态.刷新会话列表()
 				uni.navigateTo({
@@ -246,24 +224,20 @@
 		if (当前用户.value != null) {
 			void 会话状态.刷新会话列表()
 			void 加载好友申请()
-			void 加载群邀请()
 			if (取消订阅申请 == null) {
 				取消订阅申请 = 订阅实时事件((事件) => {
 					if (事件.事件类型.startsWith('friend.request_')) void 加载好友申请()
-					if (事件.事件类型 == 'group.invitation_created') void 加载群邀请()
+					if (事件.事件类型 == 'group.invitation_created') void 会话状态.刷新会话列表()
 				})
 			}
 		} else {
 			void 加载好友申请()
-			void 加载群邀请()
 		}
 	})
 
 	onHide(() => {
 		申请加载序号 += 1
-		邀请加载序号 += 1
 		好友申请正在加载.value = false
-		群邀请正在加载.value = false
 		取消订阅申请?.()
 		取消订阅申请 = null
 	})
@@ -276,8 +250,8 @@
 				<text class="fu_biao_ti">私聊、群聊与委托消息</text>
 				<text class="biao_ti">消息</text>
 			</view>
-			<button v-if="当前用户 != null" class="ci_yao_an_niu" :disabled="正在加载 || 好友申请正在加载 || 群邀请正在加载" @click="刷新消息">
-				{{ 正在加载 || 好友申请正在加载 || 群邀请正在加载 ? '同步中…' : '刷新' }}
+			<button v-if="当前用户 != null" class="ci_yao_an_niu" :disabled="正在加载 || 好友申请正在加载" @click="刷新消息">
+				{{ 正在加载 || 好友申请正在加载 ? '同步中…' : '刷新' }}
 			</button>
 		</view>
 
@@ -355,7 +329,7 @@
 
 			<view v-else class="kong_zhuang_tai">
 				<text class="ka_pian_biao_ti">
-					{{ 正在加载 || 好友申请正在加载 || 群邀请正在加载 ? '正在同步消息…' : 搜索词 ? '没有找到匹配的消息' : '还没有消息' }}
+					{{ 正在加载 || 好友申请正在加载 ? '正在同步消息…' : 搜索词 ? '没有找到匹配的消息' : '还没有消息' }}
 				</text>
 				<text class="fu_zhu_wen_ben">
 					{{ 搜索词 ? '试试其他名称或消息关键词。' : '好友验证、群聊邀请、好友私聊、群聊和委托沟通会显示在这里。' }}

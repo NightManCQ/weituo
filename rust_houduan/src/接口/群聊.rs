@@ -122,17 +122,6 @@ pub(super) struct 群详情视图 {
 }
 
 #[derive(Serialize)]
-pub(super) struct 群邀请视图 {
-    pub(super) 邀请编号: Uuid,
-    pub(super) 群组编号: Uuid,
-    pub(super) 群组名称: String,
-    pub(super) 邀请人编号: Uuid,
-    pub(super) 邀请人昵称: String,
-    pub(super) 创建时间: DateTime<Utc>,
-    pub(super) 过期时间: DateTime<Utc>,
-}
-
-#[derive(Serialize)]
 pub(super) struct 群消息视图 {
     pub(super) 消息编号: Uuid,
     pub(super) 群组编号: Uuid,
@@ -266,42 +255,6 @@ pub(super) async fn 查询我的群组(
                 最近消息: 记录.get("最近消息"),
                 最近消息时间: 记录.get("最近消息时间"),
                 已读至序号: 记录.get("已读至序号"),
-            })
-            .collect(),
-    ))
-}
-
-pub(super) async fn 查询群邀请(
-    State(状态): State<应用状态>,
-    请求: axum::http::Request<axum::body::Body>,
-) -> Result<Json<Vec<群邀请视图>>, 应用错误> {
-    let 用户编号 = 当前用户编号(&请求)?;
-    let 记录集 = sqlx::query(
-        r#"SELECT i."邀请编号", i."群组编号", g."群组名称",
-                  i."邀请人编号", inviter."昵称" AS "邀请人昵称",
-                  i."创建时间", i."过期时间"
-           FROM "群_邀请" i
-           JOIN "群_群组" g ON g."群组编号" = i."群组编号"
-           JOIN "用户" inviter ON inviter."用户编号" = i."邀请人编号"
-           WHERE i."受邀用户编号" = $1 AND i."邀请状态" = '待接受'
-             AND i."过期时间" > now() AND g."群组状态" = '正常'
-           ORDER BY i."创建时间" DESC
-           LIMIT 100"#,
-    )
-    .bind(用户编号)
-    .fetch_all(&状态.数据库)
-    .await?;
-    Ok(Json(
-        记录集
-            .iter()
-            .map(|记录| 群邀请视图 {
-                邀请编号: 记录.get("邀请编号"),
-                群组编号: 记录.get("群组编号"),
-                群组名称: 记录.get("群组名称"),
-                邀请人编号: 记录.get("邀请人编号"),
-                邀请人昵称: 记录.get("邀请人昵称"),
-                创建时间: 记录.get("创建时间"),
-                过期时间: 记录.get("过期时间"),
             })
             .collect(),
     ))
