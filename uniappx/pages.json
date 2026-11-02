@@ -48,6 +48,12 @@
 			}
 		},
 		{
+			"path": "pages/weituo/di_tu",
+			"style": {
+				"navigationStyle": "custom"
+			}
+		},
+		{
 			"path": "pages/liaotian/liaotian",
 			"style": {
 				"navigationStyle": "custom"

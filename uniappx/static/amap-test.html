@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>高德地图 Key 自检页</title>
+<style>
+  body { margin: 0; font-family: sans-serif; }
+  #map { width: 100vw; height: 60vh; }
+  #log { padding: 10px; font-size: 13px; white-space: pre-wrap; background:#111; color:#0f0; height: 40vh; overflow: auto; }
+  .err { color: #ff5252; }
+  .ok  { color: #69f0ae; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="log">日志加载中……</div>
+<script>
+  var KEY = 'de374be8bbfe10173e22208c2924bf06';
+  var SCODE = 'b12e970c7e6949dfab2820b7b524d4d8';
+
+  var logBox = document.getElementById('log');
+  function log(msg, cls) {
+    var d = document.createElement('div');
+    if (cls) d.className = cls;
+    d.textContent = '[' + new Date().toLocaleTimeString() + '] ' + msg;
+    logBox.appendChild(d);
+    logBox.scrollTop = logBox.scrollHeight;
+  }
+  logBox.textContent = '';
+  log('页面地址: ' + location.href);
+  log('Referer: ' + (document.referrer || '(空)'));
+
+  // 拦截全局错误，直接显示在页面上
+  window.onerror = function (msg, src, line) {
+    log('全局错误: ' + msg + ' @ ' + (src || '') + ':' + line, 'err');
+  };
+
+  // 拦截瓦片等请求失败
+  window.addEventListener('unhandledrejection', function (e) {
+    log('未处理的 Promise 异常: ' + e.reason, 'err');
+  });
+
+  // 1) 安全密钥必须先于 JSAPI 注入
+  window._AMapSecurityConfig = { securityJsCode: SCODE };
+
+  var s = document.createElement('script');
+  s.src = 'https://webapi.amap.com/maps?v=2.0&key=' + KEY;
+  s.onload = function () {
+    log('JSAPI 脚本加载成功', 'ok');
+    try {
+      var map = new AMap.Map('map', {
+        zoom: 14,
+        center: [113.9344, 22.5403]
+      });
+      map.on('complete', function () { log('地图 complete：渲染完成', 'ok'); });
+      map.on('error', function (e) { log('地图 error: ' + JSON.stringify(e), 'err'); });
+      new AMap.Marker({ position: [113.9344, 22.5403], map: map });
+      log('已创建地图实例，观察左侧是否出现道路底图');
+    } catch (e) {
+      log('创建地图异常: ' + e.message, 'err');
+    }
+  };
+  s.onerror = function () {
+    log('JSAPI 脚本加载失败：请检查 key 类型是否为「Web端(JS API)」、域名白名单是否包含当前域名', 'err');
+  };
+  document.head.appendChild(s);
+</script>
+</body>
+</html>

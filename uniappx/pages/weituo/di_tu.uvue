@@ -1,0 +1,401 @@
+<script setup lang="ts">
+import { onLoad } from '@dcloudio/uni-app'
+import { ref } from 'vue'
+
+/** 演示委托数据（后端任务暂无经纬度字段，先内置演示点位，接入时替换为接口数据） */
+type 演示委托 = {
+  编号: string
+  标题: string
+  类别: string
+  图标: string
+  纬度: number
+  经度: number
+  地址: string
+  距离: string
+  报酬: number
+}
+
+type 地图标记 = {
+  id: number
+  latitude: number
+  longitude: number
+  iconPath: string
+  width: number
+  height: number
+  anchor: { x: number; y: number }
+  callout?: {
+    content: string
+    color: string
+    fontSize: number
+    bgColor: string
+    borderRadius: number
+    padding: number
+    display: string
+  }
+}
+
+/** 默认中心：深圳市南山区科技园（GCJ-02） */
+const 中心纬度 = ref(22.5403)
+const 中心经度 = ref(113.9344)
+const 状态栏高 = ref(20)
+
+const 分类列表 = ['全部', '技术开发', '设计创意', '文案策划', '生活服务']
+const 选中分类 = ref('全部')
+const 关键词 = ref('')
+
+const 委托池: 演示委托[] = [
+  { 编号: 'demo-rust', 标题: '开发 Rust 后端 API 服务', 类别: '技术开发', 图标: '/static/map/marker-blue.png', 纬度: 22.5408, 经度: 113.9352, 地址: '深圳市南山区科技园', 距离: '1.2km', 报酬: 5000 },
+  { 编号: 'demo-vi', 标题: '品牌 VI 与海报设计', 类别: '设计创意', 图标: '/static/map/marker-orange.png', 纬度: 22.5421, 经度: 113.9289, 地址: '深圳市南山区科苑南路', 距离: '1.8km', 报酬: 3200 },
+  { 编号: 'demo-copy', 标题: '公众号文案撰写', 类别: '文案策划', 图标: '/static/map/marker-pink.png', 纬度: 22.5468, 经度: 113.9401, 地址: '深圳市南山区深大', 距离: '2.3km', 报酬: 1500 },
+  { 编号: 'demo-move', 标题: '周末搬家协助', 类别: '生活服务', 图标: '/static/map/marker-green.png', 纬度: 22.5377, 经度: 113.9442, 地址: '深圳市南山区桃源村', 距离: '2.6km', 报酬: 800 },
+  { 编号: 'demo-mini', 标题: '小程序前端开发', 类别: '技术开发', 图标: '/static/map/marker-blue.png', 纬度: 22.5349, 经度: 113.9298, 地址: '深圳市南山区软件园', 距离: '0.9km', 报酬: 6000 },
+  { 编号: 'demo-proto', 标题: '产品原型设计', 类别: '设计创意', 图标: '/static/map/marker-orange.png', 纬度: 22.5442, 经度: 113.9467, 地址: '深圳市南山区后海', 距离: '3.1km', 报酬: 2600 },
+  { 编号: 'demo-pet', 标题: '宠物上门喂养', 类别: '生活服务', 图标: '/static/map/marker-green.png', 纬度: 22.5389, 经度: 113.9221, 地址: '深圳市南山区西丽', 距离: '3.5km', 报酬: 300 },
+]
+
+const 标记列表 = ref<地图标记[]>([])
+const 选中编号 = ref('')
+
+function 过滤委托(): 演示委托[] {
+  const 词 = 关键词.value.trim()
+  return 委托池.filter((委托) => {
+    if (选中分类.value != '全部' && 委托.类别 != 选中分类.value) return false
+    if (词 != '' && !委托.标题.includes(词)) return false
+    return true
+  })
+}
+
+/** 重建 markers：中心定位图钉 + 各类别标记，选中项附带 ¥ 气泡 */
+function 构建标记() {
+  const 列表: 地图标记[] = [{
+    id: 9999,
+    latitude: 中心纬度.value,
+    longitude: 中心经度.value,
+    iconPath: '/static/map/pin-center.png',
+    width: 34,
+    height: 42,
+    anchor: { x: 0.5, y: 0.82 },
+  }]
+  const 可展示的 = 过滤委托()
+  可展示的.forEach((委托, 序号) => {
+    const 标记: 地图标记 = {
+      id: 序号 + 1,
+      latitude: 委托.纬度,
+      longitude: 委托.经度,
+      iconPath: 委托.图标,
+      width: 36,
+      height: 43,
+      anchor: { x: 0.5, y: 0.9 },
+    }
+    if (委托.编号 == 选中编号.value) {
+      标记.callout = {
+        content: `¥${委托.报酬}`,
+        color: '#1a2332',
+        fontSize: 15,
+        bgColor: '#ffffff',
+        borderRadius: 12,
+        padding: 6,
+        display: 'ALWAYS',
+      }
+    }
+    列表.push(标记)
+  })
+  标记列表.value = 列表
+  if (选中编号.value == '' && 可展示的.length > 0) {
+    选中编号.value = 可展示的[0].编号
+  }
+}
+
+function 选中委托(): 演示委托 | null {
+  const 命中 = 过滤委托().find((委托) => 委托.编号 == 选中编号.value)
+  return 命中 ?? null
+}
+
+function 切换分类(分类: string) {
+  选中分类.value = 分类
+  选中编号.value = ''
+  构建标记()
+}
+
+function 搜索输入() {
+  选中编号.value = ''
+  构建标记()
+}
+
+function 标记点击(事件: any) {
+  const id = Number((事件?.detail as UTSJSONObject)['markerId'] ?? -1)
+  if (id < 1) return
+  const 可展示的 = 过滤委托()
+  const 委托 = 可展示的[id - 1]
+  if (委托 == null) return
+  选中编号.value = 委托.编号
+  构建标记()
+}
+
+/** 顶部「列表」切换：从哪来回哪去，直接打开则跳委托广场列表页 */
+function 返回列表() {
+  const 栈 = getCurrentPages()
+  if (栈.length > 1) uni.navigateBack()
+  else uni.redirectTo({ url: '/pages/zhuye/zhuye' })
+}
+
+function 立即接单() {
+  const 委托 = 选中委托()
+  if (委托 == null) return
+  uni.navigateTo({ url: `/pages/weituo/weituo?id=${encodeURIComponent(委托.编号)}` })
+}
+
+/** 中国大陆 GCJ-02 粗略范围：超出视为定位异常（代理/VPN 常把浏览器定位解析到境外，境外无高德矢量瓦片会导致底图空白） */
+function 国内范围(纬度: number, 经度: number): boolean {
+  return 纬度 >= 18 && 纬度 <= 54 && 经度 >= 73 && 经度 <= 135
+}
+
+onLoad(() => {
+  const 信息 = uni.getSystemInfoSync()
+  状态栏高.value = 信息.statusBarHeight ?? 20
+  构建标记()
+
+  // Web 端 manifest 已配置高德 key，可直接定位；App 端未配置定位模块则保持默认中心
+  // #ifdef WEB
+  uni.getLocation({
+    type: 'gcj02',
+    success: (结果) => {
+      if (国内范围(结果.latitude, 结果.longitude)) {
+        中心纬度.value = 结果.latitude
+        中心经度.value = 结果.longitude
+        构建标记()
+      } else {
+        uni.showToast({ title: '当前定位在境外，已展示默认区域', icon: 'none' })
+      }
+    },
+  })
+  // #endif
+})
+</script>
+
+<template>
+  <view class="di_tu_ye" :style="{ paddingTop: 状态栏高 + 'px' }">
+    <!-- 顶部：标题 + 列表/地图切换 -->
+    <view class="ding_bu">
+      <view class="biao_ti_hang">
+        <text class="ye_biao_ti">委托广场</text>
+        <view class="fen_duan">
+          <text class="fen_duan_xiang" @click="返回列表">列表</text>
+          <text class="fen_duan_xiang fen_duan_ji_huo">地图</text>
+        </view>
+      </view>
+      <!-- 搜索 -->
+      <view class="sou_suo_kuang">
+        <text class="sou_suo_tu_biao">🔍</text>
+        <input v-model="关键词" class="sou_suo_shu_ru" placeholder="搜索附近需求" @input="搜索输入" />
+      </view>
+      <!-- 分类 -->
+      <scroll-view scroll-x class="fen_lei_tiao" :show-scrollbar="false">
+        <view class="fen_lei_hang">
+          <text
+            v-for="分类 in 分类列表"
+            :key="分类"
+            :class="['fen_lei_xiang', 选中分类 == 分类 ? 'fen_lei_ji_huo' : '']"
+            @click="切换分类(分类)"
+          >{{ 分类 }}</text>
+        </view>
+      </scroll-view>
+    </view>
+
+    <!-- 地图区 -->
+    <view class="di_tu_qu">
+      <map
+        class="di_tu"
+        :latitude="中心纬度"
+        :longitude="中心经度"
+        :scale="14"
+        :markers="标记列表"
+        :show-location="true"
+        @markertap="标记点击"
+      ></map>
+
+      <!-- 底部委托卡片 -->
+      <view v-if="选中委托() != null" class="wei_tuo_ka">
+        <text class="ka_biao_ti">{{ 选中委托()!.标题 }}</text>
+        <view class="ka_di_zhi">
+          <text class="ka_di_zhi_tu_biao">📍</text>
+          <text class="ka_di_zhi_wen_ben">{{ 选中委托()!.地址 }} · 距离 {{ 选中委托()!.距离 }}</text>
+        </view>
+        <view class="ka_di_bu">
+          <view class="ka_bao_chou">
+            <text class="ka_bao_chou_qian">报酬：</text>
+            <text class="ka_bao_chou_zhi">¥{{ 选中委托()!.报酬 }}</text>
+          </view>
+          <button class="jie_dan_an_niu" @click="立即接单">立即接单</button>
+        </view>
+      </view>
+    </view>
+  </view>
+</template>
+
+<style scoped>
+.di_tu_ye {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background-color: #f5f7fa;
+}
+
+/* 顶部区域 */
+.ding_bu {
+  padding: 8px 16px 0;
+  background-color: #ffffff;
+}
+.biao_ti_hang {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+.ye_biao_ti {
+  font-size: 26px;
+  font-weight: 700;
+  color: #1a2332;
+}
+.fen_duan {
+  display: flex;
+  flex-direction: row;
+  padding: 2px;
+  border-radius: 16px;
+  background-color: #f1f3f6;
+}
+.fen_duan_xiang {
+  padding: 4px 14px;
+  font-size: 13px;
+  color: #6b7280;
+}
+.fen_duan_ji_huo {
+  border-radius: 14px;
+  background-color: #2f80ff;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+/* 搜索框 */
+.sou_suo_kuang {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  height: 38px;
+  margin-top: 10px;
+  padding: 0 14px;
+  border-radius: 19px;
+  background-color: #f3f5f8;
+}
+.sou_suo_tu_biao {
+  font-size: 13px;
+  color: #9aa3af;
+}
+.sou_suo_shu_ru {
+  flex: 1;
+  margin-left: 6px;
+  font-size: 13px;
+  color: #1a2332;
+}
+
+/* 分类条 */
+.fen_lei_tiao {
+  margin-top: 8px;
+  height: 36px;
+  white-space: nowrap;
+}
+.fen_lei_hang {
+  display: flex;
+  flex-direction: row;
+}
+.fen_lei_xiang {
+  padding: 6px 4px;
+  margin-right: 18px;
+  font-size: 14px;
+  color: #6b7280;
+  border-bottom-width: 2px;
+  border-bottom-style: solid;
+  border-bottom-color: transparent;
+}
+.fen_lei_ji_huo {
+  color: #2f80ff;
+  font-weight: 700;
+  border-bottom-color: #2f80ff;
+}
+
+/* 地图区 */
+.di_tu_qu {
+  position: relative;
+  flex: 1;
+  margin-top: 8px;
+}
+.di_tu {
+  width: 100%;
+  height: 100%;
+}
+
+/* 底部委托卡片 */
+.wei_tuo_ka {
+  position: absolute;
+  bottom: 14px;
+  left: 12px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background-color: #ffffff;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+.ka_biao_ti {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1a2332;
+}
+.ka_di_zhi {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin-top: 6px;
+}
+.ka_di_zhi_tu_biao {
+  font-size: 11px;
+}
+.ka_di_zhi_wen_ben {
+  margin-left: 4px;
+  font-size: 12px;
+  color: #6b7280;
+}
+.ka_di_bu {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+}
+.ka_bao_chou {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+.ka_bao_chou_qian {
+  font-size: 13px;
+  color: #6b7280;
+}
+.ka_bao_chou_zhi {
+  font-size: 18px;
+  font-weight: 700;
+  color: #f59e0b;
+}
+.jie_dan_an_niu {
+  margin: 0;
+  padding: 8px 22px;
+  border: 0;
+  border-radius: 20px;
+  background-color: #2f80ff;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+</style>
