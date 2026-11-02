@@ -91,6 +91,7 @@ pub(crate) async fn 启动(状态: 应用状态, 配置: 运行配置) -> Result
             get(好友::查询好友聊天会话),
         )
         .route("/api/v1/my/friends/search", get(好友::搜索用户))
+        .route("/api/v1/users/{user_id}", get(好友::查询用户详细信息))
         .route("/api/v1/my/friends/{friend_id}", delete(好友::删除好友))
         .route(
             "/api/v1/my/friends/{friend_id}/messages",

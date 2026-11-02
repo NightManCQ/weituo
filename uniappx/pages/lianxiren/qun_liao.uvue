@@ -1,0 +1,181 @@
+<script setup lang="ts">
+	import { onLoad } from '@dcloudio/uni-app'
+	import { ref } from 'vue'
+	import type { 群聊详细信息 } from '../../common/leixing'
+	import { 发送请求 } from '../../common/wangluo'
+
+	const 群聊信息 = ref<群聊详细信息 | null>(null)
+	const 正在加载 = ref(false)
+	const 错误信息 = ref('')
+	let 群聊编号 = ''
+
+	async function 加载群聊详情() : Promise<void> {
+		if (!群聊编号) return
+		正在加载.value = true
+		错误信息.value = ''
+		try {
+			群聊信息.value = await 发送请求<群聊详细信息>(`/groups/${encodeURIComponent(群聊编号)}`)
+		} catch (原因) {
+			错误信息.value = 原因 instanceof Error ? 原因.message : '无法加载群聊信息'
+		} finally {
+			正在加载.value = false
+		}
+	}
+
+	function 打开群友详情(用户编号 : string) {
+		uni.navigateTo({
+			url: `/pages/lianxiren/lian_xi_ren?userId=${encodeURIComponent(用户编号)}`,
+		})
+	}
+
+	onLoad((参数) => {
+		群聊编号 = typeof 参数['groupId'] == 'string' ? 参数['groupId'] : ''
+		void 加载群聊详情()
+	})
+</script>
+
+<template>
+	<view class="ye_mian">
+		<view v-if="正在加载" class="zhuang_tai_wen_ben">正在加载群聊信息…</view>
+		<view v-else-if="错误信息" class="zhuang_tai_wen_ben cuo_wu">{{ 错误信息 }}</view>
+		<view v-else-if="群聊信息" class="群聊详情">
+			<view class="群聊头像">{{ 群聊信息.群组名称.slice(0, 1) }}</view>
+			<text class="群聊名称">{{ 群聊信息.群组名称 }}</text>
+			<text class="群聊状态">{{ 群聊信息.群组状态 }}</text>
+
+			<view class="群聊公告卡片">
+				<text class="卡片标题">群公告</text>
+				<text class="群公告">{{ 群聊信息.群组公告 || '暂无群公告' }}</text>
+			</view>
+
+			<view class="群友卡片">
+				<text class="卡片标题">群友 · {{ 群聊信息.成员列表.length }}</text>
+				<view
+					v-for="群友 in 群聊信息.成员列表"
+					:key="群友.用户编号"
+					class="群友行"
+					@click="打开群友详情(群友.用户编号)"
+				>
+					<view class="群友头像">{{ 群友.昵称.slice(0, 1) }}</view>
+					<view class="群友信息">
+						<text class="群友昵称">{{ 群友.昵称 }}</text>
+						<text class="群友角色">{{ 群友.成员角色 }}</text>
+					</view>
+					<text class="进入详情">›</text>
+				</view>
+			</view>
+		</view>
+	</view>
+</template>
+
+<style lang="scss">
+	.ye_mian {
+		min-height: 100vh;
+		padding: 24px 16px;
+		background: #f5f7f6;
+	}
+
+	.zhuang_tai_wen_ben {
+		padding: 32px 0;
+		text-align: center;
+		color: #6b7573;
+	}
+
+	.cuo_wu {
+		color: #b42318;
+	}
+
+	.群聊详情 {
+		align-items: center;
+	}
+
+	.群聊头像 {
+		width: 88px;
+		height: 88px;
+		border-radius: 44px;
+		background: #d7eee4;
+		color: #075e54;
+		font-size: 36px;
+		font-weight: 700;
+		line-height: 88px;
+		text-align: center;
+	}
+
+	.群聊名称 {
+		margin-top: 14px;
+		font-size: 22px;
+		font-weight: 700;
+		color: #17201e;
+	}
+
+	.群聊状态 {
+		margin-top: 4px;
+		color: #7a8582;
+	}
+
+	.群聊公告卡片,
+	.群友卡片 {
+		width: 100%;
+		margin-top: 20px;
+		padding: 16px;
+		border-radius: 12px;
+		background: #ffffff;
+	}
+
+	.卡片标题 {
+		font-size: 16px;
+		font-weight: 700;
+		color: #25332e;
+	}
+
+	.群公告 {
+		display: block;
+		margin-top: 10px;
+		color: #52635c;
+		line-height: 22px;
+	}
+
+	.群友行 {
+		flex-direction: row;
+		align-items: center;
+		padding: 12px 0;
+		border-bottom-width: 1px;
+		border-bottom-color: #edf0ef;
+	}
+
+	.群友行:last-child {
+		border-bottom-width: 0;
+	}
+
+	.群友头像 {
+		width: 42px;
+		height: 42px;
+		border-radius: 21px;
+		background: #e7f2ee;
+		color: #075e54;
+		line-height: 42px;
+		text-align: center;
+		font-weight: 700;
+	}
+
+	.群友信息 {
+		flex: 1;
+		margin-left: 12px;
+	}
+
+	.群友昵称 {
+		color: #25332e;
+		font-weight: 700;
+	}
+
+	.群友角色 {
+		margin-top: 4px;
+		color: #7a8582;
+		font-size: 12px;
+	}
+
+	.进入详情 {
+		color: #9aa4a0;
+		font-size: 24px;
+	}
+</style>

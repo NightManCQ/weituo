@@ -47,7 +47,7 @@ async function 提交() {
     截止时分.value = '18:00'
     报酬积分.value = 0
     位置.value = null
-    uni.switchTab({ url: '/pages/zhuye/zhuye' })
+    uni.navigateTo({ url: '/pages/zhuye/zhuye' })
   } catch (原因) {
     uni.showToast({ title: 原因 instanceof Error ? 原因.message : '发布失败', icon: 'none' })
   } finally {

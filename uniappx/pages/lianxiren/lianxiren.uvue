@@ -30,11 +30,11 @@ async function 刷新() {
 }
 
 function 打开好友(好友项: 好友) {
-  uni.navigateTo({ url: `/pages/liaotian/liaotian?friendId=${encodeURIComponent(好友项.用户编号)}&nickname=${encodeURIComponent(好友项.昵称)}` })
+  uni.navigateTo({ url: `/pages/liaotian/liaotian?hui_hua=${encodeURIComponent(好友项.用户编号)}&ming_cheng=${encodeURIComponent(好友项.昵称)}&lei_xing=好友&bian_hao=${encodeURIComponent(好友项.用户编号)}` })
 }
 
 function 打开群聊(编号: string) {
-  uni.navigateTo({ url: `/pages/liaotian/liaotian?groupId=${encodeURIComponent(编号)}` })
+  uni.navigateTo({ url: `/pages/liaotian/liaotian?hui_hua=${encodeURIComponent(编号)}&ming_cheng=群聊&lei_xing=群聊&bian_hao=${encodeURIComponent(编号)}` })
 }
 
 async function 删除好友(好友项: 好友) {

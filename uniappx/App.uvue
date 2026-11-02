@@ -86,13 +86,7 @@
 	// #endif
 </script>
 
-<style lang="scss">
-	page {
-		background-color: #f4f6f5;
-		color: #1b2427;
-		font-size: 14px;
-	}
-
+<style>
 	.ye_mian {
 		padding: 8px;
 	}

@@ -35,7 +35,7 @@
 
 			if (操作 == 'accept' && 属性.会话.会话类型 == '群邀请') {
 				uni.navigateTo({
-					url: `/pages/liaotian/liaotian?groupId=${encodeURIComponent(属性.会话.关联编号)}`,
+					url: `/pages/liaotian/liaotian?hui_hua=${encodeURIComponent(属性.会话.关联编号)}&ming_cheng=${encodeURIComponent(属性.会话.会话名称)}&lei_xing=群聊&bian_hao=${encodeURIComponent(属性.会话.关联编号)}`,
 				})
 			}
 		} catch (原因) {

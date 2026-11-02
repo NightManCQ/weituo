@@ -25,7 +25,7 @@ async function 创建群聊() {
       data: { name: 名称 } as UTSJSONObject,
     })
     uni.navigateTo({
-      url: `/pages/liaotian/liaotian?groupId=${encodeURIComponent(结果.群组编号)}`,
+      url: `/pages/liaotian/liaotian?hui_hua=${encodeURIComponent(结果.群组编号)}&ming_cheng=群聊&lei_xing=群聊&bian_hao=${encodeURIComponent(结果.群组编号)}`,
       fail: (原因) => {
         错误信息.value = 原因.errMsg || '群聊已创建，但打开群聊页面失败'
       },

@@ -74,6 +74,13 @@ async function 操作(委托: 任务, 行为: string) {
   }
 }
 
+async function 打开委托会话(委托: 任务) {
+  const 结果 = await 发送请求<{ 群组编号: string }>(`/tasks/${encodeURIComponent(委托.任务编号)}/group-chat`)
+  uni.navigateTo({
+    url: `/pages/liaotian/liaotian?hui_hua=${encodeURIComponent(结果.群组编号)}&ming_cheng=${encodeURIComponent(委托.标题)}&lei_xing=委托&bian_hao=${encodeURIComponent(委托.任务编号)}`,
+  })
+}
+
 onShow(() => {
   当前用户.value = 读取当前用户()
   void 刷新()
@@ -118,7 +125,7 @@ onShow(() => {
         <button v-if="归属 == 'claimed' && 委托.任务状态 == '进行中'" class="xiao_hao zhu_yao_an_niu" @click="操作(委托, 'complete')">提交完成</button>
         <button v-if="归属 == 'published' && 委托.任务状态 == '待验收'" class="xiao_hao zhu_yao_an_niu" @click="操作(委托, 'accept-completion')">确认验收</button>
         <button v-if="归属 == 'published' && ['待接单', '已接单'].includes(委托.任务状态)" class="xiao_hao ci_yao_an_niu" @click="操作(委托, 'cancel')">取消委托</button>
-        <button v-if="委托.接单者编号 != null" class="xiao_hao ci_yao_an_niu" @click="uni.navigateTo({ url: `/pages/liaotian/liaotian?taskId=${encodeURIComponent(委托.任务编号)}` })">查看消息</button>
+        <button v-if="委托.接单者编号 != null" class="xiao_hao ci_yao_an_niu" @click="打开委托会话(委托)">查看消息</button>
       </view>
     </view>
     <button v-if="任务列表.length > 0 && 任务列表.length < 委托总数" class="ci_yao_an_niu" :disabled="正在加载" @click="加载更多">

@@ -50,21 +50,28 @@
 
 		if (会话类型 == '好友') {
 			uni.navigateTo({
-				url: `/pages/liaotian/liaotian?friendId=${encodeURIComponent(关联编号)}&nickname=${encodeURIComponent(会话名称)}`,
+				url: `/pages/liaotian/liaotian?hui_hua=${encodeURIComponent(会话编号)}&ming_cheng=${encodeURIComponent(会话名称)}&lei_xing=好友&bian_hao=${encodeURIComponent(关联编号)}`,
 			})
 			return
 		}
 
 		if (会话类型 == '群聊') {
 			uni.navigateTo({
-				url: `/pages/liaotian/liaotian?groupId=${encodeURIComponent(会话编号)}`,
+				url: `/pages/liaotian/liaotian?hui_hua=${encodeURIComponent(会话编号)}&ming_cheng=${encodeURIComponent(会话名称)}&lei_xing=群聊&bian_hao=${encodeURIComponent(会话编号)}`,
 			})
 			return
 		}
 
-		uni.navigateTo({
-			url: `/pages/liaotian/liaotian?taskId=${encodeURIComponent(关联编号)}`,
-		})
+		if (会话类型 == '委托') {
+			const 任务编号 = 会话.任务编号
+			if (!任务编号) {
+				uni.showToast({ title: '委托编号缺失，无法打开群聊', icon: 'none' })
+				return
+			}
+			uni.navigateTo({
+				url: `/pages/liaotian/liaotian?hui_hua=${encodeURIComponent(会话编号)}&ming_cheng=${encodeURIComponent(会话名称)}&lei_xing=委托&bian_hao=${encodeURIComponent(任务编号)}`,
+			})
+		}
 	}
 
 	onShow(() => {
@@ -102,7 +109,7 @@
 							{{ 会话.最近消息 || (会话.会话类型 == '好友验证' ? '请求添加你为好友' : 会话.会话类型 == '群邀请' ? '邀请你加入群聊' : 会话.会话类型 == '好友' ? '开始聊天吧' : '暂无消息') }}
 						</text>
 					</view>
-					<text class="jian_tou">›</text>
+					
 					<text
 						v-if="(会话.新消息条数 ?? 0) > 0"
 						class="wei_du_xin_xi_shu"
@@ -153,9 +160,6 @@
 		justify-content: center;
 	}
 
-	.liang_duan_dui_qi > .fu_zhu_wen_ben {
-		margin-right: 22px;
-	}
 
 	.liang_duan_dui_qi {
 		flex-wrap: nowrap;

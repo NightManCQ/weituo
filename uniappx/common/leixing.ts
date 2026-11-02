@@ -4,6 +4,34 @@ export type 用户 = {
   昵称: string
 }
 
+export type 用户详细信息 = {
+  用户编号: string
+  登录名: string
+  昵称: string
+  账号状态: string
+  创建时间: string
+  是否好友: boolean
+}
+
+export type 群聊成员详情 = {
+  用户编号: string
+  登录名: string
+  昵称: string
+  成员角色: string
+  加入时间: string
+}
+
+export type 群聊详细信息 = {
+  群组编号: string
+  关联任务编号: string | null
+  群组状态: string
+  群组名称: string
+  群组公告: string
+  群主编号: string
+  最后消息序号: number
+  成员列表: 群聊成员详情[]
+}
+
 export type 任务位置 = {
   经度: number
   纬度: number
@@ -34,6 +62,7 @@ export type 消息会话 = {
   会话类型: '委托' | '好友' | '群聊' | '群邀请' | '好友验证'
   会话编号: string
   关联编号: string
+  任务编号?: string | null
   会话名称: string
   联系人昵称: string | null
   会话说明: string

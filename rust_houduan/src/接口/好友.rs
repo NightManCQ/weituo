@@ -18,6 +18,48 @@ pub(super) struct 好友视图 {
 }
 
 #[derive(Serialize)]
+pub(super) struct 用户详细信息视图 {
+    pub(super) 用户编号: Uuid,
+    pub(super) 登录名: String,
+    pub(super) 昵称: String,
+    pub(super) 账号状态: String,
+    pub(super) 创建时间: DateTime<Utc>,
+    pub(super) 是否好友: bool,
+}
+
+pub(super) async fn 查询用户详细信息(
+    State(状态): State<应用状态>,
+    Path(目标用户编号): Path<Uuid>,
+    请求: axum::http::Request<axum::body::Body>,
+) -> Result<Json<用户详细信息视图>, 应用错误> {
+    let 当前编号 = 当前用户编号(&请求)?;
+    let 记录 = sqlx::query(
+        r#"SELECT u."用户编号", u."登录名", u."昵称", u."账号状态", u."创建时间",
+                  EXISTS (
+                      SELECT 1 FROM "好友关系" f
+                      WHERE (f."用户甲编号" = $1 AND f."用户乙编号" = u."用户编号")
+                         OR (f."用户乙编号" = $1 AND f."用户甲编号" = u."用户编号")
+                  ) AS "是否好友"
+           FROM "用户" u
+           WHERE u."用户编号" = $2"#,
+    )
+    .bind(当前编号)
+    .bind(目标用户编号)
+    .fetch_optional(&状态.数据库)
+    .await?
+    .ok_or_else(|| 应用错误::未找到("用户不存在".into()))?;
+
+    Ok(Json(用户详细信息视图 {
+        用户编号: 记录.get("用户编号"),
+        登录名: 记录.get("登录名"),
+        昵称: 记录.get("昵称"),
+        账号状态: 记录.get("账号状态"),
+        创建时间: 记录.get("创建时间"),
+        是否好友: 记录.get("是否好友"),
+    }))
+}
+
+#[derive(Serialize)]
 #[serde(tag = "项目类型")]
 pub(super) enum 联系人列表项目 {
     好友 {
@@ -605,46 +647,57 @@ pub(super) async fn 查询私聊消息(
     请求: axum::http::Request<axum::body::Body>,
 ) -> Result<Json<Vec<私聊消息视图>>, 应用错误> {
     let 当前编号 = 当前用户编号(&请求)?;
-    if 当前编号 == 好友编号 {
-        return Err(应用错误::请求错误("好友编号无效".into()));
-    }
-    let (用户甲, 用户乙) = 好友编号对(当前编号, 好友编号);
-    let 会话 = sqlx::query(
-        r#"SELECT "会话编号" FROM "私聊会话"
-           WHERE "用户甲编号" = $1 AND "用户乙编号" = $2"#,
+    let 会话编号: Uuid = if let Some(会话) = sqlx::query(
+        r#"SELECT "会话编号", "用户甲编号", "用户乙编号" FROM "私聊会话"
+           WHERE "会话编号" = $1 AND ("用户甲编号" = $2 OR "用户乙编号" = $2)"#,
     )
-    .bind(用户甲)
-    .bind(用户乙)
+    .bind(好友编号)
+    .bind(当前编号)
     .fetch_optional(&状态.数据库)
-    .await?;
-
-    let 会话编号: Uuid = if let Some(会话) = 会话 {
+    .await?
+    {
         会话.get("会话编号")
     } else {
-        let 是好友 = sqlx::query(
-            r#"SELECT 1 FROM "好友关系"
+        if 当前编号 == 好友编号 {
+            return Err(应用错误::请求错误("好友编号无效".into()));
+        }
+        let (用户甲, 用户乙) = 好友编号对(当前编号, 好友编号);
+        let 会话 = sqlx::query(
+            r#"SELECT "会话编号" FROM "私聊会话"
                WHERE "用户甲编号" = $1 AND "用户乙编号" = $2"#,
         )
         .bind(用户甲)
         .bind(用户乙)
         .fetch_optional(&状态.数据库)
         .await?;
-        if 是好友.is_none() {
-            return Err(应用错误::禁止访问("你们还不是好友".into()));
-        }
-        sqlx::query(
-            r#"INSERT INTO "私聊会话" ("会话编号", "用户甲编号", "用户乙编号")
+        if let Some(会话) = 会话 {
+            会话.get("会话编号")
+        } else {
+            let 是好友 = sqlx::query(
+                r#"SELECT 1 FROM "好友关系"
+               WHERE "用户甲编号" = $1 AND "用户乙编号" = $2"#,
+            )
+            .bind(用户甲)
+            .bind(用户乙)
+            .fetch_optional(&状态.数据库)
+            .await?;
+            if 是好友.is_none() {
+                return Err(应用错误::禁止访问("你们还不是好友".into()));
+            }
+            sqlx::query(
+                r#"INSERT INTO "私聊会话" ("会话编号", "用户甲编号", "用户乙编号")
                VALUES ($1, $2, $3)
                ON CONFLICT ("用户甲编号", "用户乙编号")
                DO UPDATE SET "用户甲编号" = EXCLUDED."用户甲编号"
                RETURNING "会话编号""#,
-        )
-        .bind(Uuid::new_v4())
-        .bind(用户甲)
-        .bind(用户乙)
-        .fetch_one(&状态.数据库)
-        .await?
-        .get("会话编号")
+            )
+            .bind(Uuid::new_v4())
+            .bind(用户甲)
+            .bind(用户乙)
+            .fetch_one(&状态.数据库)
+            .await?
+            .get("会话编号")
+        }
     };
     let 限制 = 条件.数量上限.unwrap_or(100).clamp(1, 200);
     let 记录集 = sqlx::query(

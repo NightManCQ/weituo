@@ -4,7 +4,7 @@
 <template>
   <view class="ye_mian">
     <view class="ye_mian_biao_ti"><text class="fu_biao_ti">探索与发现</text><text class="biao_ti">世界</text></view>
-    <view class="ka_pian ke_dian_ji" @click="uni.switchTab({ url: '/pages/zhuye/zhuye' })">
+    <view class="ka_pian ke_dian_ji" @click="uni.navigateTo({ url: '/pages/zhuye/zhuye' })">
       <text class="ka_pian_biao_ti">委托广场</text>
       <text class="fu_zhu_wen_ben">浏览正在招募的委托，发现可以参与的机会。</text>
     </view>

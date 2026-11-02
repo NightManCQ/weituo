@@ -9,34 +9,19 @@
 	import { 清零会话新消息条数 } from '../xiaoxi/会话列表'
 	import { 格式化日期标签, 格式化消息时间, 消息日期键 } from '../xiaoxi/时间'
 
-	type 群成员 = { 用户编号 : string; 昵称 : string; 成员角色 : string }
-	type 群详情 = {
-		群组编号 : string
-		关联任务编号 : string | null
-		群组状态 : string
-		群组名称 : string
-		群组公告 : string
-		群主编号 : string
-		成员列表 : 群成员[]
-	}
-	type 好友 = { 用户编号 : string; 昵称 : string }
-
 	const 当前用户 = ref<用户 | null>(null)
-	const 群组编号 = ref('')
-	const 好友编号 = ref('')
-	const 联系人昵称 = ref('好友')
-	const 群组 = ref<群详情 | null>(null)
+	const 会话编号 = ref('')
+	const 会话类型 = ref('')
+	const 会话名称 = ref('聊天')
+	const 业务编号 = ref('')
 	const 群消息列表 = ref<群消息[]>([])
 	const 好友消息列表 = ref<好友消息[]>([])
-	const 好友列表 = ref<好友[]>([])
 	const 消息正文 = ref('')
 	const 键盘高度 = ref(0)
 	const 好友消息待确认 = ref<{ 客户端消息编号 : string; 正文 : string } | null>(null)
-	const 邀请用户编号 = ref('')
 	const 正在加载 = ref(false)
 	const 正在发送 = ref(false)
 	const 错误 = ref('')
-	const 群管理面板已展开 = ref(false)
 	let 正在刷新 = false
 	let 取消订阅 : (() => void) | null = null
 
@@ -80,9 +65,9 @@
 		const 数据 = 事件.数据
 		const 联系人编号 = 数据['联系人编号'] ?? 数据['contact_user_id']
 		if (
-			!好友编号.value ||
+			会话类型.value != '好友' ||
 			!当前用户.value ||
-			联系人编号 != 好友编号.value
+			联系人编号 != 业务编号.value
 		) return
 		const 消息编号 = 数据['消息编号'] ?? 数据['message_id']
 		const 会话编号 = 数据['会话编号'] ?? 数据['conversation_id'] ?? 事件.会话编号
@@ -105,7 +90,7 @@
 		}
 		if (
 			发送者编号 != 当前用户.value.用户编号 &&
-			发送者编号 != 好友编号.value
+			发送者编号 != 业务编号.value
 		) return
 		添加好友消息({
 			消息编号,
@@ -121,17 +106,15 @@
 	function 处理群聊实时事件(事件 : 实时事件) {
 		if (
 			事件.事件类型 == 'task.completed' &&
-			事件.任务编号 == 群组.value?.关联任务编号
+			事件.任务编号 == 业务编号.value
 		) {
 			void 刷新()
 			return
 		}
 		if (事件.事件类型 != '群聊消息已创建' || 事件.数据 == null) return
 		const 数据 = 事件.数据
-		const 当前群组 = 群组.value
-		if (!当前群组) return
 		const 群编号 = 数据['群组编号'] ?? 事件.原始事件['群组编号']
-		if (群编号 != 当前群组.群组编号) return
+		if (群编号 != 会话编号.value) return
 		const 消息编号 = 数据['消息编号']
 		const 群内序号 = 数据['群内序号']
 		const 发送者编号 = 数据['发送者编号']
@@ -157,7 +140,7 @@
 		)) return
 		群消息列表.value = [...群消息列表.value, {
 			消息编号,
-			群组编号: 当前群组.群组编号,
+			群组编号: 会话编号.value,
 			群内序号,
 			发送者编号,
 			发送者昵称,
@@ -165,7 +148,6 @@
 			消息正文: 正文,
 			创建时间,
 		}].sort((左侧, 右侧) => 左侧.群内序号 - 右侧.群内序号).slice(-100)
-		当前群组.最后消息序号 = Math.max(当前群组.最后消息序号, 群内序号)
 		滚动到最新消息()
 	}
 
@@ -181,17 +163,8 @@
 		正在加载.value = true
 		错误.value = ''
 		try {
-			if (群组编号.value || (任务编号.value && !好友编号.value)) {
-				if (!群组编号.value && 任务编号.value) {
-					const 结果 = await 发送请求<{ 群组编号 : string }>(`/tasks/${encodeURIComponent(任务编号.value)}/group-chat`)
-					群组编号.value = 结果.群组编号
-				}
-				const 群编号 = 群组编号.value
-				const [详情, 消息] = await Promise.all([
-					发送请求<群详情>(`/groups/${encodeURIComponent(群编号)}`),
-					发送请求<群消息[]>(`/groups/${encodeURIComponent(群编号)}/messages?limit=100`),
-				])
-				群组.value = 详情
+			if (会话类型.value == '群聊' || 会话类型.value == '委托') {
+				const 消息 = await 发送请求<群消息[]>(`/groups/${encodeURIComponent(会话编号.value)}/messages?limit=100`)
 				const 合并消息 = [...群消息列表.value, ...消息]
 				群消息列表.value = 合并消息.filter((项目, 索引, 列表) =>
 					列表.findIndex((候选) =>
@@ -200,9 +173,8 @@
 					) == 索引,
 				).sort((左侧, 右侧) => 左侧.群内序号 - 右侧.群内序号).slice(-100)
 				滚动到最新消息()
-				if (详情.关联任务编号 == null) 好友列表.value = await 发送请求<好友[]>('/my/friends')
-			} else if (好友编号.value) {
-				const 消息 = await 发送请求<好友消息[]>(`/my/friends/${encodeURIComponent(好友编号.value)}/messages?limit=200`)
+			} else if (会话类型.value == '好友') {
+				const 消息 = await 发送请求<好友消息[]>(`/my/friends/${encodeURIComponent(会话编号.value)}/messages?limit=200`)
 				好友消息列表.value = 合并好友消息([...好友消息列表.value, ...消息])
 				滚动到最新消息()
 			}
@@ -220,13 +192,13 @@
 		正在发送.value = true
 		错误.value = ''
 		try {
-			if (好友编号.value) {
+			if (会话类型.value == '好友') {
 				const 待发送消息 = 好友消息待确认.value ?? {
 					客户端消息编号: 创建编号(),
 					正文,
 				}
 				好友消息待确认.value = 待发送消息
-				const 消息 = await 发送请求<好友消息>(`/my/friends/${encodeURIComponent(好友编号.value)}/messages`, {
+				const 消息 = await 发送请求<好友消息>(`/my/friends/${encodeURIComponent(业务编号.value)}/messages`, {
 					method: 'POST',
 					data: {
 						client_message_id: 待发送消息.客户端消息编号,
@@ -235,8 +207,8 @@
 				})
 				添加好友消息(消息)
 				好友消息待确认.value = null
-			} else if (群组.value != null) {
-				const 消息 = await 发送请求<群消息>(`/groups/${encodeURIComponent(群组.value.群组编号)}/messages`, {
+			} else if (会话编号.value) {
+				const 消息 = await 发送请求<群消息>(`/groups/${encodeURIComponent(会话编号.value)}/messages`, {
 					method: 'POST',
 					data: { client_message_id: 创建编号(), content: 正文 } as UTSJSONObject,
 				})
@@ -251,55 +223,27 @@
 		}
 	}
 
-	async function 邀请好友() {
-		if (!邀请用户编号.value || 群组.value == null) return
-		try {
-			await 发送请求(`/groups/${encodeURIComponent(群组.value.群组编号)}/invitations`, {
-				method: 'POST',
-				data: { user_id: 邀请用户编号.value } as UTSJSONObject,
-			})
-			邀请用户编号.value = ''
-			uni.showToast({ title: '已发送群邀请', icon: 'success' })
-		} catch (原因) {
-			uni.showToast({ title: 原因 instanceof Error ? 原因.message : '邀请失败', icon: 'none' })
-		}
-	}
-
-	async function 移除成员(编号 : string, 名称 : string) {
-		const 确认 = await new Promise<boolean>((resolve) => uni.showModal({
-			title: '移除群成员',
-			content: `确定将 ${名称} 移出群聊吗？`,
-			success: (结果) => resolve(结果.confirm),
-			fail: () => resolve(false),
-		}))
-		if (!确认 || 群组.value == null) return
-		try {
-			await 发送请求(`/groups/${encodeURIComponent(群组.value.群组编号)}/members/${encodeURIComponent(编号)}`, { method: 'DELETE' })
-			await 刷新()
-		} catch (原因) {
-			uni.showToast({ title: 原因 instanceof Error ? 原因.message : '移除失败', icon: 'none' })
-		}
-	}
-
-	async function 退出群聊() {
-		if (群组.value == null) return
-		const 确认 = await new Promise<boolean>((resolve) => uni.showModal({
-			title: '退出群聊',
-			content: '确定退出这个群聊吗？',
-			success: (结果) => resolve(结果.confirm),
-			fail: () => resolve(false),
-		}))
-		if (!确认) return
-		try {
-			await 发送请求(`/groups/${encodeURIComponent(群组.value.群组编号)}/leave`, { method: 'DELETE' })
-			uni.navigateBack()
-		} catch (原因) {
-			uni.showToast({ title: 原因 instanceof Error ? 原因.message : '退出群聊失败', icon: 'none' })
-		}
-	}
-
 	function 返回() {
 		uni.navigateBack({ fail: () => uni.switchTab({ url: '/pages/xiaoxi/xiaoxi' }) })
+	}
+
+	function 打开联系人详情() {
+		if (会话类型.value == '委托') {
+			uni.navigateTo({
+				url: `/pages/weituo/weituo?id=${encodeURIComponent(业务编号.value)}`,
+			})
+			return
+		}
+		if (会话类型.value == '群聊') {
+			uni.navigateTo({
+				url: `/pages/lianxiren/qun_liao?groupId=${encodeURIComponent(业务编号.value)}`,
+			})
+			return
+		}
+		if (会话类型.value != '好友') return
+		uni.navigateTo({
+			url: `/pages/lianxiren/lian_xi_ren?userId=${encodeURIComponent(业务编号.value)}`,
+		})
 	}
 
 	function 处理键盘高度变化(事件 : { detail : { height : number } }) {
@@ -307,23 +251,20 @@
 		滚动到最新消息()
 	}
 
-	let 任务编号 = ''
 	onLoad((参数) => {
 		当前用户.value = 读取当前用户()
-		群组编号.value = 参数['groupId'] as string || ''
-		好友编号.value = 参数['friendId'] as string || ''
-		联系人昵称.value = 参数['nickname'] as string || '好友'
-		任务编号 = 参数['taskId'] as string || ''
-		群组.value = null
+		会话编号.value = 参数['hui_hua'] as string || ''
+		会话类型.value = 参数['lei_xing'] as string || ''
+		会话名称.value = 参数['ming_cheng'] as string || '聊天'
+		业务编号.value = 参数['bian_hao'] as string || ''
 		群消息列表.value = []
 		好友消息列表.value = []
-		if (好友编号.value) 清零会话新消息条数(好友编号.value)
-		if (群组编号.value) 清零会话新消息条数(群组编号.value)
+		if (会话编号.value) 清零会话新消息条数(会话编号.value)
 	})
 	onShow(() => {
 		if (取消订阅 == null) {
 			取消订阅 = 订阅实时事件((事件) => {
-				if (好友编号.value) 处理好友实时事件(事件)
+				if (会话类型.value == '好友') 处理好友实时事件(事件)
 				else 处理群聊实时事件(事件)
 			})
 		}
@@ -340,36 +281,12 @@
 		<view class="liao_tian_ding_bu_zhan_wei"></view>
 		<view class="liao_tian_ding_bu" :style="`padding-top:${使用全局变量.系统信息.窗口顶高}px`">
 			<button class="liao_tian_fan_hui" @click="返回">‹</button>
-			<view class="liao_tian_tou_xiang">
-				<text>{{ (好友编号 ? 联系人昵称 : 群组?.群组名称 || '群').slice(0, 1) }}</text>
+			<view class="liao_tian_tou_xiang" @click="打开联系人详情">
+				<text>{{ 会话名称.slice(0, 1) }}</text>
 			</view>
 			<view class="liao_tian_lian_xi_ren">
-				<text class="liao_tian_lian_xi_ren_ming_cheng">{{ 好友编号 ? 联系人昵称 : 群组?.群组名称 || '委托会话' }}</text>
-				<text class="liao_tian_lian_xi_ren_xin_xi">{{ 好友编号 ? '好友私聊' : `${群组?.成员列表.length || 0} 位成员` }}</text>
-			</view>
-			<button v-if="群组 != null" class="liao_tian_cai_dan_an_niu" @click="群管理面板已展开 = !群管理面板已展开">
-				{{ 群管理面板已展开 ? '收起' : '⋮' }}
-			</button>
-		</view>
-
-		<view v-if="群管理面板已展开 && 群组 != null" class="qun_zu_mian_ban">
-			<text class="qun_zu_mian_ban_biao_ti">群成员 · {{ 群组.成员列表.length }}</text>
-			<view v-for="成员 in 群组.成员列表" :key="成员.用户编号" class="qun_zu_cheng_yuan_hang">
-				<text class="qun_zu_cheng_yuan_ming_cheng">{{ 成员.昵称 }} · {{ 成员.成员角色 }}</text>
-				<button
-					v-if="群组.关联任务编号 == null && ['群主', '管理员'].includes(群组.成员列表.find((项) => 项.用户编号 == 当前用户?.用户编号)?.成员角色 || '') && 成员.用户编号 != 当前用户?.用户编号 && 成员.成员角色 != '群主'"
-					class="qun_zu_cheng_yuan_cao_zuo" @click="移除成员(成员.用户编号, 成员.昵称)">移除</button>
-			</view>
-			<picker v-if="群组.关联任务编号 == null" :range="好友列表" range-key="昵称"
-				@change="(事件) => 邀请用户编号 = 好友列表[Number(事件.detail.value)].用户编号">
-				<view class="qun_zu_yao_qing_xuan_ze">
-					{{ 邀请用户编号 ? (好友列表.find((好友) => 好友.用户编号 == 邀请用户编号)?.昵称 || '选择好友') : '选择好友邀请入群' }}
-				</view>
-			</picker>
-			<view class="qun_zu_mian_ban_cao_zuo">
-				<button v-if="群组.关联任务编号 == null" class="qun_zu_cheng_yuan_cao_zuo" @click="邀请好友">邀请好友</button>
-				<button v-if="当前用户?.用户编号 != 群组.群主编号 && 群组.关联任务编号 == null" class="qun_zu_cheng_yuan_cao_zuo"
-					@click="退出群聊">退出群聊</button>
+				<text class="liao_tian_lian_xi_ren_ming_cheng">{{ 会话名称 }}</text>
+				<text class="liao_tian_lian_xi_ren_xin_xi">{{ 会话类型 == '好友' ? '好友私聊' : 会话类型 == '委托' ? '委托群聊' : '群聊消息' }}</text>
 			</view>
 		</view>
 
@@ -377,13 +294,10 @@
 			<text>{{ 错误 }}</text>
 			<button class="liao_tian_chong_shi" :disabled="正在加载" @click="刷新">{{ 正在加载 ? '加载中…' : '重试' }}</button>
 		</view>
-		<view v-if="群组?.群组状态 == '已归档'" class="liao_tian_gui_dang">
-			该委托已完成，群聊已归档；历史消息仅供查看。
-		</view>
 
 		<view class="liao_tian_xiao_xi_lie_biao">
-			<view v-if="正在加载 && 好友编号 && 好友消息列表.length == 0" class="liao_tian_kong_zhuang_tai">正在加载消息…</view>
-			<template v-if="好友编号">
+			<view v-if="正在加载 && 会话类型 == '好友' && 好友消息列表.length == 0" class="liao_tian_kong_zhuang_tai">正在加载消息…</view>
+			<template v-if="会话类型 == '好友'">
 				<template v-for="(消息, 索引) in 好友消息列表" :key="消息.消息编号">
 					<view v-if="是否显示日期(好友消息列表, 索引)" class="liao_tian_ri_qi_hang">
 						<text class="liao_tian_ri_qi">{{ 格式化日期标签(消息.创建时间) }}</text>
@@ -414,16 +328,15 @@
 					</view>
 				</template>
 			</template>
-			<view v-if="!正在加载 && !错误 && 好友编号 && 好友消息列表.length == 0" class="liao_tian_kong_zhuang_tai">还没有消息，发起一段对话吧。
+			<view v-if="!正在加载 && !错误 && 会话类型 == '好友' && 好友消息列表.length == 0" class="liao_tian_kong_zhuang_tai">还没有消息，发起一段对话吧。
 			</view>
-			<view v-if="!正在加载 && !错误 && !好友编号 && 群消息列表.length == 0" class="liao_tian_kong_zhuang_tai">还没有群消息。</view>
+			<view v-if="!正在加载 && !错误 && 会话类型 != '好友' && 群消息列表.length == 0" class="liao_tian_kong_zhuang_tai">还没有群消息。</view>
 		</view>
 
 		<view v-if="当前用户 == null" class="liao_tian_deng_lu">
 			<button class="liao_tian_deng_lu_an_niu"
 				@click="uni.switchTab({ url: '/pages/wode/wode' })">登录后开始聊天</button>
 		</view>
-		<!-- -if="好友编号 || 群组?.群组状态 == '正常'" -->
 		<template v-else>
 			<view class="liao_tian_bian_ji_zhan_wei"></view>
 			<view class="liao_tian_bian_ji_lan" :style="`bottom:${键盘高度}px`">
@@ -443,6 +356,10 @@
 </template>
 
 <style lang="scss">
+	page{
+
+		background-color: #efeae2;
+	}
 	.liao_tian_rong_qi {
 		display: flex;
 		flex-direction: column;
@@ -450,7 +367,6 @@
 		max-width: 720px;
 		margin: 0 auto;
 		padding: 0;
-		background-color: #efeae2;
 	}
 
 	.liao_tian_ding_bu_zhan_wei {
@@ -525,71 +441,6 @@
 		font-size: 12px;
 	}
 
-	.liao_tian_cai_dan_an_niu {
-		min-width: 38px;
-		height: 38px;
-		margin: 0 0 0 8px;
-		padding: 0 8px;
-		border: 0;
-		background-color: transparent;
-		color: #ffffff;
-		font-size: 20px;
-	}
-
-	.qun_zu_mian_ban {
-		padding: 10px 16px;
-		border-bottom: 1px solid #d5ded9;
-		background-color: #ffffff;
-	}
-
-	.qun_zu_mian_ban_biao_ti {
-		display: flex;
-		margin-bottom: 5px;
-		color: #075e54;
-		font-size: 14px;
-		font-weight: 700;
-	}
-
-	.qun_zu_cheng_yuan_hang {
-		display: flex;
-		flex-direction: row;
-		align-items: center;
-		justify-content: space-between;
-		min-height: 38px;
-		border-bottom: 1px solid #eef0ed;
-	}
-
-	.qun_zu_cheng_yuan_ming_cheng {
-		color: #25332e;
-		font-size: 13px;
-	}
-
-	.qun_zu_cheng_yuan_cao_zuo {
-		min-height: 30px;
-		margin: 2px;
-		padding: 0 10px;
-		border: 1px solid #d5e5dd;
-		border-radius: 15px;
-		background-color: #ffffff;
-		color: #087e67;
-		font-size: 12px;
-	}
-
-	.qun_zu_yao_qing_xuan_ze {
-		margin-top: 8px;
-		padding: 9px 10px;
-		border: 1px solid #e1e8e3;
-		border-radius: 8px;
-		color: #52635c;
-		font-size: 13px;
-	}
-
-	.qun_zu_mian_ban_cao_zuo {
-		display: flex;
-		flex-direction: row;
-		flex-wrap: wrap;
-		margin-top: 5px;
-	}
 
 	.liao_tian_cuo_wu {
 		display: flex;
@@ -610,14 +461,6 @@
 		border-radius: 15px;
 		background-color: #ffffff;
 		color: #9c3c2b;
-		font-size: 12px;
-	}
-
-	.liao_tian_gui_dang {
-		padding: 8px 12px;
-		background-color: #fff8df;
-		color: #71633b;
-		text-align: center;
 		font-size: 12px;
 	}
 

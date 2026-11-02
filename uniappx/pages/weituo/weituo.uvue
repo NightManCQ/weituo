@@ -37,6 +37,14 @@ async function 执行(操作: string) {
   }
 }
 
+async function 打开委托会话() {
+  if (委托.value == null) return
+  const 结果 = await 发送请求<{ 群组编号: string }>(`/tasks/${encodeURIComponent(委托.value.任务编号)}/group-chat`)
+  uni.navigateTo({
+    url: `/pages/liaotian/liaotian?hui_hua=${encodeURIComponent(结果.群组编号)}&ming_cheng=${encodeURIComponent(委托.value.标题)}&lei_xing=委托&bian_hao=${encodeURIComponent(委托.value.任务编号)}`,
+  })
+}
+
 onLoad((参数) => {
   委托编号 = 参数['id'] as string || ''
   当前用户.value = 读取当前用户()
@@ -61,7 +69,7 @@ onLoad((参数) => {
       <text class="biao_qian">委托地址</text>
       <text class="zheng_wen">{{ 委托.位置 == null ? '未填写' : [委托.位置.省, 委托.位置.市, 委托.位置.县, 委托.位置.地址].filter(Boolean).join(' · ') }}</text>
       <button v-if="当前用户 != null && 委托.任务状态 == '待接单' && 委托.发布者编号 != 当前用户.用户编号 && 委托.报酬积分 != null" class="zhu_yao_an_niu" @click="执行('claim')">接取委托</button>
-      <button v-if="当前用户 != null && (委托.发布者编号 == 当前用户.用户编号 || 委托.接单者编号 == 当前用户.用户编号)" class="ci_yao_an_niu" @click="uni.navigateTo({ url: `/pages/liaotian/liaotian?taskId=${encodeURIComponent(委托.任务编号)}` })">打开委托会话</button>
+      <button v-if="当前用户 != null && (委托.发布者编号 == 当前用户.用户编号 || 委托.接单者编号 == 当前用户.用户编号)" class="ci_yao_an_niu" @click="打开委托会话">打开委托会话</button>
     </view>
   </view>
 </template>

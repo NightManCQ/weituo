@@ -11,6 +11,7 @@ pub(super) struct 消息会话视图 {
     pub(super) 会话类型: String,
     pub(super) 会话编号: Uuid,
     pub(super) 关联编号: Uuid,
+    pub(super) 任务编号: Option<Uuid>,
     pub(super) 会话名称: String,
     pub(super) 联系人昵称: Option<String>,
     pub(super) 会话说明: String,
@@ -41,6 +42,7 @@ pub(super) async fn 查询我的消息会话(
                SELECT '委托'::text AS "会话类型",
                       g."群组编号" AS "会话编号",
                       COALESCE(t."接单者编号", t."发布者编号") AS "关联编号",
+                      t."任务编号" AS "任务编号",
                       t."标题" AS "会话名称",
                       联系人."昵称" AS "联系人昵称",
                       CASE WHEN t."接单者编号" IS NULL
@@ -91,6 +93,7 @@ pub(super) async fn 查询我的消息会话(
                SELECT '群邀请'::text AS "会话类型",
                       i."邀请编号" AS "会话编号",
                       i."群组编号" AS "关联编号",
+                      NULL::uuid AS "任务编号",
                       g."群组名称" AS "会话名称",
                       inviter."昵称" AS "联系人昵称",
                       '群聊邀请'::text AS "会话说明",
@@ -117,6 +120,7 @@ pub(super) async fn 查询我的消息会话(
                SELECT '好友验证'::text AS "会话类型",
                       a."申请编号" AS "会话编号",
                       a."申请人编号" AS "关联编号",
+                      NULL::uuid AS "任务编号",
                       applicant."昵称" AS "会话名称",
                       applicant."昵称" AS "联系人昵称",
                       '好友验证'::text AS "会话说明",
@@ -140,6 +144,7 @@ pub(super) async fn 查询我的消息会话(
                SELECT '好友'::text AS "会话类型",
                       s."会话编号",
                       contact."用户编号" AS "关联编号",
+                      NULL::uuid AS "任务编号",
                       contact."昵称" AS "会话名称",
                       contact."昵称" AS "联系人昵称",
                       '好友私聊'::text AS "会话说明",
@@ -176,6 +181,7 @@ pub(super) async fn 查询我的消息会话(
                SELECT '群聊'::text AS "会话类型",
                       g."群组编号" AS "会话编号",
                       g."群组编号" AS "关联编号",
+                      NULL::uuid AS "任务编号",
                       g."群组名称" AS "会话名称",
                       NULL::text AS "联系人昵称",
                       '群聊'::text AS "会话说明",
@@ -222,6 +228,11 @@ pub(super) async fn 查询我的消息会话(
                 let 会话类型: String = 记录.get("会话类型");
                 let 会话编号: Uuid = 记录.get("会话编号");
                 let 关联编号: Uuid = 记录.get("关联编号");
+                let 任务编号 = if 会话类型 == "委托" {
+                    记录.get("任务编号")
+                } else {
+                    None
+                };
                 let mqtt主题 = match 会话类型.as_str() {
                     "委托" | "群聊" => Some(format!("q/{会话编号}")),
                     _ => None,
@@ -230,6 +241,7 @@ pub(super) async fn 查询我的消息会话(
                     会话类型,
                     会话编号,
                     关联编号,
+                    任务编号,
                     会话名称: 记录.get("会话名称"),
                     联系人昵称: 记录.get("联系人昵称"),
                     会话说明: 记录.get("会话说明"),

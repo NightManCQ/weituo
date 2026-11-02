@@ -54,6 +54,18 @@
 			}
 		},
 		{
+			"path": "pages/lianxiren/lian_xi_ren",
+			"style": {
+				"navigationBarTitleText": "联系人详情"
+			}
+		},
+		{
+			"path": "pages/lianxiren/qun_liao",
+			"style": {
+				"navigationBarTitleText": "群聊详情"
+			}
+		},
+		{
 			"path": "pages/chuanjianqun/chuanjianqun",
 			"style": {
 				"navigationBarTitleText": "创建群聊"
