@@ -1,8 +1,10 @@
 <script setup lang="ts">
 	import { onShow } from '@dcloudio/uni-app'
 	import { computed, ref } from 'vue'
-	import { 格式化时间, 读取当前用户 } from '../../common/wangluo'
+	import { 读取当前用户 } from '../../common/wangluo'
 	import type { 用户 } from '../../common/leixing'
+	import { 格式化会话时间 } from './时间'
+	import TongYiJueJue from './tongyijuejue.uvue'
 	import {
 		会话列表,
 		会话列表正在加载 as 正在加载,
@@ -10,6 +12,16 @@
 	} from './会话列表'
 
 	const 当前用户 = ref<用户 | null>(null)
+
+	function 获取会话标题(会话 : (typeof 会话列表.value)[number]) {
+		if (会话.会话类型 == "好友验证") return `好友请求 ${会话.会话名称}`
+		if (会话.会话类型 == "群邀请") return `群聊邀请 ${会话.会话名称}`
+		if (会话.会话类型 == "委托") {
+			const 委托状态 = 会话.会话状态 ? ` · ${会话.会话状态}` : ""
+			return `委托${委托状态} ${会话.会话名称}`
+		}
+		return 会话.会话名称
+	}
 
 	const 普通会话列表 = computed(() => 会话列表.value.slice()
 		.sort((左侧, 右侧) => {
@@ -83,20 +95,22 @@
 					</view>
 					<view class="zhan_kai hui_hua_wen_ben">
 						<view class="liang_duan_dui_qi">
-							<text class="ka_pian_biao_ti">{{ 会话.会话名称 }}</text>
-							<text class="fu_zhu_wen_ben">{{ 格式化时间(会话.最近消息时间) }}</text>
+							<text class="ka_pian_biao_ti">{{ 获取会话标题(会话) }}</text>
+							<text class="fu_zhu_wen_ben">{{ 格式化会话时间(会话.最近消息时间) }}</text>
 						</view>
 						<text class="fu_zhu_wen_ben hui_hua_zhai_yao">
 							{{ 会话.最近消息 || (会话.会话类型 == '好友验证' ? '请求添加你为好友' : 会话.会话类型 == '群邀请' ? '邀请你加入群聊' : 会话.会话类型 == '好友' ? '开始聊天吧' : '暂无消息') }}
 						</text>
-						<text class="hui_hua_lei_xing">
-							{{ 会话.会话类型 }}
-							<text v-if="会话.会话类型 == '群聊'"> · {{ 会话.成员数 ?? 0 }} 人</text>
-							<text v-else-if="会话.会话类型 == '委托' && 会话.会话状态"> · {{ 会话.会话状态 }}</text>
-							<text v-if="(会话.新消息条数 ?? 0) > 0"> · 新消息 {{ 会话.新消息条数 }}</text>
-						</text>
 					</view>
 					<text class="jian_tou">›</text>
+					<text
+						v-if="(会话.新消息条数 ?? 0) > 0"
+						class="wei_du_xin_xi_shu"
+					>{{ 会话.新消息条数 > 99 ? '99+' : 会话.新消息条数 }}</text>
+					<TongYiJueJue
+						v-if="会话.会话类型 == '好友验证' || 会话.会话类型 == '群邀请'"
+						:会话="会话"
+					/>
 				</view>
 			</view>
 
@@ -109,7 +123,11 @@
 
 <style lang="scss">
 	.hui_hua_hang {
+		position: relative;
+		height: 72px;
 		padding: 10px 4px;
+		flex-wrap: nowrap;
+		overflow: hidden;
 	}
 
 	.hui_hua_tou_xiang {
@@ -130,11 +148,46 @@
 	.hui_hua_wen_ben {
 		display: flex;
 		flex-direction: column;
+		height: 52px;
+		min-width: 0;
+		justify-content: center;
 	}
 
-	.hui_hua_lei_xing {
-		margin-top: 3px;
-		color: #087e67;
+	.liang_duan_dui_qi > .fu_zhu_wen_ben {
+		margin-right: 22px;
+	}
+
+	.liang_duan_dui_qi {
+		flex-wrap: nowrap;
+		width: 100%;
+	}
+
+	.ka_pian_biao_ti {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.hui_hua_zhai_yao {
+		margin-top: 6px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.wei_du_xin_xi_shu {
+		position: absolute;
+		top: 7px;
+		right: 7px;
+		min-width: 18px;
+		height: 18px;
+		padding: 0 5px;
+		border-radius: 9px;
+		background-color: #f02d2d;
+		color: #ffffff;
 		font-size: 11px;
+		line-height: 18px;
+		text-align: center;
 	}
 </style>

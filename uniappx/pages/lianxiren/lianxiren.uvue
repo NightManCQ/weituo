@@ -1,15 +1,13 @@
 <script setup lang="ts">
 import { onShow } from '@dcloudio/uni-app'
 import { computed, ref } from 'vue'
-import type { 联系人列表数据, 群邀请, 用户 } from '../../common/leixing'
-import { 发送请求, 格式化时间, 读取当前用户 } from '../../common/wangluo'
-import { 会话列表 } from '../xiaoxi/会话列表'
+import type { 联系人列表数据, 用户 } from '../../common/leixing'
+import { 发送请求, 读取当前用户 } from '../../common/wangluo'
 import { 联系人列表, 刷新联系人列表 } from './联系人列表'
 
 type 好友 = Extract<联系人列表数据['数据'][number], { 项目类型: '好友' }>
 type 群组 = Extract<联系人列表数据['数据'][number], { 项目类型: '群聊' }>
 const 当前用户 = ref<用户 | null>(null)
-const 邀请列表 = ref<群邀请[]>([])
 const 搜索 = ref('')
 const 正在加载 = ref(false)
 const 错误 = ref('')
@@ -24,15 +22,6 @@ async function 刷新() {
   错误.value = ''
   try {
     await 刷新联系人列表()
-    邀请列表.value = 会话列表.value.filter((项目) => 项目.会话类型 == '群邀请').map((项目) => ({
-      邀请编号: 项目.会话编号,
-      群组编号: 项目.关联编号,
-      群组名称: 项目.会话名称,
-      邀请人编号: 项目.邀请人编号 || '',
-      邀请人昵称: 项目.联系人昵称 || '',
-      创建时间: 项目.最近消息时间,
-      过期时间: 项目.过期时间 || '',
-    }))
   } catch (原因) {
     错误.value = 原因 instanceof Error ? 原因.message : '加载联系人失败'
   } finally {
@@ -61,16 +50,6 @@ async function 删除好友(好友项: 好友) {
     await 刷新()
   } catch (原因) {
     uni.showToast({ title: 原因 instanceof Error ? 原因.message : '删除好友失败', icon: 'none' })
-  }
-}
-
-async function 处理邀请(邀请: 群邀请, 操作: 'accept' | 'reject') {
-  try {
-    await 发送请求(`/group-invitations/${encodeURIComponent(邀请.邀请编号)}/${操作}`, { method: 'POST' })
-    await 刷新()
-    if (操作 == 'accept') 打开群聊(邀请.群组编号)
-  } catch (原因) {
-    uni.showToast({ title: 原因 instanceof Error ? 原因.message : '处理邀请失败', icon: 'none' })
   }
 }
 
@@ -104,12 +83,6 @@ onShow(() => {
       <text class="biao_qian">群聊（{{ 群聊个数 }}）</text>
       <view v-for="群 in 群聊列表.filter((项目) => `${项目.群组名称} ${项目.最近消息 || ''}`.toLowerCase().includes(搜索.toLowerCase()))" :key="群.群组编号" class="lie_biao_hang ke_dian_ji" @click="打开群聊(群.群组编号)">
         <view class="zhan_kai"><text class="ka_pian_biao_ti">{{ 群.群组名称 }}</text><text class="fu_zhu_wen_ben">{{ 群.最近消息 || 群.群组公告 || '还没有消息' }} · {{ 群.成员数 }}人</text></view><text class="jian_tou">›</text>
-      </view>
-      <text class="biao_qian">群邀请</text>
-      <view v-for="邀请 in 邀请列表" :key="邀请.邀请编号" class="ka_pian">
-        <text class="ka_pian_biao_ti">{{ 邀请.邀请人昵称 }} 邀请加入 {{ 邀请.群组名称 }}</text>
-        <text class="fu_zhu_wen_ben">{{ 格式化时间(邀请.创建时间) }}</text>
-        <view class="cao_zuo_zu"><button class="xiao_hao zhu_yao_an_niu" @click="处理邀请(邀请, 'accept')">加入</button><button class="xiao_hao ci_yao_an_niu" @click="处理邀请(邀请, 'reject')">拒绝</button></view>
       </view>
       <view v-if="正在加载" class="kong_zhuang_tai">正在同步联系人…</view>
     </template>

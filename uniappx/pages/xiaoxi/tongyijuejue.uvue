@@ -1,0 +1,91 @@
+<script setup lang="ts">
+	import { ref } from 'vue'
+	import { 发送请求 } from '../../common/wangluo'
+	import type { 消息会话 } from '../../common/leixing'
+	import { 刷新会话列表 } from './会话列表'
+
+	const 属性 = defineProps<{ 会话 : 消息会话 }>()
+	const 正在处理 = ref(false)
+
+	function 是否显示操作() : boolean {
+		return 属性.会话.会话类型 == '好友验证' || 属性.会话.会话类型 == '群邀请'
+	}
+
+	async function 处理请求(操作 : 'accept' | 'reject') : Promise<void> {
+		if (!是否显示操作() || 正在处理.value) return
+
+		正在处理.value = true
+		try {
+			if (属性.会话.会话类型 == '好友验证') {
+				await 发送请求(`/my/friend-requests/${encodeURIComponent(属性.会话.会话编号)}/${操作}`, {
+					method: 'POST',
+				})
+			} else {
+				await 发送请求(`/group-invitations/${encodeURIComponent(属性.会话.会话编号)}/${操作}`, {
+					method: 'POST',
+				})
+			}
+			await 刷新会话列表()
+
+			if (操作 == 'accept' && 属性.会话.会话类型 == '群邀请') {
+				uni.navigateTo({
+					url: `/pages/liaotian/liaotian?groupId=${encodeURIComponent(属性.会话.关联编号)}`,
+				})
+			}
+		} catch (原因) {
+			uni.showToast({
+				title: 原因 instanceof Error ? 原因.message : '处理请求失败',
+				icon: 'none',
+			})
+		} finally {
+			正在处理.value = false
+		}
+	}
+</script>
+
+<template>
+	<view v-if="是否显示操作()" class="tong_yi_ju_jue_cao_zuo">
+		<button
+			class="cao_zuo_an_niu tong_yi_an_niu"
+			:disabled="正在处理"
+			@click.stop="处理请求('accept')"
+		>同意</button>
+		<button
+			class="cao_zuo_an_niu ju_jue_an_niu"
+			:disabled="正在处理"
+			@click.stop="处理请求('reject')"
+		>拒绝</button>
+	</view>
+</template>
+
+<style lang="scss">
+	.tong_yi_ju_jue_cao_zuo {
+		position: absolute;
+		right: 8px;
+		bottom: 5px;
+		flex-direction: row;
+		align-items: center;
+		gap: 6px;
+		z-index: 2;
+	}
+
+	.cao_zuo_an_niu {
+		height: 26px;
+		min-width: 48px;
+		padding: 0 10px;
+		border: 0;
+		border-radius: 13px;
+		font-size: 12px;
+		line-height: 26px;
+	}
+
+	.tong_yi_an_niu {
+		background-color: #087e67;
+		color: #ffffff;
+	}
+
+	.ju_jue_an_niu {
+		background-color: #eef1f0;
+		color: #5c6865;
+	}
+</style>

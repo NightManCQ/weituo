@@ -94,7 +94,7 @@
 	}
 
 	.ye_mian {
-		padding: 18px 16px 30px;
+		padding: 8px;
 	}
 
 	.ye_mian_biao_ti {

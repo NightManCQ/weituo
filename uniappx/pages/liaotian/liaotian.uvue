@@ -2,11 +2,12 @@
 	import { onHide, onLoad, onShow } from '@dcloudio/uni-app'
 	import { nextTick, ref } from 'vue'
 	import type { 好友消息, 群消息, 用户 } from '../../common/leixing'
-	import { 创建编号, 发送请求, 格式化时间, 读取当前用户 } from '../../common/wangluo'
+	import { 创建编号, 发送请求, 读取当前用户 } from '../../common/wangluo'
 	import { 订阅实时事件 } from '../../common/实时'
 	import type { 实时事件 } from '../../common/实时'
 	import { 使用全局变量 } from "../../状态/全局.ts"
 	import { 清零会话新消息条数 } from '../xiaoxi/会话列表'
+	import { 格式化日期标签, 格式化消息时间, 消息日期键 } from '../xiaoxi/时间'
 
 	type 群成员 = { 用户编号 : string; 昵称 : string; 成员角色 : string }
 	type 群详情 = {
@@ -39,32 +40,8 @@
 	let 正在刷新 = false
 	let 取消订阅 : (() => void) | null = null
 
-	function 格式化消息时间(值 : string) : string {
-		const 日期 = new Date(值)
-		if (Number.isNaN(日期.getTime())) return ''
-		return `${String(日期.getHours()).padStart(2, '0')}:${String(日期.getMinutes()).padStart(2, '0')}`
-	}
-
-	function 消息日期键(值 : string) : string {
-		const 日期 = new Date(值)
-		if (Number.isNaN(日期.getTime())) return 值.slice(0, 10)
-		return `${日期.getFullYear()}-${日期.getMonth() + 1}-${日期.getDate()}`
-	}
-
 	function 是否显示日期(消息列表 : 好友消息[] | 群消息[], 索引 : number) : boolean {
 		return 索引 == 0 || 消息日期键(消息列表[索引 - 1].创建时间) != 消息日期键(消息列表[索引].创建时间)
-	}
-
-	function 格式化日期标签(值 : string) : string {
-		const 日期 = new Date(值)
-		if (Number.isNaN(日期.getTime())) return 值.slice(0, 10)
-		const 今天 = new Date()
-		const 日期零点 = new Date(日期.getFullYear(), 日期.getMonth(), 日期.getDate()).getTime()
-		const 今天零点 = new Date(今天.getFullYear(), 今天.getMonth(), 今天.getDate()).getTime()
-		const 相差天数 = Math.floor((今天零点 - 日期零点) / 86400000)
-		if (相差天数 == 0) return '今天'
-		if (相差天数 == 1) return '昨天'
-		return `${日期.getFullYear()}年${日期.getMonth() + 1}月${日期.getDate()}日`
 	}
 
 	function 滚动到最新消息() {

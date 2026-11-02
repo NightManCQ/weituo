@@ -65,6 +65,8 @@ emqxMqtt.注册事件监听("message", (数据: MQTT事件数据) => {
   if (typeof 数据.主题 != "string") return;
   try {
     const 原始事件 = 解析MQTT载荷(数据.载荷 ?? 数据.二进制载荷);
+    console.log("---------------mqtt事件", 原始事件);
+
     if (原始事件 == null) return;
     const 事件类型值 = 读取记录值(原始事件, ["事件类型", "event_type"]);
     const 事件类型 = typeof 事件类型值 == "string" ? 事件类型值 : "notification.unknown";
@@ -205,7 +207,7 @@ async function 连接() {
 
       await emqxMqtt.连接({
         地址,
-        客户端编号: (使用全局变量.系统信息.系统名 + "-" + 当前用户.用户编号).replace(/\s+/g, ""),
+        客户端编号: (使用全局变量.系统信息.系统名 + "-" + 当前用户.用户编号).replace(/\s+/g, "") + "-" + Math.random(),
         用户名: 当前用户.用户编号,
         密码: 令牌,
         清理会话: true,
@@ -220,10 +222,7 @@ async function 连接() {
         return;
       }
       重连次数 = 0;
-      const 主题列表 = [...new Set([
-        `u/${用户信息.用户编号}`,
-        ...会话列表.value.flatMap((会话) => 会话.MQTT主题 ? [会话.MQTT主题] : []),
-      ])];
+      const 主题列表 = [...new Set([`u/${用户信息.用户编号}`, ...会话列表.value.flatMap((会话) => (会话.MQTT主题 ? [会话.MQTT主题] : []))])];
       console.log("订阅的主题列表", 主题列表);
 
       await emqxMqtt.订阅(主题列表, 1);

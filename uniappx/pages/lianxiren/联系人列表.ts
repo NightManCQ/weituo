@@ -56,9 +56,3 @@ export function 发送好友申请(目标用户编号 : string, 附言 : string)
    } as UTSJSONObject,
  })
 }
-
-export function 处理好友申请(申请编号 : string, 操作 : 'accept' | 'reject') : Promise<unknown> {
- return 发送请求(`/my/friend-requests/${encodeURIComponent(申请编号)}/${操作}`, {
-   method: 'POST',
- })
-}
