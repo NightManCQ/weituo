@@ -309,7 +309,7 @@ export function 连接(参数: 连接参数): Promise<void> {
         (错误: string) => {
           stateManager.setDisconnected(错误)
           logMessage(日志级别.ERROR, 'Connection failed: ' + 错误)
-          emitEvent('错误', { 错误: 错误 } as 事件数据)
+          emitEvent('error', { 错误: 错误 } as 事件数据)
           reject(new Error(错误))
         }
       )
@@ -553,7 +553,7 @@ export function 获取连接状态(): any {
   const s = stateManager.get连接状态()
   return {
     状态:            s.状态.toString(),
-    connectedAt:       s.connectedAt,
+    连接时间:      s.连接时间,
     最后错误:         s.最后错误,
     重连次数: s.重连次数,
     会话存在:    s.会话存在

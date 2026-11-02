@@ -69,12 +69,12 @@ export async function 连接全局实时服务(
   通知连接状态("connecting");
 
   const 连接任务 = (async () => {
-    const 会话列表 = await 发送请求<Array<{ MQTT主题: string }>>("/my/message-conversations", {}, 令牌);
+    const 会话列表 = await 发送请求<Array<{ MQTT主题?: string }>>("/my/message-conversations", {}, 令牌);
     if (代数 !== 连接代数) return;
 
     const 主题列表 = [...new Set([
       `u/${用户编号}`,
-      ...会话列表.map(会话 => 会话.MQTT主题),
+      ...会话列表.flatMap(会话 => 会话.MQTT主题 ? [会话.MQTT主题] : []),
     ])];
     const MQTT地址 = import.meta.env.VITE_MQTT_URL
       || localStorage.getItem("renwu_mqtt_url")

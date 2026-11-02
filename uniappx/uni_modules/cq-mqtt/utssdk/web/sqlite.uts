@@ -199,7 +199,8 @@ async function 载入并初始化() : Promise<any> {
 
 /** 从指定地址加载官方 ESM 并调 sqlite3InitModule() */
 async function 从地址初始化(地址 : string) : Promise<any> {
-	const 模块 : any = await import(地址)
+	// 地址是运行期拼接的，Vite 无法静态分析，用 @vite-ignore 消除告警（uni-app x web 同理）
+	const 模块 : any = await import(/* @vite-ignore */ 地址)
 	return await 从模块初始化(模块)
 }
 

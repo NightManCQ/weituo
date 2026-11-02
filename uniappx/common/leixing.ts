@@ -46,7 +46,7 @@ export type 消息会话 = {
   申请人登录名?: string | null
   申请附言?: string | null
   新消息条数?: number
-  MQTT主题: string
+  MQTT主题?: string
 }
 
 export type 好友联系人 = {

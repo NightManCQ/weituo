@@ -17,7 +17,7 @@ function 触发事件(事件 : MQTT事件, 数据 : MQTT事件数据 = {}) {
 		try {
 			回调(数据)
 		} catch (原因) {
-			console.错误('MQTT 事件监听处理失败', 原因)
+			console.error('MQTT 事件监听处理失败', 原因)
 		}
 	})
 }
@@ -61,14 +61,15 @@ function 编码UTF8(文本 : string) : number[] {
 }
 
 function 解码UTF8(字节 : Uint8Array) : string {
-	let 编码 = ''
+	let 编码 : string = ''
 	for (let 索引 = 0; 索引 < 字节.length; 索引++) {
 		编码 += `%${字节[索引].toString(16).padStart(2, '0')}`
 	}
 	try {
-		return decodeURIComponent(编码)
+		// UTS 里 decodeURIComponent 的返回类型是可空 string（TS 侧 string | null），做一次兜底
+		return decodeURIComponent(编码) ?? ''
 	} catch (原因) {
-		console.错误('MQTT 消息 UTF-8 解码失败', 原因)
+		console.error('MQTT 消息 UTF-8 解码失败', 原因)
 		return ''
 	}
 }
@@ -90,7 +91,9 @@ function 编码剩余长度(长度 : number) : number[] {
 }
 
 function MQTT数据包(头 : number, 内容 : number[]) : ArrayBuffer {
-	return new Uint8Array([头, ...编码剩余长度(内容.length), ...内容]).buffer
+	const 字节 = new Uint8Array([头, ...编码剩余长度(内容.length), ...内容])
+	// .buffer 在 TS 里是 ArrayBufferLike（含 SharedArrayBuffer），显式断言为 ArrayBuffer
+	return 字节.buffer as ArrayBuffer
 }
 
 function 获取消息编号() : number {
@@ -178,13 +181,13 @@ function 处理数据包(数据 : ArrayBuffer) {
 				const 原因 = new Error(`MQTT broker 拒绝连接（返回码 ${返回码}）`)
 				连接完成?.(原因)
 				连接完成 = null
-				触发事件('错误', { 错误: 原因.message })
+				触发事件('error', { 错误: 原因.message })
 				连接对象?.close({})
 				return
 			}
 			已连接 = true
 			if (心跳定时器 != null) clearInterval(心跳定时器)
-			心跳定时器 = setInterval(() => 发送(new Uint8Array([0xC0, 0]).buffer), 45000)
+			心跳定时器 = setInterval(() => 发送(new Uint8Array([0xC0, 0]).buffer as ArrayBuffer), 45000)
 			连接完成?.()
 			连接完成 = null
 			触发事件('connect')
@@ -314,13 +317,13 @@ export function 连接(参数 : MQTT连接参数) : Promise<void> {
 			if (连接对象 != 新连接) return
 			if (事件.data instanceof ArrayBuffer) 处理数据包(事件.data)
 			else if (typeof 事件.data == 'string') {
-				处理数据包(new Uint8Array(编码UTF8(事件.data)).buffer)
+				处理数据包(new Uint8Array(编码UTF8(事件.data)).buffer as ArrayBuffer)
 			}
 		})
 		新连接.onError(() => {
 			if (连接对象 != 新连接) return
 			const 原因 = new Error('MQTT WebSocket 连接发生错误')
-			触发事件('错误', { 错误: 原因.message })
+			触发事件('error', { 错误: 原因.message })
 			连接失败(原因)
 		})
 		新连接.onClose(() => {
@@ -346,7 +349,7 @@ export function 连接(参数 : MQTT连接参数) : Promise<void> {
 
 export function 断开连接() : Promise<void> {
 	const 旧连接 = 连接对象
-	if (已连接) 发送(new Uint8Array([0xE0, 0]).buffer)
+	if (已连接) 发送(new Uint8Array([0xE0, 0]).buffer as ArrayBuffer)
 	连接对象 = null
 	已连接 = false
 	if (心跳定时器 != null) {
@@ -363,7 +366,7 @@ export function 断开连接() : Promise<void> {
 		try {
 			旧连接.close({})
 		} catch (原因) {
-			console.错误('关闭 MQTT WebSocket 连接失败', 原因)
+			console.error('关闭 MQTT WebSocket 连接失败', 原因)
 		}
 	}
 	return Promise.resolve()

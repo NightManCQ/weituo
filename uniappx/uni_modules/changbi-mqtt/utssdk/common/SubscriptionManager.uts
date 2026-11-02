@@ -5,6 +5,7 @@
  * 版本: 1.1.0
  * 更新: 2024-04-11
  * 说明: 使用双数据结构（Map + Array）避免 Map 遍历的编译问题
+ *       字段统一使用中文命名（主题 / 服务质量 / 订阅时间），与外层访问保持一致
  */
 
 import { 服务质量等级 } from '../interface.uts'
@@ -13,9 +14,9 @@ import { 服务质量等级 } from '../interface.uts'
  * 订阅信息
  */
 export type Subscription = {
-  topic: string
-  qos: 服务质量等级
-  subscribedAt: number
+  主题: string
+  服务质量: 服务质量等级
+  订阅时间: number
 }
 
 /**
@@ -24,51 +25,51 @@ export type Subscription = {
 export class SubscriptionManager {
   private subscriptions: Map<string, Subscription> = new Map()
   private subscriptionList: Subscription[] = []  // 同时维护一个数组
-  
+
   /**
    * 添加订阅
    */
-  addSubscription(topic: string, qos: 服务质量等级): void {
-    // 先尝试移除，确保数组和 Map 中没有重复的 topic 项
-    this.removeSubscription(topic)
+  addSubscription(主题: string, 服务质量: 服务质量等级): void {
+    // 先尝试移除，确保数组和 Map 中没有重复的主题项
+    this.removeSubscription(主题)
 
     const subscription: Subscription = {
-      topic: topic,
-      qos: qos,
-      subscribedAt: Date.now()
+      主题: 主题,
+      服务质量: 服务质量,
+      订阅时间: Date.now()
     }
-    this.subscriptions.set(topic, subscription)
+    this.subscriptions.set(主题, subscription)
     // 同时添加到数组
     this.subscriptionList.push(subscription)
   }
-  
+
   /**
    * 移除订阅
    */
-  removeSubscription(topic: string): void {
-    this.subscriptions.delete(topic)
+  removeSubscription(主题: string): void {
+    this.subscriptions.delete(主题)
     // 从数组中移除
-    const index = this.subscriptionList.findIndex((sub) => sub.topic === topic)
+    const index = this.subscriptionList.findIndex((sub) => sub.主题 === 主题)
     if (index > -1) {
       this.subscriptionList.splice(index, 1)
     }
   }
-  
+
   /**
    * 检查是否已订阅
    */
-  hasSubscription(topic: string): boolean {
-    return this.subscriptions.has(topic)
+  hasSubscription(主题: string): boolean {
+    return this.subscriptions.has(主题)
   }
-  
+
   /**
    * 获取订阅信息
    */
-  getSubscription(topic: string): Subscription | null {
-    const sub = this.subscriptions.get(topic)
+  getSubscription(主题: string): Subscription | null {
+    const sub = this.subscriptions.get(主题)
     return sub != null ? sub : null
   }
-  
+
   /**
    * 获取所有订阅
    */
@@ -76,7 +77,7 @@ export class SubscriptionManager {
     // 直接返回数组的副本
     return this.subscriptionList.slice()
   }
-  
+
   /**
    * 清空所有订阅
    */
@@ -84,7 +85,7 @@ export class SubscriptionManager {
     this.subscriptions.clear()
     this.subscriptionList = []
   }
-  
+
   /**
    * 获取订阅数量
    */

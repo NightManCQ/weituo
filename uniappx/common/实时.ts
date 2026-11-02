@@ -3,7 +3,7 @@ import { 读取MQTT地址 } from "./本地存储";
 import { 会话列表, 新增或刷新会话, 更新会话最近消息 } from "../pages/xiaoxi/会话列表";
 import { 使用全局变量, 用户信息 } from "../状态/全局.ts";
 import type { 用户 } from "./leixing";
-import type { MQTT事件, MQTT事件数据, MQTT回调, MQTT连接参数, 实时事件, 实时监听器 } from "./实时.类型";
+import type { MQTT事件数据, 实时事件, 实时监听器 } from "./实时.类型";
 
 export type { MQTT事件, MQTT事件数据, MQTT回调, MQTT连接参数, MQTT遗嘱消息, 实时事件, 实时监听器 } from "./实时.类型";
 
@@ -44,36 +44,6 @@ function 解析MQTT载荷(载荷: string | ArrayBuffer | undefined): Record<stri
   if (typeof 内容 != "object" || 内容 == null || Array.isArray(内容)) return null;
   return 内容 as Record<string, unknown>;
 }
-
-export const emqx = {
-  连接(参数: MQTT连接参数): Promise<void> {
-    return emqxMqtt.连接(参数);
-  },
-  断开连接(): Promise<void> {
-    return emqxMqtt.断开连接();
-  },
-  是否已连接(): boolean {
-    return emqxMqtt.是否已连接();
-  },
-  订阅(主题: string | string[], 服务质量: 0 | 1 | 2 = 1): Promise<void> {
-    const 主题列表 = Array.isArray(主题) ? 主题 : [主题];
-    if (主题列表.length == 0) return Promise.resolve();
-    return emqxMqtt.订阅(主题列表, 服务质量);
-  },
-  取消订阅(主题: string | string[]): Promise<void> {
-    const 主题列表 = Array.isArray(主题) ? 主题 : [主题];
-    return emqxMqtt.取消订阅(主题列表);
-  },
-  发布(主题: string, 载荷: string | ArrayBuffer): Promise<void> {
-    return emqxMqtt.发布(主题, 载荷, { qos: 1 });
-  },
-  注册事件监听(事件: MQTT事件, 回调: MQTT回调) {
-    if (事件 != "message") emqxMqtt.注册事件监听(事件, 回调);
-  },
-  移除事件监听(事件: MQTT事件, 回调?: MQTT回调) {
-    if (事件 != "message") emqxMqtt.移除事件监听(事件, 回调);
-  },
-};
 
 function 通知关闭时重连() {
   if (重连定时器 != null || 当前用户 == null || !获取令牌()) return;
@@ -162,7 +132,6 @@ emqxMqtt.注册事件监听("message", (数据: MQTT事件数据) => {
           成员数: null,
           申请人登录名: typeof 申请人登录名 == "string" ? 申请人登录名 : null,
           申请附言: typeof 申请附言 == "string" ? 申请附言 : null,
-          MQTT主题: `u/${当前用户编号}`,
         });
       }
     }
@@ -185,7 +154,6 @@ emqxMqtt.注册事件监听("message", (数据: MQTT事件数据) => {
           会话状态: "待接受",
           成员数: null,
           邀请人编号: typeof 邀请人编号 == "string" ? 邀请人编号 : null,
-          MQTT主题: `u/${当前用户编号}`,
         });
       }
     }
@@ -194,7 +162,7 @@ emqxMqtt.注册事件监听("message", (数据: MQTT事件数据) => {
   }
 });
 
-emqx.注册事件监听("close", () => {
+emqxMqtt.注册事件监听("close", () => {
   if (uni.getSystemInfoSync().platform != "android") 通知关闭时重连();
 });
 
@@ -211,7 +179,7 @@ export async function 连接实时消息(用户: 用户 | null = 读取当前用
     当前用户 = 用户;
     当前身份键 = 新身份键;
   }
-  if (emqx.是否已连接()) return;
+  if (emqxMqtt.是否已连接()) return;
   if (正在连接 != null) return await 正在连接;
   await 连接();
 }
@@ -235,7 +203,7 @@ async function 连接() {
         地址 = "ws" + 地址 + ":8084/wss";
       }
 
-      await emqx.连接({
+      await emqxMqtt.连接({
         地址,
         客户端编号: (使用全局变量.系统信息.系统名 + "-" + 当前用户.用户编号).replace(/\s+/g, ""),
         用户名: 当前用户.用户编号,
@@ -248,12 +216,17 @@ async function 连接() {
         最大重连次数: 10,
       });
       if (本次连接代次 != 连接代次) {
-        await emqx.断开连接();
+        await emqxMqtt.断开连接();
         return;
       }
       重连次数 = 0;
-      const 主题列表 = [...new Set([`u/${用户信息.用户编号}`, ...会话列表.value.map((会话) => 会话.MQTT主题)])];
-      await emqx.订阅(主题列表, 1);
+      const 主题列表 = [...new Set([
+        `u/${用户信息.用户编号}`,
+        ...会话列表.value.flatMap((会话) => 会话.MQTT主题 ? [会话.MQTT主题] : []),
+      ])];
+      console.log("订阅的主题列表", 主题列表);
+
+      await emqxMqtt.订阅(主题列表, 1);
     } catch (原因) {
       console.error("无法连接 MQTT 实时消息服务", 原因);
       if (本次连接代次 == 连接代次) 通知关闭时重连();
@@ -284,7 +257,7 @@ export async function 断开实时消息() {
   正在连接 = null;
   if (旧连接任务 != null) await 旧连接任务;
   try {
-    await emqx.断开连接();
+    await emqxMqtt.断开连接();
   } catch (原因) {
     console.error("断开 MQTT 实时连接失败", 原因);
   }

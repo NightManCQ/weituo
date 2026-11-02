@@ -68,7 +68,7 @@ export type 消息会话 = {
   最近消息时间: string
   会话状态: string | null
   成员数: number | null
-  MQTT主题: string
+  MQTT主题?: string
 }
 
 export type 群组 = {

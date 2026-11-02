@@ -20,7 +20,8 @@ pub(super) struct 消息会话视图 {
     pub(super) 成员数: Option<i64>,
     pub(super) 邀请人编号: Option<Uuid>,
     pub(super) 过期时间: Option<DateTime<Utc>>,
-    pub(super) MQTT主题: String,
+    #[serde(rename = "MQTT主题", skip_serializing_if = "Option::is_none")]
+    pub(super) mqtt主题: Option<String>,
     pub(super) 申请人登录名: Option<String>,
     pub(super) 申请附言: Option<String>,
 }
@@ -219,15 +220,15 @@ pub(super) async fn 查询我的消息会话(
             .iter()
             .map(|记录| {
                 let 会话类型: String = 记录.get("会话类型");
+                let 会话编号: Uuid = 记录.get("会话编号");
                 let 关联编号: Uuid = 记录.get("关联编号");
-                let MQTT主题 = match 会话类型.as_str() {
-                    "委托" | "群聊" => format!("q/{关联编号}"),
-                    "好友" | "群邀请" => 构造用户通知主题(用户编号),
-                    _ => 构造用户通知主题(用户编号),
+                let mqtt主题 = match 会话类型.as_str() {
+                    "委托" | "群聊" => Some(format!("q/{会话编号}")),
+                    _ => None,
                 };
                 消息会话视图 {
                     会话类型,
-                    会话编号: 记录.get("会话编号"),
+                    会话编号,
                     关联编号,
                     会话名称: 记录.get("会话名称"),
                     联系人昵称: 记录.get("联系人昵称"),
@@ -238,7 +239,7 @@ pub(super) async fn 查询我的消息会话(
                     成员数: 记录.get("成员数"),
                     邀请人编号: 记录.get("邀请人编号"),
                     过期时间: 记录.get("过期时间"),
-                    MQTT主题,
+                    mqtt主题,
                     申请人登录名: 记录.get("申请人登录名"),
                     申请附言: 记录.get("申请附言"),
                 }

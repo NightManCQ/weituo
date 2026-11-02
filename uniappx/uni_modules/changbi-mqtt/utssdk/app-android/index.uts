@@ -29,7 +29,9 @@ import { ConnectionManager, ReconnectConfig } from '../common/ConnectionManager.
  */
 let 助手 : MqttHelper | null = null
 let 事件监听器集合 : Map<string, Array<事件回调>> = new Map()
-let 日志级别 : 日志级别 = 日志级别.INFO
+// 注意：变量名不能与枚举类型「日志级别」同名，否则 Kotlin 侧枚举类无 companion object，
+// 会被当成表达式解析，导致变量类型退化为 Unit（编译报错 error17）
+let 当前日志级别 : 日志级别 = 日志级别.INFO
 
 // 订阅管理器、消息处理器、状态管理器和连接管理器
 let 订阅管理器 : SubscriptionManager = new SubscriptionManager()
@@ -105,7 +107,7 @@ function 初始化助手() : void {
 					触发事件('close', 事件数据)
 					if (状态.最后错误 !== null) {
 						const 错误数据 : 事件数据 = {
-							错误: 状态.最后错误
+							错误: 状态.最后错误!
 						}
 						触发事件('offline', 错误数据)
 					}
@@ -185,7 +187,7 @@ function 初始化助手() : void {
 				触发事件('message', 事件数据)
 				主题订阅消息回调.get(主题)?.forEach((回调) => {
 					try { 回调(事件数据 as MQTT订阅消息) }
-					catch (原因) { console.错误('主题订阅消息处理失败: ' + 原因) }
+					catch (原因) { console.error('主题订阅消息处理失败: ' + 原因) }
 				})
 				记录日志(日志级别.DEBUG, 'Message received on 主题 ' + 主题)
 			}
@@ -235,7 +237,7 @@ function 触发事件(事件 : string, 数据 : 事件数据) : void {
 			try {
 				回调(数据)
 			} catch (原因) {
-				console.错误('Error in event handler for ' + 事件 + ':', 原因)
+				console.error('Error in event handler for ' + 事件 + ':', 原因)
 			}
 		})
 	}
@@ -245,7 +247,7 @@ function 触发事件(事件 : string, 数据 : 事件数据) : void {
  * 记录日志
  */
 function 记录日志(级别 : 日志级别, 消息文本 : string) : void {
-	if (级别 >= 日志级别) {
+	if (级别 >= 当前日志级别) {
 		console.log('[MQTT] ' + 消息文本)
 	}
 }
@@ -273,16 +275,16 @@ export function 连接(参数 : 连接参数) : Promise<void> {
 			if (参数.重连间隔 != null) {
 				const 重连配置 = {
 					enabled: true,
-					重连间隔: 参数.重连间隔,
-					最大重连次数: 10
+					reconnectPeriod: 参数.重连间隔,
+					maxReconnectAttempts: 10
 				} as ReconnectConfig
 				连接管理器.setReconnectConfig(重连配置)
 			}
 			if (参数.最大重连次数 != null) {
 				const 重连配置 = {
 					enabled: true,
-					重连间隔: 5000,
-					最大重连次数: 参数.最大重连次数
+					reconnectPeriod: 5000,
+					maxReconnectAttempts: 参数.最大重连次数
 				} as ReconnectConfig
 				连接管理器.setReconnectConfig(重连配置)
 			}
@@ -333,7 +335,7 @@ export function 连接(参数 : 连接参数) : Promise<void> {
 					const 错误数据 : 事件数据 = {
 						错误: 错误
 					}
-					触发事件('错误', 错误数据)
+					触发事件('error', 错误数据)
 
 					拒绝(new Error(错误))
 				}
@@ -666,7 +668,7 @@ export function 获取连接状态() : any {
 	// 转换为兼容的格式
 	return {
 		状态: 当前状态.状态.toString(),
-		连接时间: 当前状态.connectedAt,
+		连接时间: 当前状态.连接时间,
 		最后错误: 当前状态.最后错误,
 		重连次数: 当前状态.重连次数,
 		会话存在: 当前状态.会话存在
@@ -677,7 +679,7 @@ export function 获取连接状态() : any {
  * 设置日志级别
  */
 export function 设置日志级别(级别 : 日志级别) : void {
-	日志级别 = 级别
+	当前日志级别 = 级别
 }
 
 /**
