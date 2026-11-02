@@ -7,6 +7,7 @@
 	const 用户信息 = ref<用户详细信息 | null>(null)
 	const 正在加载 = ref(false)
 	const 错误信息 = ref('')
+	const 正在删除 = ref(false)
 	let 用户编号 = ''
 
 	function 格式化时间(时间 : string) : string {
@@ -33,6 +34,30 @@
 		uni.navigateTo({
 			url: `/pages/liaotian/liaotian?hui_hua=${encodeURIComponent(用户信息.value.用户编号)}&ming_cheng=${encodeURIComponent(用户信息.value.昵称)}&lei_xing=好友&bian_hao=${encodeURIComponent(用户信息.value.用户编号)}`,
 		})
+	}
+
+	async function 删除好友() : Promise<void> {
+		if (!用户信息.value || !用户信息.value.是否好友 || 正在删除.value) return
+		const 确认 = await new Promise<boolean>((resolve) => uni.showModal({
+			title: '删除好友',
+			content: `确定删除好友 ${用户信息.value?.昵称} 吗？历史聊天记录会保留。`,
+			success: (结果) => resolve(结果.confirm),
+			fail: () => resolve(false),
+		}))
+		if (!确认) return
+		正在删除.value = true
+		try {
+			await 发送请求(`/my/friends/${encodeURIComponent(用户编号)}`, { method: 'DELETE' })
+			uni.showToast({ title: '好友已删除', icon: 'success' })
+			uni.navigateBack()
+		} catch (原因) {
+			uni.showToast({
+				title: 原因 instanceof Error ? 原因.message : '删除好友失败',
+				icon: 'none',
+			})
+		} finally {
+			正在删除.value = false
+		}
 	}
 
 	onLoad((参数) => {
@@ -66,6 +91,12 @@
 			</view>
 
 			<button v-if="用户信息.是否好友" class="zhu_yao_an_niu" @click="进入聊天">发送消息</button>
+			<button
+				v-if="用户信息.是否好友"
+				class="shan_chu_an_niu"
+				:disabled="正在删除"
+				@click="删除好友"
+			>{{ 正在删除 ? '删除中…' : '删除好友' }}</button>
 		</view>
 	</view>
 </template>
@@ -141,5 +172,15 @@
 		background: #087e67;
 		color: #ffffff;
 		border-radius: 8px;
+	}
+
+	.shan_chu_an_niu {
+		width: 100%;
+		margin-top: 12px;
+		background: #ffffff;
+		color: #c0392b;
+		border-radius: 8px;
+		border-width: 1px;
+		border-color: #e0a6a0;
 	}
 </style>

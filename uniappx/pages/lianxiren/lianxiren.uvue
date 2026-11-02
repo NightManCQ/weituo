@@ -2,19 +2,25 @@
 import { onShow } from '@dcloudio/uni-app'
 import { computed, ref } from 'vue'
 import type { 联系人列表数据, 用户 } from '../../common/leixing'
-import { 发送请求, 读取当前用户 } from '../../common/wangluo'
+import { 读取当前用户 } from '../../common/wangluo'
 import { 联系人列表, 刷新联系人列表 } from './联系人列表'
 
 type 好友 = Extract<联系人列表数据['数据'][number], { 项目类型: '好友' }>
 type 群组 = Extract<联系人列表数据['数据'][number], { 项目类型: '群聊' }>
+type 联系人项目 = 联系人列表数据['数据'][number]
 const 当前用户 = ref<用户 | null>(null)
 const 搜索 = ref('')
 const 正在加载 = ref(false)
 const 错误 = ref('')
-const 好友列表 = computed(() => 联系人列表.value?.数据.filter((项目): 项目 is 好友 => 项目.项目类型 == '好友') || [])
-const 群聊列表 = computed(() => 联系人列表.value?.数据.filter((项目): 项目 is 群组 => 项目.项目类型 == '群聊') || [])
-const 联系人个数 = computed(() => 联系人列表.value?.联系人个数 || 0)
-const 群聊个数 = computed(() => 联系人列表.value?.群聊个数 || 0)
+const 联系人项目列表 = computed(() => {
+  const 关键字 = 搜索.value.toLowerCase()
+  return (联系人列表.value?.数据 || []).filter((项目) => {
+    const 名称 = 项目.项目类型 == '好友'
+      ? `${项目.昵称} ${项目.登录名}`
+      : `${项目.群组名称} ${项目.最近消息 || ''}`
+    return 名称.toLowerCase().includes(关键字)
+  })
+})
 
 async function 刷新() {
   if (当前用户.value == null) return
@@ -30,27 +36,19 @@ async function 刷新() {
 }
 
 function 打开好友(好友项: 好友) {
-  uni.navigateTo({ url: `/pages/liaotian/liaotian?hui_hua=${encodeURIComponent(好友项.用户编号)}&ming_cheng=${encodeURIComponent(好友项.昵称)}&lei_xing=好友&bian_hao=${encodeURIComponent(好友项.用户编号)}` })
+  uni.navigateTo({ url: `/pages/lianxiren/hao_you?userId=${encodeURIComponent(好友项.用户编号)}` })
 }
 
 function 打开群聊(编号: string) {
   uni.navigateTo({ url: `/pages/liaotian/liaotian?hui_hua=${encodeURIComponent(编号)}&ming_cheng=群聊&lei_xing=群聊&bian_hao=${encodeURIComponent(编号)}` })
 }
 
-async function 删除好友(好友项: 好友) {
-  const 确认 = await new Promise<boolean>((resolve) => uni.showModal({
-    title: '删除好友',
-    content: `确定删除好友 ${好友项.昵称} 吗？历史聊天记录会保留。`,
-    success: (结果) => resolve(结果.confirm),
-    fail: () => resolve(false),
-  }))
-  if (!确认) return
-  try {
-    await 发送请求(`/my/friends/${encodeURIComponent(好友项.用户编号)}`, { method: 'DELETE' })
-    await 刷新()
-  } catch (原因) {
-    uni.showToast({ title: 原因 instanceof Error ? 原因.message : '删除好友失败', icon: 'none' })
+function 打开联系人(项目: 联系人项目) {
+  if (项目.项目类型 == '好友') {
+    打开好友(项目)
+    return
   }
+  打开群聊(项目.群组编号)
 }
 
 onShow(() => {
@@ -61,7 +59,7 @@ onShow(() => {
 <template>
   <view class="ye_mian">
     <view class="ye_mian_biao_ti liang_duan_dui_qi">
-      <view><text class="fu_biao_ti">好友与群组</text><text class="biao_ti">联系人</text></view>
+      <view><text class="biao_ti">联系人</text></view>
       <button class="ci_yao_an_niu" @click="刷新">刷新</button>
     </view>
     <view v-if="当前用户 == null" class="kong_zhuang_tai">
@@ -69,20 +67,26 @@ onShow(() => {
       <button class="zhu_yao_an_niu" @click="uni.switchTab({ url: '/pages/wode/wode' })">前往登录</button>
     </view>
     <template v-else>
-      <input v-model="搜索" class="shu_ru_kuang" placeholder="搜索好友或群聊" />
+      <input v-model="搜索" class="shu_ru_kuang" placeholder="搜索联系人" />
       <view class="cao_zuo_zu">
         <button class="zhu_yao_an_niu" @click="uni.navigateTo({ url: '/pages/chuanjianqun/chuanjianqun' })">创建群聊</button>
         <button class="ci_yao_an_niu" @click="uni.navigateTo({ url: '/pages/tianjiahaoyou/tianjiahaoyou' })">添加好友</button>
       </view>
       <view v-if="错误" class="ti_shi_xin_xi cuo_wu">{{ 错误 }}</view>
-      <text class="biao_qian">好友（{{ 联系人个数 }}）</text>
-      <view v-for="好友项 in 好友列表.filter((项目) => `${项目.昵称} ${项目.登录名}`.toLowerCase().includes(搜索.toLowerCase()))" :key="好友项.用户编号" class="lie_biao_hang">
-        <view class="zhan_kai ke_dian_ji" @click="打开好友(好友项)"><text class="ka_pian_biao_ti">{{ 好友项.昵称 }}</text><text class="fu_zhu_wen_ben">@{{ 好友项.登录名 }}</text></view>
-        <button class="wen_ben_an_niu" @click="删除好友(好友项)">删除</button>
-      </view>
-      <text class="biao_qian">群聊（{{ 群聊个数 }}）</text>
-      <view v-for="群 in 群聊列表.filter((项目) => `${项目.群组名称} ${项目.最近消息 || ''}`.toLowerCase().includes(搜索.toLowerCase()))" :key="群.群组编号" class="lie_biao_hang ke_dian_ji" @click="打开群聊(群.群组编号)">
-        <view class="zhan_kai"><text class="ka_pian_biao_ti">{{ 群.群组名称 }}</text><text class="fu_zhu_wen_ben">{{ 群.最近消息 || 群.群组公告 || '还没有消息' }} · {{ 群.成员数 }}人</text></view><text class="jian_tou">›</text>
+      <view
+        v-for="项目 in 联系人项目列表"
+        :key="项目.项目类型 == '好友' ? 项目.用户编号 : 项目.群组编号"
+        class="lie_biao_hang ke_dian_ji"
+        @click="打开联系人(项目)"
+      >
+        <view class="zhan_kai">
+          <text class="ka_pian_biao_ti">{{ 项目.项目类型 == '好友' ? 项目.昵称 : 项目.群组名称 }}</text>
+          <text class="fu_zhu_wen_ben">
+            {{ 项目.项目类型 == '好友' ? `@${项目.登录名}` : 项目.最近消息 || 项目.群组公告 || '还没有消息' }}
+          </text>
+        </view>
+        <text v-if="项目.项目类型 == '好友'" class="jian_tou">›</text>
+        <text v-else class="jian_tou">›</text>
       </view>
       <view v-if="正在加载" class="kong_zhuang_tai">正在同步联系人…</view>
     </template>

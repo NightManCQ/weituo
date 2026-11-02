@@ -71,7 +71,6 @@
 		bottom: 5px;
 		flex-direction: row;
 		align-items: center;
-		gap: 6px;
 		z-index: 2;
 	}
 
@@ -91,6 +90,7 @@
 	}
 
 	.ju_jue_an_niu {
+		margin-left: 6px;
 		background-color: #eef1f0;
 		color: #5c6865;
 	}

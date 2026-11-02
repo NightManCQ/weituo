@@ -76,7 +76,7 @@ $uni-color-paragraph: #3F536E; // 文章段落颜色
 $uni-font-size-paragraph:15px;
 
 
-	body {
+	page {
 		background-color: #f4f6f5;
 		color: #1b2427;
 		font-size: 14px;
@@ -86,12 +86,11 @@ $uni-font-size-paragraph:15px;
 		margin-left: auto;
 		margin-right: auto;
 		box-sizing: border-box;
-		overflow-x: hidden;
 		position: relative;
 	}
 
-	.uni-tabbar-top, .uni-tabbar-bottom, .uni-tabbar-top .uni-tabbar, .uni-tabbar-bottom .uni-tabbar {
-		max-width: 720px !important;
-		margin: auto !important;
-	}
+	// .uni-tabbar-top, .uni-tabbar-bottom, .uni-tabbar-top .uni-tabbar, .uni-tabbar-bottom .uni-tabbar {
+	// 	max-width: 720px !important;
+	// 	margin: auto !important;
+	// }
 	

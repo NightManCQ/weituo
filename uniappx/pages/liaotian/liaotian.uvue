@@ -242,7 +242,7 @@
 		}
 		if (会话类型.value != '好友') return
 		uni.navigateTo({
-			url: `/pages/lianxiren/lian_xi_ren?userId=${encodeURIComponent(业务编号.value)}`,
+			url: `/pages/lianxiren/hao_you?userId=${encodeURIComponent(业务编号.value)}`,
 		})
 	}
 

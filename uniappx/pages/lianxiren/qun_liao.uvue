@@ -24,7 +24,7 @@
 
 	function 打开群友详情(用户编号 : string) {
 		uni.navigateTo({
-			url: `/pages/lianxiren/lian_xi_ren?userId=${encodeURIComponent(用户编号)}`,
+			url: `/pages/lianxiren/hao_you?userId=${encodeURIComponent(用户编号)}`,
 		})
 	}
 
@@ -129,7 +129,6 @@
 	}
 
 	.qun_gong_gao {
-		display: block;
 		margin-top: 10px;
 		color: #52635c;
 		line-height: 22px;
