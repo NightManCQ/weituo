@@ -45,21 +45,21 @@
 	<view class="ye_mian">
 		<view v-if="正在加载" class="zhuang_tai_wen_ben">正在加载联系人信息…</view>
 		<view v-else-if="错误信息" class="zhuang_tai_wen_ben cuo_wu">{{ 错误信息 }}</view>
-		<view v-else-if="用户信息" class="联系人详情">
-			<view class="用户头像">{{ 用户信息.昵称.slice(0, 1) }}</view>
-			<text class="用户昵称">{{ 用户信息.昵称 }}</text>
-			<text class="用户登录名">@{{ 用户信息.登录名 }}</text>
+		<view v-else-if="用户信息" class="lian_xi_ren_xiang_qing">
+			<view class="yong_hu_tou_xiang">{{ 用户信息.昵称.slice(0, 1) }}</view>
+			<text class="yong_hu_ni_cheng">{{ 用户信息.昵称 }}</text>
+			<text class="yong_hu_deng_lu_ming">@{{ 用户信息.登录名 }}</text>
 
-			<view class="详细信息卡片">
-				<view class="详细信息行">
+			<view class="xiang_xi_xin_xi_ka_pian">
+				<view class="xiang_xi_xin_xi_hang">
 					<text>账号状态</text>
 					<text>{{ 用户信息.账号状态 }}</text>
 				</view>
-				<view class="详细信息行">
+				<view class="xiang_xi_xin_xi_hang">
 					<text>注册时间</text>
 					<text>{{ 格式化时间(用户信息.创建时间) }}</text>
 				</view>
-				<view class="详细信息行">
+				<view class="xiang_xi_xin_xi_hang zui_hou_xin_xi_hang">
 					<text>好友关系</text>
 					<text>{{ 用户信息.是否好友 ? '好友' : '非好友' }}</text>
 				</view>
@@ -72,7 +72,6 @@
 
 <style lang="scss">
 	.ye_mian {
-		min-height: 100vh;
 		background: #f5f7f6;
 		padding: 24px 16px;
 	}
@@ -87,11 +86,11 @@
 		color: #b42318;
 	}
 
-	.联系人详情 {
+	.lian_xi_ren_xiang_qing {
 		align-items: center;
 	}
 
-	.用户头像 {
+	.yong_hu_tou_xiang {
 		width: 88px;
 		height: 88px;
 		border-radius: 44px;
@@ -103,19 +102,19 @@
 		text-align: center;
 	}
 
-	.用户昵称 {
+	.yong_hu_ni_cheng {
 		margin-top: 14px;
 		font-size: 22px;
 		font-weight: 700;
 		color: #17201e;
 	}
 
-	.用户登录名 {
+	.yong_hu_deng_lu_ming {
 		margin-top: 4px;
 		color: #7a8582;
 	}
 
-	.详细信息卡片 {
+	.xiang_xi_xin_xi_ka_pian {
 		width: 100%;
 		margin-top: 24px;
 		border-radius: 12px;
@@ -123,7 +122,7 @@
 		padding: 0 16px;
 	}
 
-	.详细信息行 {
+	.xiang_xi_xin_xi_hang {
 		min-height: 52px;
 		flex-direction: row;
 		align-items: center;
@@ -132,7 +131,7 @@
 		border-bottom-color: #edf0ef;
 	}
 
-	.详细信息行:last-child {
+	.zui_hou_xin_xi_hang {
 		border-bottom-width: 0;
 	}
 

@@ -38,30 +38,31 @@
 	<view class="ye_mian">
 		<view v-if="正在加载" class="zhuang_tai_wen_ben">正在加载群聊信息…</view>
 		<view v-else-if="错误信息" class="zhuang_tai_wen_ben cuo_wu">{{ 错误信息 }}</view>
-		<view v-else-if="群聊信息" class="群聊详情">
-			<view class="群聊头像">{{ 群聊信息.群组名称.slice(0, 1) }}</view>
-			<text class="群聊名称">{{ 群聊信息.群组名称 }}</text>
-			<text class="群聊状态">{{ 群聊信息.群组状态 }}</text>
+		<view v-else-if="群聊信息" class="qun_liao_xiang_qing">
+			<view class="qun_liao_tou_xiang">{{ 群聊信息.群组名称.slice(0, 1) }}</view>
+			<text class="qun_liao_ming_cheng">{{ 群聊信息.群组名称 }}</text>
+			<text class="qun_liao_zhuang_tai">{{ 群聊信息.群组状态 }}</text>
 
-			<view class="群聊公告卡片">
-				<text class="卡片标题">群公告</text>
-				<text class="群公告">{{ 群聊信息.群组公告 || '暂无群公告' }}</text>
+			<view class="qun_liao_gong_gao_ka_pian">
+				<text class="ka_pian_biao_ti">群公告</text>
+				<text class="qun_gong_gao">{{ 群聊信息.群组公告 || '暂无群公告' }}</text>
 			</view>
 
-			<view class="群友卡片">
-				<text class="卡片标题">群友 · {{ 群聊信息.成员列表.length }}</text>
+			<view class="qun_you_ka_pian">
+				<text class="ka_pian_biao_ti">群友 · {{ 群聊信息.成员列表.length }}</text>
 				<view
 					v-for="群友 in 群聊信息.成员列表"
 					:key="群友.用户编号"
-					class="群友行"
 					@click="打开群友详情(群友.用户编号)"
 				>
-					<view class="群友头像">{{ 群友.昵称.slice(0, 1) }}</view>
-					<view class="群友信息">
-						<text class="群友昵称">{{ 群友.昵称 }}</text>
-						<text class="群友角色">{{ 群友.成员角色 }}</text>
+					<view class="qun_you_hang">
+						<view class="qun_you_tou_xiang">{{ 群友.昵称.slice(0, 1) }}</view>
+						<view class="qun_you_xin_xi">
+							<text class="qun_you_ni_cheng">{{ 群友.昵称 }}</text>
+							<text class="qun_you_jue_se">{{ 群友.成员角色 }}</text>
+						</view>
+						<text class="jin_ru_xiang_qing">›</text>
 					</view>
-					<text class="进入详情">›</text>
 				</view>
 			</view>
 		</view>
@@ -70,7 +71,6 @@
 
 <style lang="scss">
 	.ye_mian {
-		min-height: 100vh;
 		padding: 24px 16px;
 		background: #f5f7f6;
 	}
@@ -85,11 +85,11 @@
 		color: #b42318;
 	}
 
-	.群聊详情 {
+	.qun_liao_xiang_qing {
 		align-items: center;
 	}
 
-	.群聊头像 {
+	.qun_liao_tou_xiang {
 		width: 88px;
 		height: 88px;
 		border-radius: 44px;
@@ -101,20 +101,20 @@
 		text-align: center;
 	}
 
-	.群聊名称 {
+	.qun_liao_ming_cheng {
 		margin-top: 14px;
 		font-size: 22px;
 		font-weight: 700;
 		color: #17201e;
 	}
 
-	.群聊状态 {
+	.qun_liao_zhuang_tai {
 		margin-top: 4px;
 		color: #7a8582;
 	}
 
-	.群聊公告卡片,
-	.群友卡片 {
+	.qun_liao_gong_gao_ka_pian,
+	.qun_you_ka_pian {
 		width: 100%;
 		margin-top: 20px;
 		padding: 16px;
@@ -122,20 +122,20 @@
 		background: #ffffff;
 	}
 
-	.卡片标题 {
+	.ka_pian_biao_ti {
 		font-size: 16px;
 		font-weight: 700;
 		color: #25332e;
 	}
 
-	.群公告 {
+	.qun_gong_gao {
 		display: block;
 		margin-top: 10px;
 		color: #52635c;
 		line-height: 22px;
 	}
 
-	.群友行 {
+	.qun_you_hang {
 		flex-direction: row;
 		align-items: center;
 		padding: 12px 0;
@@ -143,11 +143,7 @@
 		border-bottom-color: #edf0ef;
 	}
 
-	.群友行:last-child {
-		border-bottom-width: 0;
-	}
-
-	.群友头像 {
+	.qun_you_tou_xiang {
 		width: 42px;
 		height: 42px;
 		border-radius: 21px;
@@ -158,23 +154,23 @@
 		font-weight: 700;
 	}
 
-	.群友信息 {
+	.qun_you_xin_xi {
 		flex: 1;
 		margin-left: 12px;
 	}
 
-	.群友昵称 {
+	.qun_you_ni_cheng {
 		color: #25332e;
 		font-weight: 700;
 	}
 
-	.群友角色 {
+	.qun_you_jue_se {
 		margin-top: 4px;
 		color: #7a8582;
 		font-size: 12px;
 	}
 
-	.进入详情 {
+	.jin_ru_xiang_qing {
 		color: #9aa4a0;
 		font-size: 24px;
 	}
