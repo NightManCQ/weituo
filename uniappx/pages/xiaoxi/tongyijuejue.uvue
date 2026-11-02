@@ -2,7 +2,7 @@
 	import { ref } from 'vue'
 	import { 发送请求 } from '../../common/wangluo'
 	import type { 消息会话 } from '../../common/leixing'
-	import { 刷新会话列表 } from './会话列表'
+	import { 刷新会话列表, 移除会话, 转换好友验证为好友会话 } from './会话列表'
 
 	const 属性 = defineProps<{ 会话 : 消息会话 }>()
 	const 正在处理 = ref(false)
@@ -24,6 +24,12 @@
 				await 发送请求(`/group-invitations/${encodeURIComponent(属性.会话.会话编号)}/${操作}`, {
 					method: 'POST',
 				})
+			}
+			if (属性.会话.会话类型 == '好友验证' && 操作 == 'accept') {
+				转换好友验证为好友会话(属性.会话.会话编号)
+			}
+			if (属性.会话.会话类型 == '好友验证' && 操作 == 'reject') {
+				移除会话(属性.会话.会话编号, '好友验证')
 			}
 			await 刷新会话列表()
 

@@ -134,6 +134,7 @@ emqxMqtt.注册事件监听("message", (数据: MQTT事件数据) => {
           成员数: null,
           申请人登录名: typeof 申请人登录名 == "string" ? 申请人登录名 : null,
           申请附言: typeof 申请附言 == "string" ? 申请附言 : null,
+          MQTT主题: `u/${当前用户编号}`,
         });
       }
     }
@@ -156,6 +157,7 @@ emqxMqtt.注册事件监听("message", (数据: MQTT事件数据) => {
           会话状态: "待接受",
           成员数: null,
           邀请人编号: typeof 邀请人编号 == "string" ? 邀请人编号 : null,
+          MQTT主题: `u/${当前用户编号}`,
         });
       }
     }

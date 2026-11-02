@@ -53,7 +53,7 @@ async function 搜索用户() {
   }
 }
 
-async function 发送好友申请() {
+async function 提交好友申请() {
   const 用户 = 搜索结果.value
   if (
     当前用户.value == null ||
@@ -152,7 +152,7 @@ onShow(() => {
             placeholder="验证消息（可选）"
           />
           <button class="zhu_yao_an_niu tian_jia_hao_you_shen_qing_an_niu"
-            :disabled="正在处理" @click="发送好友申请">
+            :disabled="正在处理"             @click="提交好友申请">
             {{ 正在处理 ? '发送中…' : '发送好友申请' }}
           </button>
         </view>
