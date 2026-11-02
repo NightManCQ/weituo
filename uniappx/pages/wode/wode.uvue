@@ -4,6 +4,13 @@
 	import type { 积分账户, 积分流水, 用户 } from '../../common/leixing'
 	import { 发送请求, 读取当前用户, 获取API地址 } from '../../common/wangluo'
 	import { 连接实时消息, 断开实时消息 } from '../../common/实时'
+	import {
+		存储API地址,
+		存储MQTT地址,
+		存储令牌,
+		存储用户信息,
+		移除登录信息,
+	} from "../../common/本地存储.ts"
 
 	const 当前用户 = ref<用户 | null>(null)
 	const 是否注册 = ref(false)
@@ -29,11 +36,11 @@
 				data: { login_name: 登录名.value.trim(), password: 密码.value, nickname: 昵称.value.trim() } as UTSJSONObject,
 			})
 			console.log("登陆", 结果);
-			uni.setStorageSync('renwu_token', 结果.访问令牌)
-			// uni.setStorageSync('renwu_mqtt_url', 结果.消息地址)
-			// uni.setStorageSync('renwu_user', 结果.用户)
+			存储令牌(结果.访问令牌)
+			存储MQTT地址(结果.消息地址)
+			存储用户信息(结果.用户)
 			当前用户.value = 结果.用户
-			// await 连接实时消息(结果.用户)
+			await 连接实时消息(结果.用户)
 			// uni.showToast({ title: '登录成功', icon: 'success' })
 			await 刷新积分()
 		} catch (原因) {
@@ -61,8 +68,7 @@
 	}
 
 	function 退出登录() {
-		uni.removeStorageSync('renwu_token')
-		uni.removeStorageSync('renwu_user')
+		移除登录信息()
 		断开实时消息()
 		当前用户.value = null
 		积分.value = null
@@ -75,7 +81,7 @@
 			uni.showToast({ title: 'API 地址必须以 http:// 或 https:// 开头', icon: 'none' })
 			return
 		}
-		uni.setStorageSync('renwu_api_base', 地址)
+		存储API地址(地址)
 		API地址.value = 地址
 		uni.showToast({ title: 'API 地址已保存', icon: 'success' })
 	}

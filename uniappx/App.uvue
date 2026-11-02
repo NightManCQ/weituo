@@ -1,16 +1,37 @@
 <script setup>
-	import { 连接实时消息 } from './common/实时'
+	import { 准备数据库 } from './common/sqllite'
 	import { 使用全局变量 } from "./状态/全局.ts"
+	import { 初始化会话列表和实时消息 } from './pages/xiaoxi/会话列表'
+	import { 刷新联系人列表 } from './pages/lianxiren/联系人列表'
 
-	// #ifdef APP-ANDROID || APP-HARMONY
+	// #ifdef APP-ANDROID || WEB
 	import * as 原生插件 from '@/uni_modules/cq-mqtt'
-	let firstBackTime = 0
-	// #endif
-	onLaunch(() => {
-		console.log('App Launch')
-		void 连接实时消息()
+	let 返回次数 = 0
 
-		// console.log("-----????", MyApiErrorCode);
+	/**
+	 * 启动本地数据库，两端通用
+	 * Android：内部同步执行；Web：先 await 加载 SQLite 官方 WASM 再建库建表
+	 */
+	async function 启动本地数据库() : Promise<void> {
+		try {
+			const 数据库结果 = await 准备数据库()
+			console.log('本地数据库已就绪', 数据库结果)
+		} catch (原因) {
+			console.error('本地数据库初始化失败', 原因)
+		}
+	}
+	// #endif
+
+	onLaunch(() => {
+		// 全局变量初始化()
+		console.log('App Launch')
+		初始化会话列表和实时消息()
+		void 刷新联系人列表()
+
+		// #ifdef APP-ANDROID || WEB
+		void 启动本地数据库()
+		// #endif
+
 
 		uni.getSystemInfo({
 			success(结果) {
@@ -44,17 +65,17 @@
 	// #ifdef APP-ANDROID || APP-HARMONY
 	onLastPageBackPress(() => {
 		console.log('App LastPageBackPress')
-		if (firstBackTime == 0) {
+		if (返回次数 == 0) {
 			uni.showToast({
 				title: '再按一次退出应用',
 				position: 'bottom',
 			})
-			firstBackTime = Date.now()
+			返回次数 = Date.now()
 			setTimeout(() => {
-				firstBackTime = 0
+				返回次数 = 0
 			}, 2000)
-		} else if (Date.now() - firstBackTime < 2000) {
-			firstBackTime = Date.now()
+		} else if (Date.now() - 返回次数 < 2000) {
+			返回次数 = Date.now()
 			uni.exit()
 		}
 	})

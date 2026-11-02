@@ -3,7 +3,7 @@
  * 管理 MQTT 连接的重连逻辑
  */
 
-import { ConnectionOptions } from '../interface.uts'
+import { 连接参数 } from '../interface.uts'
 
 /**
  * 重连配置类型
@@ -26,7 +26,7 @@ export class ConnectionManager {
   
   private reconnectTimer: number | null = null
   private reconnectAttempts: number = 0
-  private lastConnectionOptions: ConnectionOptions | null = null
+  private last连接参数: 连接参数 | null = null
   private isReconnecting: boolean = false
   
   private reconnectCallback: (() => void) | null = null
@@ -80,15 +80,15 @@ export class ConnectionManager {
   /**
    * 保存连接选项（用于重连）
    */
-  saveConnectionOptions(options: ConnectionOptions): void {
-    this.lastConnectionOptions = options
+  save连接参数(options: 连接参数): void {
+    this.last连接参数 = options
   }
   
   /**
    * 获取保存的连接选项
    */
-  getConnectionOptions(): ConnectionOptions | null {
-    return this.lastConnectionOptions
+  get连接参数(): 连接参数 | null {
+    return this.last连接参数
   }
   
   /**
@@ -177,7 +177,7 @@ export class ConnectionManager {
     this.cancelReconnect()
     this.reconnectAttempts = 0
     this.isReconnecting = false
-    this.lastConnectionOptions = null
+    this.last连接参数 = null
   }
   
   /**

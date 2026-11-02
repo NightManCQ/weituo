@@ -17,7 +17,7 @@ export enum ConnectionStatus {
 /**
  * 连接状态类型
  */
-export type ConnectionState = {
+export type 连接状态 = {
   status: ConnectionStatus
   connectedAt: number | null
   lastError: string | null
@@ -29,28 +29,28 @@ export type ConnectionState = {
  * 状态管理器类
  */
 export class StateManager {
-  private state: ConnectionState = {
+  private state: 连接状态 = {
     status: ConnectionStatus.DISCONNECTED,
     connectedAt: null,
     lastError: null,
     reconnectAttempts: 0,
     sessionPresent: false
-  } as ConnectionState
+  } as 连接状态
   
-  private stateChangeCallback: ((state: ConnectionState) => void) | null = null
+  private stateChangeCallback: ((state: 连接状态) => void) | null = null
   
   /**
    * 设置状态变化回调
    */
-  setStateChangeCallback(callback: (state: ConnectionState) => void): void {
+  setStateChangeCallback(callback: (state: 连接状态) => void): void {
     this.stateChangeCallback = callback
   }
   
   /**
    * 获取当前连接状态
    */
-  getConnectionState(): ConnectionState {
-    return { ...this.state } as ConnectionState
+  get连接状态(): 连接状态 {
+    return { ...this.state } as 连接状态
   }
   
   /**
@@ -176,7 +176,7 @@ export class StateManager {
       lastError: null,
       reconnectAttempts: 0,
       sessionPresent: false
-    } as ConnectionState
+    } as 连接状态
     this.notifyStateChange()
   }
   
@@ -219,7 +219,7 @@ export class StateManager {
    */
   private notifyStateChange(): void {
     if (this.stateChangeCallback !== null) {
-      this.stateChangeCallback(this.getConnectionState())
+      this.stateChangeCallback(this.get连接状态())
     }
   }
 }

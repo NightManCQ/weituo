@@ -1,49 +1,47 @@
 /**
  * cq-mqtt 插件 · 前端 SQLite 引擎 · 类型定义
  *
- * 本文件只声明类型，供 app-android 实现与业务层共享，不含任何平台相关代码。
- * Android 实现见 utssdk/app-android/index.uts 与 utssdk/app-android/sqlite.uts
+ * 本文件只声明类型，供 app-android 实现层（sqlite.uts / index.uts）
+ * 与业务层共享，不含任何平台相关代码。
  *
  * 设计取舍：
  * 1. 通用引擎：只提供「连接管理 + 执行 SQL + 查询 + 事务 + 键值表」，
- *    业务表怎么建、怎么迁移交给调用方，插件不预设任何表结构；
+ *    具体业务表怎么建、怎么升级，交给业务层（如 common/sqllite.ts）；
  * 2. 同步优先：SQLite 是本机文件操作，单条语句通常在毫秒级，
  *    同步接口直接返回结果，调用方不必层层回调；
- * 3. 异步兜底：批量写、VACUUM、大量查询等重活用异步版本，
+ * 3. 异步兜底：批量写、VACUUM、大量查询等重活提供异步版本，
  *    任务投递到 io 线程执行，回调统一切回 main 线程；
- * 4. 线程安全：同一个SQLiteDatabase实例内部已做串行化，
- *    同步与异步可以混用，插件另用 Map 保证「一句打开语句执行一次」。
+ * 4. 线程安全：同一个 SQLiteDatabase 实例内部已做串行化，
+ *    同步与异步可以混用。
  */
 
 /**
  * 单元格取值
  * 写入可接受：string / number / boolean / null（boolean 落库为 0 或 1）
  * 读出为：null / number（INTEGER、REAL）/ string（TEXT，BLOB 转成 Base64 文本）
+ *
+ * 注意：UTS 的 any 编译到 Kotlin 是非空的 Any，直接放 null 会报错
+ * "Null cannot be a value of a non-null type 'Any'"，
+ * 因此必须写成 any | null（参考 DCloud uts 编译器已知问题文档）。
  */
-export type SQLite值 = any
+export type SQLite值 = any | null
 
-/**
- * 一行数据：列名 -> 值
- * 取值示例：行.get('消息正文')
- */
+/** 一行数据：列名 -> 值 */
 export type SQLite数据行 = Map<string, SQLite值>
 
-/**
- * 一条 SQL 语句
- * 使用 ? 占位符绑定参数，避免手工拼串导致注入与转义问题
- */
+/** 一条 SQL 语句，使用 ? 占位符绑定参数，避免手工拼串 */
 export type SQL语句 = {
 	SQL : string
-	参数? : Array<SQLite值> | null
+	参数? : any
 }
 
 /**
  * 打开数据库参数
- * 数据库名：文件名，例如 'app.db'、'聊天.db'
- * 版本：传入大于 0 的值时，打开后会自动同步到 PRAGMA user_version
+ * 数据库名：文件名，例如 'im_renwu.db'
+ * 版本：传入大于 0 的值时，打开后自动同步到 PRAGMA user_version
  * 路径：为空时使用应用私有目录 /data/data/包名/databases/数据库名
- * 预写日志：默认开启 WAL，读写不互相阻塞
- * 外键约束：默认开启，删除更新时自动级联
+ * 预写日志：默认开启 WAL，读写互不阻塞
+ * 外键约束：默认开启
  */
 export type 打开数据库参数 = {
 	数据库名 : string
@@ -119,6 +117,66 @@ export type 数据库列表结果 = {
 	总数 : number
 }
 
+/** 只带数据库名的参数 */
+export type 单库参数 = {
+	数据库名 : string
+}
+
+/** 单条执行参数 */
+export type 执行SQL参数 = {
+	数据库名 : string
+	SQL : string
+	参数? : any
+}
+
+/** 批量执行参数 */
+export type 批量执行参数 = {
+	数据库名 : string
+	语句集合 : Array<SQL语句>
+}
+
+/** 查询参数 */
+export type 查询SQL参数 = {
+	数据库名 : string
+	SQL : string
+	参数? : any
+}
+
+/** 建表参数：建表SQL 由业务层给出完整 CREATE TABLE 语句 */
+export type 建表参数 = {
+	数据库名 : string
+	表名 : string
+	建表SQL : string
+}
+
+/** 建索引参数 */
+export type 建索引参数 = {
+	数据库名 : string
+	索引名 : string
+	表名 : string
+	列集合 : Array<string>
+	唯一? : boolean
+}
+
+/** 删索引参数 */
+export type 删索引参数 = {
+	数据库名 : string
+	索引名 : string
+}
+
+/** 表级操作参数（删表、清空表、判断表是否存在） */
+export type 表参数 = {
+	数据库名 : string
+	表名 : string
+}
+
+/** 列级操作参数 */
+export type 列参数 = {
+	数据库名 : string
+	表名 : string
+	列名 : string
+}
+
 /** 键值写入参数 */
 export type 存键值参数 = {
 	数据库名 : string
@@ -126,7 +184,7 @@ export type 存键值参数 = {
 	值 : string | null
 }
 
-/** 键值读取参数 */
+/** 键值读取/删除参数 */
 export type 取键值参数 = {
 	数据库名 : string
 	键 : string
@@ -138,42 +196,21 @@ export type 设版本参数 = {
 	版本 : number
 }
 
-/** 批量执行参数 */
-export type 批量执行参数 = {
+/** 事务执行参数：语句集合要么全部成功，要么全部回滚 */
+export type 事务执行参数 = {
 	数据库名 : string
 	语句集合 : Array<SQL语句>
-	使用事务? : boolean
 }
 
-/** 单条执行参数 */
-export type 执行SQL参数 = {
-	数据库名 : string
-	SQL : string
-	参数? : Array<SQLite值> | null
+/** 异步失败对象，符合 uni 错误规范 */
+export type SQLite失败 = {
+	errCode : number
+	errMsg : string
+	errSubject : string
 }
 
-/** 查询参数 */
-export type 查询SQL参数 = {
-	数据库名 : string
-	SQL : string
-	参数? : Array<SQLite值> | null
-}
+/* ---------------- 异步回调参数 ---------------- */
 
-/**
- * 错误码
- * 同步接口以异常形式抛出（message 形如 [9010002]数据库未打开），
- * 业务层可用 解析SQLite错误() 还原成结构化对象
- */
-export type SQLite错误码 =
-	9010001 | 9010002 | 9010003 | 9010004 | 9010005 | 9010006 | 9010007 |
-	9010008 | 9010009 | 9010010 | 9010011 | 9010012 | 9010013 | 9010099
-
-/** 失败对象，符合 uni 错误规范 */
-export interface SQLite失败 extends IUniError {
-	errCode : SQLite错误码
-}
-
-/** 异步回调容器：成功、失败、完成 */
 export type 打开数据库异步参数 = {
 	数据库名 : string
 	版本? : number | null
@@ -183,62 +220,47 @@ export type 打开数据库异步参数 = {
 	外键约束? : boolean
 	success? : (结果 : 打开数据库结果) => void
 	fail? : (错误 : SQLite失败) => void
-	complete? : (任意 : any) => void
+	complete? : (任意 : any | null) => void
 }
 
 export type 执行SQL异步参数 = {
 	数据库名 : string
 	SQL : string
-	参数? : Array<SQLite值> | null
+	参数? : any
 	success? : (结果 : 执行结果) => void
 	fail? : (错误 : SQLite失败) => void
-	complete? : (任意 : any) => void
+	complete? : (任意 : any | null) => void
 }
 
 export type 批量执行异步参数 = {
 	数据库名 : string
 	语句集合 : Array<SQL语句>
-	使用事务? : boolean
 	success? : (结果 : 批量执行结果) => void
 	fail? : (错误 : SQLite失败) => void
-	complete? : (任意 : any) => void
+	complete? : (任意 : any | null) => void
 }
 
 export type 查询SQL异步参数 = {
 	数据库名 : string
 	SQL : string
-	参数? : Array<SQLite值> | null
+	参数? : any
 	success? : (结果 : 查询结果) => void
 	fail? : (错误 : SQLite失败) => void
-	complete? : (任意 : any) => void
+	complete? : (任意 : any | null) => void
 }
 
-export type 存键值异步参数 = {
+export type 事务异步参数 = {
 	数据库名 : string
-	键 : string
-	值 : string | null
-	success? : (结果 : 操作结果) => void
+	语句集合 : Array<SQL语句>
+	success? : (结果 : 批量执行结果) => void
 	fail? : (错误 : SQLite失败) => void
-	complete? : (任意 : any) => void
+	complete? : (任意 : any | null) => void
 }
 
-export type 取键值异步参数 = {
-	数据库名 : string
-	键 : string
-	success? : (结果 : 键值结果) => void
-	fail? : (错误 : SQLite失败) => void
-	complete? : (任意 : any) => void
-}
-
-/** 单库操作的异步参数（关闭、删除、整理、写回日志） */
+/** 单库异步操作参数（关闭、删除、重组、写回日志） */
 export type 单库异步参数 = {
 	数据库名 : string
 	success? : (结果 : 操作结果) => void
 	fail? : (错误 : SQLite失败) => void
-	complete? : (任意 : any) => void
-}
-
-/** 单库同步参数 */
-export type 单库参数 = {
-	数据库名 : string
+	complete? : (任意 : any | null) => void
 }

@@ -1,35 +1,30 @@
 <script setup lang="ts">
 import { onShow } from '@dcloudio/uni-app'
-import { onHide } from '@dcloudio/uni-app'
-import { ref } from 'vue'
-import type { 群邀请, 用户, 消息会话 } from '../../common/leixing'
+import { computed, ref } from 'vue'
+import type { 联系人列表数据, 群邀请, 用户 } from '../../common/leixing'
 import { 发送请求, 格式化时间, 读取当前用户 } from '../../common/wangluo'
-import { 订阅实时事件 } from '../../common/实时'
+import { 会话列表 } from '../xiaoxi/会话列表'
+import { 联系人列表, 刷新联系人列表 } from './联系人列表'
 
-type 好友 = { 用户编号: string; 登录名: string; 昵称: string; 建立时间: string }
-type 群组 = { 群组编号: string; 群组名称: string; 群组公告: string; 成员数: number; 最近消息: string | null; 最近消息时间: string | null }
+type 好友 = Extract<联系人列表数据['数据'][number], { 项目类型: '好友' }>
+type 群组 = Extract<联系人列表数据['数据'][number], { 项目类型: '群聊' }>
 const 当前用户 = ref<用户 | null>(null)
-const 好友列表 = ref<好友[]>([])
-const 群组列表 = ref<群组[]>([])
 const 邀请列表 = ref<群邀请[]>([])
 const 搜索 = ref('')
 const 正在加载 = ref(false)
 const 错误 = ref('')
-let 取消订阅: (() => void) | null = null
+const 好友列表 = computed(() => 联系人列表.value?.数据.filter((项目): 项目 is 好友 => 项目.项目类型 == '好友') || [])
+const 群聊列表 = computed(() => 联系人列表.value?.数据.filter((项目): 项目 is 群组 => 项目.项目类型 == '群聊') || [])
+const 联系人个数 = computed(() => 联系人列表.value?.联系人个数 || 0)
+const 群聊个数 = computed(() => 联系人列表.value?.群聊个数 || 0)
 
 async function 刷新() {
   if (当前用户.value == null) return
   正在加载.value = true
   错误.value = ''
   try {
-    const [好友, 群组, 会话] = await Promise.all([
-      发送请求<好友[]>('/my/friends'),
-      发送请求<群组[]>('/my/groups'),
-      发送请求<消息会话[]>('/my/message-conversations'),
-    ])
-    好友列表.value = 好友
-    群组列表.value = 群组
-    邀请列表.value = 会话.filter((项目) => 项目.会话类型 == '群邀请').map((项目) => ({
+    await 刷新联系人列表()
+    邀请列表.value = 会话列表.value.filter((项目) => 项目.会话类型 == '群邀请').map((项目) => ({
       邀请编号: 项目.会话编号,
       群组编号: 项目.关联编号,
       群组名称: 项目.会话名称,
@@ -81,12 +76,6 @@ async function 处理邀请(邀请: 群邀请, 操作: 'accept' | 'reject') {
 
 onShow(() => {
   当前用户.value = 读取当前用户()
-  if (取消订阅 == null) 取消订阅 = 订阅实时事件(() => { void 刷新() })
-  void 刷新()
-})
-onHide(() => {
-  取消订阅?.()
-  取消订阅 = null
 })
 </script>
 
@@ -107,13 +96,13 @@ onHide(() => {
         <button class="ci_yao_an_niu" @click="uni.navigateTo({ url: '/pages/tianjiahaoyou/tianjiahaoyou' })">添加好友</button>
       </view>
       <view v-if="错误" class="ti_shi_xin_xi cuo_wu">{{ 错误 }}</view>
-      <text class="biao_qian">好友</text>
+      <text class="biao_qian">好友（{{ 联系人个数 }}）</text>
       <view v-for="好友项 in 好友列表.filter((项目) => `${项目.昵称} ${项目.登录名}`.toLowerCase().includes(搜索.toLowerCase()))" :key="好友项.用户编号" class="lie_biao_hang">
         <view class="zhan_kai ke_dian_ji" @click="打开好友(好友项)"><text class="ka_pian_biao_ti">{{ 好友项.昵称 }}</text><text class="fu_zhu_wen_ben">@{{ 好友项.登录名 }}</text></view>
         <button class="wen_ben_an_niu" @click="删除好友(好友项)">删除</button>
       </view>
-      <text class="biao_qian">群聊</text>
-      <view v-for="群 in 群组列表.filter((项目) => `${项目.群组名称} ${项目.最近消息 || ''}`.toLowerCase().includes(搜索.toLowerCase()))" :key="群.群组编号" class="lie_biao_hang ke_dian_ji" @click="打开群聊(群.群组编号)">
+      <text class="biao_qian">群聊（{{ 群聊个数 }}）</text>
+      <view v-for="群 in 群聊列表.filter((项目) => `${项目.群组名称} ${项目.最近消息 || ''}`.toLowerCase().includes(搜索.toLowerCase()))" :key="群.群组编号" class="lie_biao_hang ke_dian_ji" @click="打开群聊(群.群组编号)">
         <view class="zhan_kai"><text class="ka_pian_biao_ti">{{ 群.群组名称 }}</text><text class="fu_zhu_wen_ben">{{ 群.最近消息 || 群.群组公告 || '还没有消息' }} · {{ 群.成员数 }}人</text></view><text class="jian_tou">›</text>
       </view>
       <text class="biao_qian">群邀请</text>

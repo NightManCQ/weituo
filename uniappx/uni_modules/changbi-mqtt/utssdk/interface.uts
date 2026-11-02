@@ -3,10 +3,10 @@
  */
 
 // QoS 服务质量等级
-export type QoS = 0 | 1 | 2 | 3
+export type 服务质量等级 = 0 | 1 | 2
 
 // 日志级别
-export enum LogLevel {
+export enum 日志级别 {
   DEBUG = 0,
   INFO = 1,
   WARN = 2,
@@ -15,100 +15,100 @@ export enum LogLevel {
 }
 
 // MQTT 事件类型
-export type MQTTEvent = 'connect' | 'reconnect' | 'disconnect' | 'offline' | 'close' | 'error' | 'message' | 'queued' | 'queue_flushed' | 'connection_check'
+export type MQTT事件 = 'connect' | 'reconnect' | 'disconnect' | 'offline' | 'close' | 'error' | 'message' | 'queued' | 'queue_flushed' | 'connection_check'
 
 // 连接质量统计
-export type ConnectionQualityStats = {
-  totalPublished: number       // 累计成功发送消息数
-  totalReceived: number        // 累计成功接收消息数
-  totalQueued: number          // 累计进入离线队列消息数
-  totalQueueFlushed: number    // 累计从离线队列补发成功数
-  totalReconnects: number      // 累计重连次数
-  lastConnectedAt: number | null   // 最后一次连接成功时间戳
-  lastDisconnectedAt: number | null // 最后一次断开时间戳
-  avgReconnectMs: number       // 平均重连耗时 ms（每次从断开到重连成功）
+export type 连接质量统计 = {
+  已发布数量: number
+  已接收数量: number
+  已排队数量: number
+  已补发数量: number
+  重连次数: number
+  最后连接时间: number | null
+  最后断开时间: number | null
+  平均重连耗时: number
 }
 
 // Will 消息配置
-export type WillMessage = {
-  topic: string
-  payload: string
-  qos: QoS
-  retain: boolean
+export type 遗嘱消息 = {
+  主题: string
+  载荷: string
+  服务质量: 服务质量等级
+  保留: boolean
 }
 
 // 连接选项
-export type ConnectionOptions = {
-  url: string
-  clientId: string
-  username?: string | null
-  password?: string | null
-  clean?: boolean
-  connectTimeout?: number
-  keepalive?: number
-  reconnect?: boolean
-  reconnectPeriod?: number
-  maxReconnectAttempts?: number
-  ssl?: boolean
-  certPath?: string | null
-  allowUntrusted?: boolean
-  will?: WillMessage | null
+export type 连接参数 = {
+  地址: string
+  客户端编号: string
+  用户名?: string | null
+  密码?: string | null
+  清理会话?: boolean
+  连接超时?: number
+  心跳间隔?: number
+  自动重连?: boolean
+  重连间隔?: number
+  最大重连次数?: number
+  启用SSL?: boolean
+  证书路径?: string | null
+  允许不受信任证书?: boolean
+  遗嘱?: 遗嘱消息 | null
 }
 
 // 发布选项
-export type PublishOptions = {
-  qos?: QoS
-  retain?: boolean
+export type 发布选项 = {
+  服务质量?: 服务质量等级
+  保留?: boolean
 }
 
 export type MQTT订阅消息 = {
-  topic?: string
-  payload?: string | ArrayBuffer
-  qos?: QoS
-  retain?: boolean
+  主题?: string
+  载荷?: string | ArrayBuffer
+  服务质量?: 服务质量等级
+  保留?: boolean
 }
 
 export type MQTT订阅参数 = {
   主题: string
-  服务质量?: QoS
+  服务质量?: 服务质量等级
   成功?: () => void
   失败?: (错误: Error) => void
   消息: (消息: MQTT订阅消息) => void
 }
 
 // 错误信息
-export type ErrorInfo = {
-  code: number
-  message: string
-  type: 'connection' | 'authentication' | 'network' | 'protocol' | 'unknown'
-  timestamp: number
-  details?: any | null
+export type 错误信息 = {
+  编号: number
+  信息: string
+  类型: '连接' | '认证' | '网络' | '协议' | '未知'
+  时间戳: number
+  详情?: any | null
 }
 
 // 事件数据
-export type EventData = {
-  sessionPresent?: boolean
-  error?: string | ErrorInfo
-  topic?: string
-  payload?: string | ArrayBuffer
-  payloadBytes?: ArrayBuffer   // 原始二进制 payload
-  qos?: QoS
-  retain?: boolean
-  attempt?: number
-  reconnectAttempts?: number
-  queuedCount?: number         // queued 事件：当前队列消息数
-  flushedCount?: number        // queue_flushed 事件：本次补发成功数
-  isAlive?: boolean            // connection_check 事件：检测结果
+export type 事件数据 = {
+  会话存在?: boolean
+  错误?: string | 错误信息
+  主题?: string
+  载荷?: string | ArrayBuffer
+  二进制载荷?: ArrayBuffer
+  服务质量?: 服务质量等级
+  保留?: boolean
+  尝试次数?: number
+  重连次数?: number
+  排队数量?: number
+  补发数量?: number
+  连接正常?: boolean
 }
 
 // 事件回调函数类型
-export type EventCallback = (data: EventData) => void
+export type 事件回调 = (数据: 事件数据) => void
 
 // 连接状态
-export type ConnectionState = {
-  status: 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'disconnecting'
-  connectedAt?: number | null
-  lastError?: ErrorInfo | null
-  reconnectAttempts: number
-  sessionPresent: boolean
+export type 连接状态 = {
+  状态: '已断开' | '连接中' | '已连接' | '重连中' | '断开中'
+  连接时间?: number | null
+  最后错误?: 错误信息 | null
+  重连次数: number
+  会话存在: boolean
 }

@@ -85,6 +85,7 @@ pub(crate) async fn 启动(状态: 应用状态, 配置: 运行配置) -> Result
             get(消息::查询我的消息会话),
         )
         .route("/api/v1/my/friends", get(好友::查询我的好友))
+        .route("/api/v1/my/contacts", get(好友::查询联系人列表))
         .route(
             "/api/v1/my/friend-conversations",
             get(好友::查询好友聊天会话),
@@ -95,10 +96,7 @@ pub(crate) async fn 启动(状态: 应用状态, 配置: 运行配置) -> Result
             "/api/v1/my/friends/{friend_id}/messages",
             get(好友::查询私聊消息).post(好友::发送私聊消息),
         )
-        .route(
-            "/api/v1/my/friend-requests",
-            get(好友::查询收到的好友申请).post(好友::创建好友申请),
-        )
+        .route("/api/v1/my/friend-requests", post(好友::创建好友申请))
         .route(
             "/api/v1/my/friend-requests/{request_id}/accept",
             post(好友::同意好友申请),

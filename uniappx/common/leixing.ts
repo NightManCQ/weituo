@@ -31,7 +31,7 @@ export type 任务 = {
 }
 
 export type 消息会话 = {
-  会话类型: '委托' | '好友' | '群聊' | '群邀请'
+  会话类型: '委托' | '好友' | '群聊' | '群邀请' | '好友验证'
   会话编号: string
   关联编号: string
   会话名称: string
@@ -43,7 +43,36 @@ export type 消息会话 = {
   成员数: number | null
   邀请人编号?: string | null
   过期时间?: string | null
+  申请人登录名?: string | null
+  申请附言?: string | null
+  新消息条数?: number
   MQTT主题: string
+}
+
+export type 好友联系人 = {
+  项目类型: '好友'
+  拼英: string
+  用户编号: string
+  登录名: string
+  昵称: string
+  建立时间: string
+}
+
+export type 群聊联系人 = {
+  项目类型: '群聊'
+  拼英: string
+  群组编号: string
+  群组名称: string
+  群组公告: string
+  成员数: number
+  最近消息: string | null
+  最近消息时间: string | null
+}
+
+export type 联系人列表数据 = {
+  数据: (好友联系人 | 群聊联系人)[]
+  联系人个数: number
+  群聊个数: number
 }
 
 export type 群邀请 = {

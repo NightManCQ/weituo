@@ -21,6 +21,8 @@ pub(super) struct 消息会话视图 {
     pub(super) 邀请人编号: Option<Uuid>,
     pub(super) 过期时间: Option<DateTime<Utc>>,
     pub(super) MQTT主题: String,
+    pub(super) 申请人登录名: Option<String>,
+    pub(super) 申请附言: Option<String>,
 }
 
 pub(super) async fn 查询我的消息会话(
@@ -57,7 +59,9 @@ pub(super) async fn 查询我的消息会话(
                        WHERE active."群组编号" = g."群组编号"
                          AND active."成员状态" = '有效') AS "成员数",
                       NULL::uuid AS "邀请人编号",
-                      NULL::timestamptz AS "过期时间"
+                      NULL::timestamptz AS "过期时间",
+                      NULL::text AS "申请人登录名",
+                      NULL::text AS "申请附言"
                FROM "任务" t
                JOIN "群_群组" g ON g."关联任务编号" = t."任务编号"
                                   AND g."群组状态" = '正常'
@@ -94,7 +98,9 @@ pub(super) async fn 查询我的消息会话(
                       '待接受'::text AS "会话状态",
                       NULL::bigint AS "成员数",
                       i."邀请人编号" AS "邀请人编号",
-                      i."过期时间" AS "过期时间"
+                      i."过期时间" AS "过期时间",
+                      NULL::text AS "申请人登录名",
+                      NULL::text AS "申请附言"
                FROM "群_邀请" i
                JOIN "群_群组" g ON g."群组编号" = i."群组编号"
                JOIN "用户" inviter ON inviter."用户编号" = i."邀请人编号"
@@ -103,6 +109,29 @@ pub(super) async fn 查询我的消息会话(
                  AND i."过期时间" > now()
                  AND g."群组状态" = '正常'
                ORDER BY i."创建时间" DESC
+               LIMIT 100
+           )
+           UNION ALL
+           (
+               SELECT '好友验证'::text AS "会话类型",
+                      a."申请编号" AS "会话编号",
+                      a."申请人编号" AS "关联编号",
+                      applicant."昵称" AS "会话名称",
+                      applicant."昵称" AS "联系人昵称",
+                      '好友验证'::text AS "会话说明",
+                      a."申请附言" AS "最近消息",
+                      a."创建时间" AS "最近消息时间",
+                      '待接受'::text AS "会话状态",
+                      NULL::bigint AS "成员数",
+                      NULL::uuid AS "邀请人编号",
+                      NULL::timestamptz AS "过期时间",
+                      applicant."登录名" AS "申请人登录名",
+                      a."申请附言" AS "申请附言"
+               FROM "好友申请" a
+               JOIN "用户" applicant ON applicant."用户编号" = a."申请人编号"
+               WHERE a."目标用户编号" = $1
+                 AND a."申请状态" = '待处理'
+               ORDER BY a."创建时间" DESC
                LIMIT 100
            )
            UNION ALL
@@ -118,7 +147,9 @@ pub(super) async fn 查询我的消息会话(
                       NULL::text AS "会话状态",
                       NULL::bigint AS "成员数",
                       NULL::uuid AS "邀请人编号",
-                      NULL::timestamptz AS "过期时间"
+                      NULL::timestamptz AS "过期时间",
+                      NULL::text AS "申请人登录名",
+                      NULL::text AS "申请附言"
                FROM "私聊会话" s
                JOIN "好友关系" f
                  ON f."用户甲编号" = s."用户甲编号"
@@ -154,7 +185,9 @@ pub(super) async fn 查询我的消息会话(
                        WHERE active."群组编号" = g."群组编号"
                          AND active."成员状态" = '有效') AS "成员数",
                       NULL::uuid AS "邀请人编号",
-                      NULL::timestamptz AS "过期时间"
+                      NULL::timestamptz AS "过期时间",
+                      NULL::text AS "申请人登录名",
+                      NULL::text AS "申请附言"
                FROM "群_群组" g
                JOIN "群_成员" member
                  ON member."群组编号" = g."群组编号"
@@ -206,6 +239,8 @@ pub(super) async fn 查询我的消息会话(
                     邀请人编号: 记录.get("邀请人编号"),
                     过期时间: 记录.get("过期时间"),
                     MQTT主题,
+                    申请人登录名: 记录.get("申请人登录名"),
+                    申请附言: 记录.get("申请附言"),
                 }
             })
             .collect(),

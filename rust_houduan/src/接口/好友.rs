@@ -18,13 +18,47 @@ pub(super) struct 好友视图 {
 }
 
 #[derive(Serialize)]
-pub(super) struct 好友申请视图 {
-    pub(super) 申请编号: Uuid,
-    pub(super) 申请人编号: Uuid,
-    pub(super) 登录名: String,
-    pub(super) 昵称: String,
-    pub(super) 申请附言: String,
-    pub(super) 创建时间: DateTime<Utc>,
+#[serde(tag = "项目类型")]
+pub(super) enum 联系人列表项目 {
+    好友 {
+        拼英: String,
+        用户编号: Uuid,
+        登录名: String,
+        昵称: String,
+        建立时间: DateTime<Utc>,
+    },
+    群聊 {
+        拼英: String,
+        群组编号: Uuid,
+        群组名称: String,
+        群组公告: String,
+        成员数: i64,
+        最近消息: Option<String>,
+        最近消息时间: Option<DateTime<Utc>>,
+    },
+}
+
+impl 联系人列表项目 {
+    fn 名称(&self) -> &str {
+        match self {
+            联系人列表项目::好友 { 昵称, .. } => 昵称,
+            联系人列表项目::群聊 { 群组名称, .. } => 群组名称,
+        }
+    }
+
+    fn 拼英(&self) -> &str {
+        match self {
+            联系人列表项目::好友 { 拼英, .. } => 拼英,
+            联系人列表项目::群聊 { 拼英, .. } => 拼英,
+        }
+    }
+}
+
+#[derive(Serialize)]
+pub(super) struct 联系人列表视图 {
+    pub(super) 数据: Vec<联系人列表项目>,
+    pub(super) 联系人个数: usize,
+    pub(super) 群聊个数: usize,
 }
 
 #[derive(Serialize)]
@@ -83,6 +117,8 @@ pub(super) struct 消息查询条件 {
     数量上限: Option<i64>,
 }
 
+use pinyin::ToPinyin;
+
 fn 当前用户编号(
     请求: &axum::http::Request<axum::body::Body>
 ) -> Result<Uuid, 应用错误> {
@@ -99,6 +135,19 @@ fn 好友编号对(用户甲: Uuid, 用户乙: Uuid) -> (Uuid, Uuid) {
     } else {
         (用户乙, 用户甲)
     }
+}
+
+fn 汉字拼英(文本: &str) -> String {
+    文本
+        .chars()
+        .map(|字符| {
+            字符
+                .to_pinyin()
+                .map(|拼音| 拼音.plain().to_string())
+                .unwrap_or_else(|| 字符.to_string())
+        })
+        .collect::<Vec<_>>()
+        .join("-")
 }
 
 pub(super) async fn 查询我的好友(
@@ -130,6 +179,97 @@ pub(super) async fn 查询我的好友(
             })
             .collect(),
     ))
+}
+
+pub(super) async fn 查询联系人列表(
+    State(状态): State<应用状态>,
+    请求: axum::http::Request<axum::body::Body>,
+) -> Result<Json<联系人列表视图>, 应用错误> {
+    let 当前编号 = 当前用户编号(&请求)?;
+    let 好友记录集 = sqlx::query(
+        r#"SELECT u."用户编号", u."登录名", u."昵称", f."建立时间"
+           FROM "好友关系" f
+           JOIN "用户" u ON u."用户编号" = CASE
+               WHEN f."用户甲编号" = $1 THEN f."用户乙编号"
+               ELSE f."用户甲编号"
+           END
+           WHERE f."用户甲编号" = $1 OR f."用户乙编号" = $1
+           ORDER BY u."昵称", u."用户编号""#,
+    )
+    .bind(当前编号)
+    .fetch_all(&状态.数据库)
+    .await?;
+    let 联系人数组 = 好友记录集
+        .iter()
+        .map(|记录| {
+            let 昵称: String = 记录.get("昵称");
+            联系人列表项目::好友 {
+                拼英: 汉字拼英(&昵称),
+                用户编号: 记录.get("用户编号"),
+                登录名: 记录.get("登录名"),
+                昵称,
+                建立时间: 记录.get("建立时间"),
+            }
+        })
+        .collect::<Vec<_>>();
+
+    let 群聊记录集 = sqlx::query(
+        r#"SELECT g."群组编号", g."群组名称", g."群组公告",
+                  (SELECT count(*) FROM "群_成员" active
+                   WHERE active."群组编号" = g."群组编号" AND active."成员状态" = '有效')
+                    AS "成员数",
+                  latest."消息正文" AS "最近消息",
+                  latest."创建时间" AS "最近消息时间"
+           FROM "群_群组" g
+           JOIN "群_成员" m ON m."群组编号" = g."群组编号"
+                            AND m."用户编号" = $1 AND m."成员状态" = '有效'
+           LEFT JOIN LATERAL (
+               SELECT message."消息正文", message."创建时间", message."群内序号"
+               FROM "群_消息" message
+               WHERE message."群组编号" = g."群组编号"
+                 AND message."群内序号" >= m."可见起始序号"
+               ORDER BY message."群内序号" DESC
+               LIMIT 1
+           ) latest ON TRUE
+           WHERE g."群组状态" = '正常'
+             AND g."关联任务编号" IS NULL
+           ORDER BY COALESCE(latest."群内序号", g."最后消息序号") DESC,
+                    g."创建时间" DESC
+           LIMIT 200"#,
+    )
+    .bind(当前编号)
+    .fetch_all(&状态.数据库)
+    .await?;
+    let 群聊数组 = 群聊记录集
+        .iter()
+        .map(|记录| {
+            let 群组名称: String = 记录.get("群组名称");
+            联系人列表项目::群聊 {
+                拼英: 汉字拼英(&群组名称),
+                群组编号: 记录.get("群组编号"),
+                群组名称,
+                群组公告: 记录.get("群组公告"),
+                成员数: 记录.get("成员数"),
+                最近消息: 记录.get("最近消息"),
+                最近消息时间: 记录.get("最近消息时间"),
+            }
+        })
+        .collect::<Vec<_>>();
+    let 联系人个数 = 联系人数组.len();
+    let 群聊个数 = 群聊数组.len();
+    let mut 列表 = 联系人数组;
+    列表.extend(群聊数组);
+    列表.sort_by(|甲, 乙| {
+        甲.拼英()
+            .cmp(乙.拼英())
+            .then_with(|| 甲.名称().cmp(乙.名称()))
+    });
+
+    Ok(Json(联系人列表视图 {
+        数据: 列表,
+        联系人个数,
+        群聊个数,
+    }))
 }
 
 pub(super) async fn 查询好友聊天会话(
@@ -238,38 +378,6 @@ pub(super) async fn 搜索用户(
     ))
 }
 
-pub(super) async fn 查询收到的好友申请(
-    State(状态): State<应用状态>,
-    请求: axum::http::Request<axum::body::Body>,
-) -> Result<Json<Vec<好友申请视图>>, 应用错误> {
-    let 当前编号 = 当前用户编号(&请求)?;
-    let 记录集 = sqlx::query(
-        r#"SELECT a."申请编号", a."申请人编号", u."登录名", u."昵称",
-                  a."申请附言", a."创建时间"
-           FROM "好友申请" a
-           JOIN "用户" u ON u."用户编号" = a."申请人编号"
-           WHERE a."目标用户编号" = $1 AND a."申请状态" = '待处理'
-           ORDER BY a."创建时间" DESC
-           LIMIT 100"#,
-    )
-    .bind(当前编号)
-    .fetch_all(&状态.数据库)
-    .await?;
-    Ok(Json(
-        记录集
-            .iter()
-            .map(|记录| 好友申请视图 {
-                申请编号: 记录.get("申请编号"),
-                申请人编号: 记录.get("申请人编号"),
-                登录名: 记录.get("登录名"),
-                昵称: 记录.get("昵称"),
-                申请附言: 记录.get("申请附言"),
-                创建时间: 记录.get("创建时间"),
-            })
-            .collect(),
-    ))
-}
-
 pub(super) async fn 创建好友申请(
     State(状态): State<应用状态>,
     用户: Option<Extension<当前用户>>,
@@ -345,23 +453,30 @@ pub(super) async fn 创建好友申请(
         return Err(错误.into());
     }
 
+    let 申请人信息: (String, String) =
+        sqlx::query_as(r#"SELECT "登录名", "昵称" FROM "用户" WHERE "用户编号" = $1"#)
+            .bind(当前编号)
+            .fetch_one(&状态.数据库)
+            .await?;
     let 事件编号 = Uuid::new_v4();
     let 事件 = serde_json::json!({
         "事件编号": 事件编号,
-        "事件类型": "friend.request_created",
+        "事件类型": "好友验证已创建",
         "结构版本": 1,
         "发生时间": Utc::now(),
         "通知用户编号": 申请.目标用户编号,
         "数据": {
             "申请编号": 申请编号,
             "申请人编号": 当前编号,
+            "申请人登录名": 申请人信息.0,
+            "申请人昵称": 申请人信息.1,
             "目标用户编号": 申请.目标用户编号,
             "申请附言": 附言
         }
     });
     sqlx::query(
         r#"INSERT INTO "事务发件箱" ("事件编号", "事件类型", "主题", "事件内容")
-           VALUES ($1, 'friend.request_created', $2, $3)"#,
+           VALUES ($1, '好友验证已创建', $2, $3)"#,
     )
     .bind(事件编号)
     .bind(构造用户通知主题(申请.目标用户编号))
@@ -656,7 +771,7 @@ pub(super) async fn 发送私聊消息(
             };
             let 事件 = serde_json::json!({
                 "事件编号": 事件编号,
-                "事件类型": "friend.message_created",
+                "事件类型": "私聊消息已创建",
                 "结构版本": 1,
                 "发生时间": Utc::now(),
                 "会话编号": 会话编号,
@@ -675,7 +790,7 @@ pub(super) async fn 发送私聊消息(
             });
             sqlx::query(
                 r#"INSERT INTO "事务发件箱" ("事件编号", "事件类型", "主题", "事件内容")
-                   VALUES ($1, 'friend.message_created', $2, $3)"#,
+                   VALUES ($1, '私聊消息已创建', $2, $3)"#,
             )
             .bind(事件编号)
             .bind(构造用户通知主题(通知用户编号))

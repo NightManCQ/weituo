@@ -1,4 +1,4 @@
-import type { MQTT事件, MQTT事件数据, MQTT回调, MQTT连接参数 } from './实时.类型'
+import type { MQTT事件, 事件数据 as MQTT事件数据, 事件回调 as MQTT回调, 连接参数 as MQTT连接参数, 发布选项 } from '../interface.uts'
 
 let 连接对象 : ReturnType<typeof uni.connectSocket> | null = null
 let 已连接 = false
@@ -17,7 +17,7 @@ function 触发事件(事件 : MQTT事件, 数据 : MQTT事件数据 = {}) {
 		try {
 			回调(数据)
 		} catch (原因) {
-			console.error('MQTT 事件监听处理失败', 原因)
+			console.错误('MQTT 事件监听处理失败', 原因)
 		}
 	})
 }
@@ -68,7 +68,7 @@ function 解码UTF8(字节 : Uint8Array) : string {
 	try {
 		return decodeURIComponent(编码)
 	} catch (原因) {
-		console.error('MQTT 消息 UTF-8 解码失败', 原因)
+		console.错误('MQTT 消息 UTF-8 解码失败', 原因)
 		return ''
 	}
 }
@@ -103,14 +103,14 @@ function 发送(数据 : ArrayBuffer) {
 	连接对象?.send({ data: 数据 })
 }
 
-export function 订阅(主题 : string | string[], qos : 0 | 1 | 2 = 0) : Promise<void> {
+export function 订阅(主题 : string | string[], 服务质量 : 0 | 1 | 2 = 0) : Promise<void> {
 	if (!已连接) return Promise.reject(new Error('MQTT 尚未连接'))
 	const 主题列表 = Array.isArray(主题) ? 主题 : [主题]
 	if (主题列表.length == 0) return Promise.resolve()
 
 	const 编号 = 获取消息编号()
 	const 内容 = [(编号 >> 8) & 0xFF, 编号 & 0xFF]
-	主题列表.forEach((项) => 内容.push(...MQTT字符串字段(项), qos))
+	主题列表.forEach((项) => 内容.push(...MQTT字符串字段(项), 服务质量))
 	return new Promise<void>((resolve, reject) => {
 		等待订阅确认.set(编号, { resolve, reject })
 		发送(MQTT数据包(0x82, 内容))
@@ -131,10 +131,10 @@ export function 取消订阅(主题 : string | string[]) : Promise<void> {
 	})
 }
 
-export function 发布(主题 : string, payload : string | ArrayBuffer, 选项 ?: { qos?: 0 | 1 | 2 }) : Promise<void> {
+export function 发布(主题 : string, 载荷 : string | ArrayBuffer, 选项 ?: 发布选项) : Promise<void> {
 	if (!已连接) return Promise.reject(new Error('MQTT 尚未连接'))
-	const 服务质量 = 选项?.qos ?? 0
-	const 内容字节 = typeof payload == 'string' ? 编码UTF8(payload) : Array.from(new Uint8Array(payload))
+	const 服务质量 = 选项?.服务质量 ?? 0
+	const 内容字节 = typeof 载荷 == 'string' ? 编码UTF8(载荷) : Array.from(new Uint8Array(载荷))
 	const 主题字段 = MQTT字符串字段(主题)
 	const 编号 = 服务质量 > 0 ? 获取消息编号() : null
 	const 消息内容 = 编号 == null
@@ -178,7 +178,7 @@ function 处理数据包(数据 : ArrayBuffer) {
 				const 原因 = new Error(`MQTT broker 拒绝连接（返回码 ${返回码}）`)
 				连接完成?.(原因)
 				连接完成 = null
-				触发事件('error', { error: 原因.message })
+				触发事件('错误', { 错误: 原因.message })
 				连接对象?.close({})
 				return
 			}
@@ -233,8 +233,8 @@ function 处理数据包(数据 : ArrayBuffer) {
 				发送(MQTT数据包(0x50, [(本次消息编号 >> 8) & 0xFF, 本次消息编号 & 0xFF]))
 			}
 			触发事件('message', {
-				topic: 主题,
-				payload: 解码UTF8(字节.slice(内容游标, 内容结束位置)),
+				主题: 主题,
+				载荷: 解码UTF8(字节.slice(内容游标, 内容结束位置)),
 			})
 		}
 		游标 = 内容结束位置
@@ -320,7 +320,7 @@ export function 连接(参数 : MQTT连接参数) : Promise<void> {
 		新连接.onError(() => {
 			if (连接对象 != 新连接) return
 			const 原因 = new Error('MQTT WebSocket 连接发生错误')
-			触发事件('error', { error: 原因.message })
+			触发事件('错误', { 错误: 原因.message })
 			连接失败(原因)
 		})
 		新连接.onClose(() => {
@@ -363,7 +363,7 @@ export function 断开连接() : Promise<void> {
 		try {
 			旧连接.close({})
 		} catch (原因) {
-			console.error('关闭 MQTT WebSocket 连接失败', 原因)
+			console.错误('关闭 MQTT WebSocket 连接失败', 原因)
 		}
 	}
 	return Promise.resolve()

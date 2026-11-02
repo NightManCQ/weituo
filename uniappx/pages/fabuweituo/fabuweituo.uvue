@@ -3,6 +3,7 @@ import { onShow } from '@dcloudio/uni-app'
 import { ref } from 'vue'
 import type { 积分账户, 任务位置, 用户 } from '../../common/leixing'
 import { 发布委托, 发送请求, 读取当前用户, 读取委托位置 } from '../../common/wangluo'
+import { 移除委托位置 } from '../../common/本地存储'
 
 const 当前用户 = ref<用户 | null>(null)
 const 标题 = ref('')
@@ -71,7 +72,7 @@ onShow(() => {
   const 结果 = 读取委托位置()
   if (结果 != null) {
     位置.value = 结果
-    uni.removeStorageSync('renwu_location')
+    移除委托位置()
   }
   if (当前用户.value != null) void 加载积分()
   else {

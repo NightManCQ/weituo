@@ -3,7 +3,7 @@
  * 负责消息队列和批量处理
  */
 
-import { QoS } from '../interface.uts'
+import { 服务质量等级 } from '../interface.uts'
 
 /**
  * 待发送消息
@@ -12,7 +12,7 @@ export type PendingMessage = {
   id: string
   topic: string
   payload: string | ArrayBuffer
-  qos: QoS
+  qos: 服务质量等级
   retain: boolean
   timestamp: number
   retryCount: number
@@ -24,7 +24,7 @@ export type PendingMessage = {
 export type ReceivedMessage = {
   topic: string
   payload: string | ArrayBuffer
-  qos: QoS
+  qos: 服务质量等级
   retain: boolean
   timestamp: number
 }
@@ -55,7 +55,7 @@ export class MessageHandler {
   queueMessage(
     topic: string,
     payload: string | ArrayBuffer,
-    qos: QoS,
+    qos: 服务质量等级,
     retain: boolean
   ): PendingMessage {
     const message: PendingMessage = {
@@ -130,7 +130,7 @@ export class MessageHandler {
   handleIncomingMessage(
     topic: string,
     payload: string | ArrayBuffer,
-    qos: QoS,
+    qos: 服务质量等级,
     retain: boolean
   ): ReceivedMessage {
     const message: ReceivedMessage = {

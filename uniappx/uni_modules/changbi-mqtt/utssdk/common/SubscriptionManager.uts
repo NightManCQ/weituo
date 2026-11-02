@@ -7,14 +7,14 @@
  * 说明: 使用双数据结构（Map + Array）避免 Map 遍历的编译问题
  */
 
-import { QoS } from '../interface.uts'
+import { 服务质量等级 } from '../interface.uts'
 
 /**
  * 订阅信息
  */
 export type Subscription = {
   topic: string
-  qos: QoS
+  qos: 服务质量等级
   subscribedAt: number
 }
 
@@ -28,7 +28,7 @@ export class SubscriptionManager {
   /**
    * 添加订阅
    */
-  addSubscription(topic: string, qos: QoS): void {
+  addSubscription(topic: string, qos: 服务质量等级): void {
     // 先尝试移除，确保数组和 Map 中没有重复的 topic 项
     this.removeSubscription(topic)
 

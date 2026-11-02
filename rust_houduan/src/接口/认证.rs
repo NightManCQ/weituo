@@ -91,7 +91,11 @@ pub(super) async fn 验证可选身份(
     后续处理.run(请求).await
 }
 
-fn 签发访问令牌(用户编号: Uuid, 密钥: &str, 主题列表: Vec<String>) -> Result<String, 应用错误> {
+fn 签发访问令牌(
+    用户编号: Uuid,
+    密钥: &str,
+    主题列表: Vec<String>,
+) -> Result<String, 应用错误> {
     let 令牌内容 = 令牌声明 {
         主体: 用户编号,
         过期时间: None,
@@ -253,8 +257,8 @@ mod 访问令牌测试 {
     fn 访问令牌不包含过期时间且可通过校验() {
         let 用户编号 = Uuid::new_v4();
         let 密钥 = "测试用的访问令牌签名密钥";
-        let 令牌 = 签发访问令牌(用户编号, 密钥, vec![format!("u/{用户编号}")])
-            .expect("访问令牌应能签发");
+        let 令牌 =
+            签发访问令牌(用户编号, 密钥, vec![format!("u/{用户编号}")]).expect("访问令牌应能签发");
         let mut 校验规则 = Validation::default();
         校验规则.required_spec_claims.remove("exp");
 

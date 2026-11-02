@@ -1,0 +1,633 @@
+/**
+ * cq-mqtt 插件 · 前端 SQLite 引擎 · Web 端对外 API 层（utssdk/web）
+ *
+ * 这一层的导出项与 app-android/index.uts **逐一对齐**，业务层同一份
+ * `import { 打开数据库, 执行SQL, ... } from '@/uni_modules/cq-mqtt'`
+ * 在 Android 与 H5 上都能编译通过、行为一致。
+ *
+ * 与 Android 端唯一的差别：Web 端底层是 SQLite 官方 WASM，
+ * 模块本身必须异步加载，因此多了一个 `准备SQLite()`。
+ * 规则很简单：
+ *   1. 任意同步 API 之前，先 `await 准备SQLite()` 一次（幂等，可重复调用）；
+ *   2. 没 await 就调同步 API，会抛 [9010014]，提示很明确；
+ *   3. 所有 `*异步` 版本内部会自动 await，不用调用方关心。
+ *
+ * 存储：kvvfs（localStorage），单库、约 5MB 上限，详见 sqlite.uts 头部说明。
+ */
+
+import {
+	SQLite值,
+	SQLite数据行,
+	SQL语句,
+	打开数据库参数,
+	打开数据库结果,
+	单库参数,
+	执行SQL参数,
+	批量执行参数,
+	查询SQL参数,
+	建表参数,
+	建索引参数,
+	删索引参数,
+	表参数,
+	列参数,
+	存键值参数,
+	取键值参数,
+	设版本参数,
+	执行结果,
+	批量执行结果,
+	查询结果,
+	操作结果,
+	SQLite失败,
+	打开数据库异步参数,
+	执行SQL异步参数,
+	批量执行异步参数,
+	查询SQL异步参数,
+	事务异步参数,
+	单库异步参数
+} from '../interface.uts'
+import { SQLite错误主题, SQLite未知错误码, SQLite错误前缀开始, 取得错误说明 } from '../unierror.uts'
+import {
+	设置模块地址,
+	取得模块地址,
+	引擎是否已就绪,
+	加载引擎,
+	取连接,
+	打开,
+	关闭,
+	关闭全部,
+	删除,
+	是否已打开,
+	文件是否存在,
+	取得路径,
+	已打开列表,
+	执行,
+	批量执行,
+	查询,
+	查询单值,
+	查询数量,
+	开始事务,
+	提交事务核心,
+	回滚事务核心,
+	是否在事务中核心,
+	执行事务,
+	建表,
+	表是否存在核心,
+	删表,
+	清空表核心,
+	列是否存在核心,
+	建索引,
+	删索引,
+	存键值,
+	读键值,
+	删键值,
+	清空键值核心,
+	列出键核心,
+	取版本,
+	设版本,
+	重组,
+	写回日志,
+	取SQLite版本,
+	取得存储占用,
+	注入模块,
+	候选模块地址
+} from './sqlite.uts'
+
+/* ============================================================
+ * Web 端专属：WASM 初始化
+ * ============================================================ */
+
+/**
+ * 加载 SQLite 官方 WASM，业务层在调用任何同步 API 之前必须先 await 一次
+ * 参数：可选的自定义模块地址（把 index.mjs 与 sqlite3.wasm 放同一目录）
+ */
+export async function 准备SQLite(地址? : string) : Promise<boolean> {
+	if (地址 != null && 地址!.length > 0) {
+		设置模块地址(地址!)
+	}
+	await 加载引擎()
+	return 引擎是否已就绪()
+}
+
+/** WASM 是否已就绪 */
+export function SQLite是否已就绪() : boolean {
+	return 引擎是否已就绪()
+}
+
+/** 换成自托管的 SQLite WASM 地址（index.mjs + sqlite3.wasm 同目录） */
+export function 设置SQLite模块地址(地址 : string) : void {
+	设置模块地址(地址)
+}
+
+/** 当前 SQLite WASM 地址 */
+export function 取得SQLite模块地址() : string {
+	return 取得模块地址()
+}
+
+/** 实际会依次尝试的地址列表，资源加载出问题时先看这里 */
+export function 候选SQLite模块地址() : Array<string> {
+	return 候选模块地址()
+}
+
+/**
+ * 逃生通道：业务层自己 import 官方模块后注入进来，优先级高于地址加载
+ * 某些打包器会让 `import(变量)` 失效，这时改成：
+ *   import sqlite3Module from '/static/sqlite/index.mjs'
+ *   注入SQLite模块(sqlite3Module)
+ */
+export function 注入SQLite模块(模块 : any) : void {
+	注入模块(模块)
+}
+
+/** 取 SQLite 库版本号，例如 3.54.1 */
+export function 取得SQLite版本号() : string {
+	return 取SQLite版本()
+}
+
+/** localStorage 里当前占用的字节数（kvvfs 上限约 5MB） */
+export function 取得Web存储占用() : number {
+	return 取得存储占用()
+}
+
+/* ============================================================
+ * 统一错误处理
+ * ============================================================ */
+
+/**
+ * 把底层抛出的任意异常，解析成结构化的 SQLite失败
+ * UTS 的 throw new Error() 在 Web 端就是普通 Error，
+ * 错误信息以 [错误码] 开头，这里剥掉前缀还原成 errCode + errMsg
+ */
+export function 解析SQLite异常(异常 : any) : SQLite失败 {
+	let 错误信息 = ''
+	let 错误码 = SQLite未知错误码
+
+	try {
+		if (异常 == null) {
+			错误信息 = '未知错误'
+		} else {
+			错误信息 = '' + 异常
+		}
+	} catch (忽略异常) {
+		错误信息 = '解析异常时再次出错'
+	}
+
+	const 前缀位置 = 错误信息.indexOf(SQLite错误前缀开始)
+	if (前缀位置 >= 0) {
+		const 后半 = 错误信息.substring(前缀位置)
+		const 后缀位置 = 后半.indexOf(']')
+		if (后缀位置 > 0) {
+			const 码文本 = 后半.substring(1, 后缀位置)
+			const 解析结果 = Number.parseFloat(码文本)
+			if (解析结果 != 解析结果) {
+				错误码 = SQLite未知错误码
+			} else {
+				错误码 = 解析结果
+			}
+			错误信息 = 后半.substring(后缀位置 + 1)
+		}
+	}
+
+	if (错误信息.length == 0) {
+		错误信息 = 取得错误说明(错误码)
+	}
+
+	const 失败 : SQLite失败 = {
+		errCode: 错误码,
+		errMsg: 错误信息,
+		errSubject: SQLite错误主题
+	}
+	return 失败
+}
+
+/* ============================================================
+ * 异步包装
+ * ============================================================ */
+
+/** 异步包装的内部参数 */
+type 异步回调包 = {
+	任务 : (() => any)
+	成功回调 : ((任意结果 : any | null) => void) | null
+	失败回调 : ((失败 : SQLite失败) => void) | null
+	完成回调 : ((任意结果 : any | null) => void) | null
+}
+
+/**
+ * 统一异步包装：先确保 WASM 已加载，再执行任务，最后统一回调
+ * JS 是单线程，这里不再做线程切换，只保证回调顺序与 Android 端一致
+ */
+function 异步执行(包 : 异步回调包) : void {
+	void 跑异步(包.任务, 包.成功回调, 包.失败回调, 包.完成回调)
+}
+
+async function 跑异步(
+	任务 : () => any,
+	成功回调 : ((任意结果 : any | null) => void) | null,
+	失败回调 : ((失败 : SQLite失败) => void) | null,
+	完成回调 : ((任意结果 : any | null) => void) | null
+) : Promise<void> {
+	let 结果 : any | null = null
+	let 失败 : SQLite失败 | null = null
+
+	try {
+		await 加载引擎()
+		结果 = 任务()
+	} catch (异常) {
+		失败 = 解析SQLite异常(异常)
+	}
+
+	if (失败 != null) {
+		if (失败回调 != null) {
+			失败回调!(失败!)
+		}
+	} else {
+		if (成功回调 != null) {
+			成功回调!(结果)
+		}
+	}
+	if (完成回调 != null) {
+		if (失败 != null) {
+			完成回调!(失败!)
+		} else {
+			完成回调!(结果)
+		}
+	}
+}
+
+/* ============================================================
+ * 打开 / 关闭 / 删除
+ * ============================================================ */
+
+/** 打开数据库，同名库重复调用是幂等的 */
+export function 打开数据库(参数 : 打开数据库参数) : 打开数据库结果 {
+	return 打开(参数)
+}
+
+/** 打开数据库（异步） */
+export function 打开数据库异步(参数 : 打开数据库异步参数) : void {
+	const 入参 : 打开数据库参数 = {
+		数据库名: 参数.数据库名,
+		版本: 参数.版本 ?? null,
+		路径: 参数.路径 ?? null,
+		只读: 参数.只读 ?? false,
+		预写日志: 参数.预写日志 ?? null,
+		外键约束: 参数.外键约束 ?? null
+	}
+	const 用户成功 = 参数.success ?? null
+	异步执行({
+		任务: function() : any {
+			return 打开(入参) as any
+		},
+		成功回调: function(任意结果 : any | null) : void {
+			if (用户成功 != null) {
+				用户成功!(任意结果! as 打开数据库结果)
+			}
+		},
+		失败回调: 参数.fail ?? null,
+		完成回调: 参数.complete ?? null
+	})
+}
+
+/** 关闭数据库 */
+export function 关闭数据库(数据库名 : string) : void {
+	关闭(数据库名)
+}
+
+/** 关闭数据库（异步） */
+export function 关闭数据库异步(参数 : 单库异步参数) : void {
+	const 数据库名 = 参数.数据库名
+	const 用户成功 = 参数.success ?? null
+	异步执行({
+		任务: function() : any {
+			关闭(数据库名)
+			const 结果 : 操作结果 = { 数据库名: 数据库名, 是否成功: true }
+			return 结果 as any
+		},
+		成功回调: function(任意结果 : any | null) : void {
+			if (用户成功 != null) {
+				用户成功!(任意结果! as 操作结果)
+			}
+		},
+		失败回调: 参数.fail ?? null,
+		完成回调: 参数.complete ?? null
+	})
+}
+
+/** 关闭全部数据库，返回关闭的库数量 */
+export function 关闭全部数据库() : number {
+	return 关闭全部()
+}
+
+/** 删除数据库：清空 localStorage 里的 kvvfs 数据 */
+export function 删除数据库(数据库名 : string) : void {
+	删除(数据库名)
+}
+
+/** 删除数据库（异步） */
+export function 删除数据库异步(参数 : 单库异步参数) : void {
+	const 数据库名 = 参数.数据库名
+	const 用户成功 = 参数.success ?? null
+	异步执行({
+		任务: function() : any {
+			删除(数据库名)
+			const 结果 : 操作结果 = { 数据库名: 数据库名, 是否成功: true }
+			return 结果 as any
+		},
+		成功回调: function(任意结果 : any | null) : void {
+			if (用户成功 != null) {
+				用户成功!(任意结果! as 操作结果)
+			}
+		},
+		失败回调: 参数.fail ?? null,
+		完成回调: 参数.complete ?? null
+	})
+}
+
+/** 数据库是否已打开 */
+export function 数据库是否已打开(数据库名 : string) : boolean {
+	return 是否已打开(数据库名)
+}
+
+/** localStorage 里是否已有数据库数据 */
+export function 数据库文件是否存在(数据库名 : string) : boolean {
+	return 文件是否存在(数据库名)
+}
+
+/** 取得数据库标识（kvvfs 没有真实文件路径） */
+export function 取得数据库文件路径(数据库名 : string) : string {
+	return 取得路径(数据库名)
+}
+
+/** 已打开的库名列表 */
+export function 取得已打开数据库名列表() : Array<string> {
+	return 已打开列表()
+}
+
+/* ============================================================
+ * 执行 / 查询
+ * ============================================================ */
+
+/** 执行一条写 SQL（INSERT / UPDATE / DELETE / DDL） */
+export function 执行SQL(参数 : 执行SQL参数) : 执行结果 {
+	return 执行(参数)
+}
+
+/** 执行一条写 SQL（异步） */
+export function 执行SQL异步(参数 : 执行SQL异步参数) : void {
+	const 入参 : 执行SQL参数 = {
+		数据库名: 参数.数据库名,
+		SQL: 参数.SQL,
+		参数: 参数.参数 ?? null
+	}
+	const 用户成功 = 参数.success ?? null
+	异步执行({
+		任务: function() : any {
+			return 执行(入参) as any
+		},
+		成功回调: function(任意结果 : any | null) : void {
+			if (用户成功 != null) {
+				用户成功!(任意结果! as 执行结果)
+			}
+		},
+		失败回调: 参数.fail ?? null,
+		完成回调: 参数.complete ?? null
+	})
+}
+
+/** 依次执行多条 SQL，不在事务中时自动包一层事务 */
+export function 批量执行SQL(参数 : 批量执行参数) : 批量执行结果 {
+	return 批量执行(参数)
+}
+
+/** 批量执行 SQL（异步） */
+export function 批量执行SQL异步(参数 : 批量执行异步参数) : void {
+	const 入参 : 批量执行参数 = {
+		数据库名: 参数.数据库名,
+		语句集合: 参数.语句集合
+	}
+	const 用户成功 = 参数.success ?? null
+	异步执行({
+		任务: function() : any {
+			return 批量执行(入参) as any
+		},
+		成功回调: function(任意结果 : any | null) : void {
+			if (用户成功 != null) {
+				用户成功!(任意结果! as 批量执行结果)
+			}
+		},
+		失败回调: 参数.fail ?? null,
+		完成回调: 参数.complete ?? null
+	})
+}
+
+/** 执行查询，返回列名与数据行 */
+export function 查询SQL(参数 : 查询SQL参数) : 查询结果 {
+	return 查询(参数)
+}
+
+/** 执行查询（异步） */
+export function 查询SQL异步(参数 : 查询SQL异步参数) : void {
+	const 入参 : 查询SQL参数 = {
+		数据库名: 参数.数据库名,
+		SQL: 参数.SQL,
+		参数: 参数.参数 ?? null
+	}
+	const 用户成功 = 参数.success ?? null
+	异步执行({
+		任务: function() : any {
+			return 查询(入参) as any
+		},
+		成功回调: function(任意结果 : any | null) : void {
+			if (用户成功 != null) {
+				用户成功!(任意结果! as 查询结果)
+			}
+		},
+		失败回调: 参数.fail ?? null,
+		完成回调: 参数.complete ?? null
+	})
+}
+
+/** 只取第一行，没有结果返回 null */
+export function 查询单行(参数 : 查询SQL参数) : SQLite数据行 | null {
+	const 结果 = 查询(参数)
+	if (结果.行集合.length == 0) {
+		return null
+	}
+	return 结果.行集合[0]
+}
+
+/** 只取第一行第一列 */
+export function 查询单个值(参数 : 查询SQL参数) : SQLite值 {
+	return 查询单值(参数)
+}
+
+/** 取 COUNT 类查询的数字结果 */
+export function 查询记录数(参数 : 查询SQL参数) : number {
+	return 查询数量(参数)
+}
+
+/* ============================================================
+ * 事务
+ * ============================================================ */
+
+/** 开启事务，重复开启会抛错 */
+export function 开启事务(数据库名 : string) : void {
+	开始事务(数据库名)
+}
+
+/** 提交事务，未开启时抛错 */
+export function 提交事务(数据库名 : string) : void {
+	提交事务核心(数据库名)
+}
+
+/** 回滚事务，未开启时抛错 */
+export function 回滚事务(数据库名 : string) : void {
+	回滚事务核心(数据库名)
+}
+
+/** 是否处于手动事务中 */
+export function 是否在事务中(数据库名 : string) : boolean {
+	return 是否在事务中核心(数据库名)
+}
+
+/** 在一个事务里执行多条语句，全部成功才提交 */
+export function 在一个事务里执行(参数 : 批量执行参数) : 批量执行结果 {
+	return 执行事务(参数)
+}
+
+/** 在一个事务里执行多条语句（异步） */
+export function 在一个事务里执行异步(参数 : 事务异步参数) : void {
+	const 入参 : 批量执行参数 = {
+		数据库名: 参数.数据库名,
+		语句集合: 参数.语句集合
+	}
+	const 用户成功 = 参数.success ?? null
+	异步执行({
+		任务: function() : any {
+			return 执行事务(入参) as any
+		},
+		成功回调: function(任意结果 : any | null) : void {
+			if (用户成功 != null) {
+				用户成功!(任意结果! as 批量执行结果)
+			}
+		},
+		失败回调: 参数.fail ?? null,
+		完成回调: 参数.complete ?? null
+	})
+}
+
+/* ============================================================
+ * 表 / 索引
+ * ============================================================ */
+
+/** 建表，已存在则跳过 */
+export function 创建表(参数 : 建表参数) : void {
+	建表(参数)
+}
+
+/** 判断表是否存在 */
+export function 表是否存在(参数 : 表参数) : boolean {
+	return 表是否存在核心(参数)
+}
+
+/** 删表 */
+export function 删除表(参数 : 表参数) : void {
+	删表(参数)
+}
+
+/** 清空表数据，并重置自增序号 */
+export function 清空表(参数 : 表参数) : void {
+	清空表核心(参数)
+}
+
+/** 判断列是否存在 */
+export function 列是否存在(参数 : 列参数) : boolean {
+	return 列是否存在核心(参数)
+}
+
+/** 建索引 */
+export function 创建索引(参数 : 建索引参数) : void {
+	建索引(参数)
+}
+
+/** 删索引 */
+export function 删除索引(参数 : 删索引参数) : void {
+	删索引(参数)
+}
+
+/* ============================================================
+ * 键值表
+ * ============================================================ */
+
+/** 写键值，键已存在则覆盖 */
+export function 存储键值(参数 : 存键值参数) : void {
+	存键值(参数)
+}
+
+/** 读键值，不存在返回 null */
+export function 读取键值(参数 : 取键值参数) : string | null {
+	return 读键值(参数)
+}
+
+/** 删键值 */
+export function 删除键值(参数 : 取键值参数) : void {
+	删键值(参数)
+}
+
+/** 清空键值表 */
+export function 清空键值(数据库名 : string) : void {
+	清空键值核心(数据库名)
+}
+
+/** 列出全部键 */
+export function 列出键(数据库名 : string) : Array<string> {
+	return 列出键核心(数据库名)
+}
+
+/* ============================================================
+ * 版本 / 维护
+ * ============================================================ */
+
+/** 取 PRAGMA user_version */
+export function 取得用户版本号(数据库名 : string) : number {
+	return 取版本(数据库名)
+}
+
+/** 设置 PRAGMA user_version */
+export function 设置用户版本号(参数 : 设版本参数) : void {
+	设版本(参数)
+}
+
+/** 整理数据库碎片（VACUUM），不能在事务中调用 */
+export function 重组数据库(数据库名 : string) : void {
+	重组(数据库名)
+}
+
+/** 整理数据库碎片（异步） */
+export function 重组数据库异步(参数 : 单库异步参数) : void {
+	const 数据库名 = 参数.数据库名
+	const 用户成功 = 参数.success ?? null
+	异步执行({
+		任务: function() : any {
+			重组(数据库名)
+			const 结果 : 操作结果 = { 数据库名: 数据库名, 是否成功: true }
+			return 结果 as any
+		},
+		成功回调: function(任意结果 : any | null) : void {
+			if (用户成功 != null) {
+				用户成功!(任意结果! as 操作结果)
+			}
+		},
+		失败回调: 参数.fail ?? null,
+		完成回调: 参数.complete ?? null
+	})
+}
+
+/** Web 端没有 WAL，这里做一次 checkpoint 尝试，失败也不影响使用 */
+export function 写回预写日志(数据库名 : string) : void {
+	写回日志(数据库名)
+}
+
+/** 按错误码取错误文案 */
+export function 取得SQLite错误说明(错误码 : number) : string {
+	return 取得错误说明(错误码)
+}

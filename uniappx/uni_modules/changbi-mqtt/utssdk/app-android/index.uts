@@ -4,16 +4,16 @@
  */
 
 import {
-	ConnectionOptions,
-	PublishOptions,
+	连接参数,
+	发布选项,
 	MQTT订阅消息,
-	MQTTEvent,
-	EventCallback,
-	EventData,
-	ConnectionState,
-	LogLevel,
-	QoS,
-	ConnectionQualityStats
+	MQTT事件,
+	事件回调,
+	事件数据,
+	连接状态,
+	日志级别,
+	服务质量等级,
+	连接质量统计
 } from '../interface.uts'
 
 import { UTSAndroid } from 'io.dcloud.uts'
@@ -28,8 +28,8 @@ import { ConnectionManager, ReconnectConfig } from '../common/ConnectionManager.
  * 全局变量
  */
 let 助手 : MqttHelper | null = null
-let 事件监听器集合 : Map<string, Array<EventCallback>> = new Map()
-let 日志级别 : LogLevel = LogLevel.INFO
+let 事件监听器集合 : Map<string, Array<事件回调>> = new Map()
+let 日志级别 : 日志级别 = 日志级别.INFO
 
 // 订阅管理器、消息处理器、状态管理器和连接管理器
 let 订阅管理器 : SubscriptionManager = new SubscriptionManager()
@@ -44,19 +44,19 @@ let 关闭回调引用 : (() => void) | null = null
 let 连接丢失回调引用 : (() => void) | null = null
 
 // 保存用户注册的事件回调，防止被释放
-let 用户事件回调 : Map<string, Array<EventCallback>> = new Map()
+let 用户事件回调 : Map<string, Array<事件回调>> = new Map()
 let 主题订阅消息回调 : Map<string, Array<(消息 : MQTT订阅消息) => void>> = new Map()
 
 // 连接质量统计（全局单例）
-let 质量统计 : ConnectionQualityStats = {
-	totalPublished: 0,
-	totalReceived: 0,
-	totalQueued: 0,
-	totalQueueFlushed: 0,
-	totalReconnects: 0,
-	lastConnectedAt: null,
-	lastDisconnectedAt: null,
-	avgReconnectMs: 0
+let 质量统计 : 连接质量统计 = {
+	已发布数量: 0,
+	已接收数量: 0,
+	已排队数量: 0,
+	已补发数量: 0,
+	重连次数: 0,
+	最后连接时间: null,
+	最后断开时间: null,
+	平均重连耗时: 0
 }
 // 记录断线时间戳，用于计算平均重连耗时
 let 断线时间戳 : number = 0
@@ -75,19 +75,19 @@ function 初始化助手() : void {
 			// 设置状态变化回调
 			状态管理器.setStateChangeCallback((状态) => {
 				// 根据状态触发相应事件
-				if (状态.status === ConnectionStatus.CONNECTED) {
+				if (状态.状态 === ConnectionStatus.CONNECTED) {
 					// 恢复订阅
 					const 订阅列表 = 订阅管理器.getSubscriptions()
 					订阅列表.forEach((订阅项) => {
 						if (助手 != null) {
 							助手!.subscribe(
-								订阅项.topic,
-								订阅项.qos.toInt(),
+								订阅项.主题,
+								订阅项.服务质量.toInt(),
 								() => {
-									记录日志(LogLevel.INFO, 'Subscription restored: ' + 订阅项.topic + ' with QoS ' + 订阅项.qos)
+									记录日志(日志级别.INFO, 'Subscription restored: ' + 订阅项.主题 + ' with 服务质量等级 ' + 订阅项.服务质量)
 								},
 								(错误 : string) => {
-									记录日志(LogLevel.ERROR, 'Failed to restore subscription: ' + 订阅项.topic + ' error: ' + 错误)
+									记录日志(日志级别.ERROR, 'Failed to restore subscription: ' + 订阅项.主题 + ' 错误: ' + 错误)
 								}
 							)
 						}
@@ -96,22 +96,22 @@ function 初始化助手() : void {
 					// 补发离线消息队列
 					补发消息队列()
 
-					const 事件数据 : EventData = {
-						sessionPresent: 状态.sessionPresent
+					const 事件数据 : 事件数据 = {
+						会话存在: 状态.会话存在
 					}
 					触发事件('connect', 事件数据)
-				} else if (状态.status === ConnectionStatus.DISCONNECTED) {
-					const 事件数据 : EventData = {}
+				} else if (状态.状态 === ConnectionStatus.DISCONNECTED) {
+					const 事件数据 : 事件数据 = {}
 					触发事件('close', 事件数据)
-					if (状态.lastError !== null) {
-						const 错误数据 : EventData = {
-							error: 状态.lastError
+					if (状态.最后错误 !== null) {
+						const 错误数据 : 事件数据 = {
+							错误: 状态.最后错误
 						}
 						触发事件('offline', 错误数据)
 					}
-				} else if (状态.status === ConnectionStatus.RECONNECTING) {
-					const 事件数据 : EventData = {
-						reconnectAttempts: 状态.reconnectAttempts
+				} else if (状态.状态 === ConnectionStatus.RECONNECTING) {
+					const 事件数据 : 事件数据 = {
+						重连次数: 状态.重连次数
 					}
 					触发事件('reconnect', 事件数据)
 				}
@@ -120,12 +120,12 @@ function 初始化助手() : void {
 			// 设置重连次数变化回调：ConnectionManager 是唯一权威，StateManager 只做镜像
 			连接管理器.setReconnectAttemptsCallback((重连次数 : number) => {
 				状态管理器.setReconnecting(重连次数)
-				记录日志(LogLevel.INFO, 'Reconnecting... (attempt ' + 重连次数 + ')')
+				记录日志(日志级别.INFO, 'Reconnecting... (attempt ' + 重连次数 + ')')
 			})
 
 			// 设置重连回调
 			连接管理器.setReconnectCallback(() => {
-				const 连接选项 = 连接管理器.getConnectionOptions()
+				const 连接选项 = 连接管理器.get连接参数()
 				if (连接选项 !== null) {
 					// 尝试重连
 					连接(连接选项).then(() => {
@@ -133,17 +133,17 @@ function 初始化助手() : void {
 						状态管理器.resetReconnectAttempts()
 					}).catch((原因) => {
 						连接管理器.onReconnectFailure()
-						const 错误消息 = 原因 != null ? (原因 as Error).message : 'Unknown error'
-						记录日志(LogLevel.ERROR, 'Reconnect failed: ' + 错误消息)
+						const 错误消息 = 原因 != null ? (原因 as Error).message : 'Unknown 错误'
+						记录日志(日志级别.ERROR, 'Reconnect failed: ' + 错误消息)
 					})
 				}
 			})
 
 			// 设置达到最大重连次数回调
 			连接管理器.setMaxAttemptsCallback(() => {
-				记录日志(LogLevel.ERROR, 'Max reconnect attempts reached')
-				const 事件数据 : EventData = {
-					error: 'Max reconnect attempts reached'
+				记录日志(日志级别.ERROR, 'Max reconnect attempts reached')
+				const 事件数据 : 事件数据 = {
+					错误: 'Max reconnect attempts reached'
 				}
 				触发事件('offline', 事件数据)
 			})
@@ -152,15 +152,15 @@ function 初始化助手() : void {
 			连接回调引用 = (会话保留 : boolean, 错误 : string | null) => {
 				if (错误 == null) {
 					状态管理器.setConnected(会话保留)
-					记录日志(LogLevel.INFO, 'Connected to MQTT broker')
+					记录日志(日志级别.INFO, 'Connected to MQTT broker')
 					// 质量统计：记录连接时间，计算本次重连耗时
 					const 当前时间 = Date.now()
-					质量统计.lastConnectedAt = 当前时间
+					质量统计.最后连接时间 = 当前时间
 					if (断线时间戳 > 0) {
 						const 间隔时长 = 当前时间 - 断线时间戳
 						重连耗时总和 += 间隔时长
-						质量统计.totalReconnects++
-						质量统计.avgReconnectMs = 重连耗时总和 / 质量统计.totalReconnects
+						质量统计.重连次数++
+						质量统计.平均重连耗时 = 重连耗时总和 / 质量统计.重连次数
 						断线时间戳 = 0
 					}
 				}
@@ -172,32 +172,32 @@ function 初始化助手() : void {
 			// Kotlin 层负责将 ByteArray 转换为 UTF-8 字符串，避免 UTS 侧 ArrayBuffer 类型转换崩溃
 			消息回调引用 = (主题 : string, 载荷文本 : string, 服务质量 : number, 保留标志 : boolean) => {
 				// 使用 MessageHandler 处理接收到的消息
-				消息处理器.handleIncomingMessage(主题, 载荷文本, 服务质量 as QoS, 保留标志)
-				质量统计.totalReceived++
+				消息处理器.handleIncomingMessage(主题, 载荷文本, 服务质量 as 服务质量等级, 保留标志)
+				质量统计.已接收数量++
 
-				// 创建符合 EventData 类型的对象
-				const 事件数据 : EventData = {
-					topic: 主题,
-					payload: 载荷文本,
-					qos: 服务质量 as QoS,
-					retain: 保留标志
+				// 创建符合 事件数据 类型的对象
+				const 事件数据 : 事件数据 = {
+					主题: 主题,
+					载荷: 载荷文本,
+					服务质量: 服务质量 as 服务质量等级,
+					保留: 保留标志
 				}
 				触发事件('message', 事件数据)
 				主题订阅消息回调.get(主题)?.forEach((回调) => {
 					try { 回调(事件数据 as MQTT订阅消息) }
-					catch (原因) { console.error('主题订阅消息处理失败: ' + 原因) }
+					catch (原因) { console.错误('主题订阅消息处理失败: ' + 原因) }
 				})
-				记录日志(LogLevel.DEBUG, 'Message received on topic ' + 主题)
+				记录日志(日志级别.DEBUG, 'Message received on 主题 ' + 主题)
 			}
 			助手!.setMessageCallback(消息回调引用!)
 
 			// 设置关闭回调 - 保存到全局变量防止被释放
 			关闭回调引用 = () => {
 				状态管理器.setDisconnected()
-				记录日志(LogLevel.INFO, 'Connection closed')
+				记录日志(日志级别.INFO, 'Connection closed')
 				// 质量统计：记录断线时间
 				const 当前时间 = Date.now()
-				质量统计.lastDisconnectedAt = 当前时间
+				质量统计.最后断开时间 = 当前时间
 				if (断线时间戳 == 0) {
 					断线时间戳 = 当前时间
 				}
@@ -206,18 +206,18 @@ function 初始化助手() : void {
 
 			// 设置心跳主动检测回调 - 保存到全局变量防止被释放
 			助手!.setConnectionCheckCallback((是否在线 : boolean) => {
-				const 事件数据 : EventData = {
-					isAlive: 是否在线
+				const 事件数据 : 事件数据 = {
+					连接正常: 是否在线
 				}
 				触发事件('connection_check', 事件数据)
 				if (!是否在线) {
-					记录日志(LogLevel.WARN, 'Connection check: dead connection detected')
+					记录日志(日志级别.WARN, 'Connection check: dead connection detected')
 				}
 			})
 
 			// 设置连接丢失回调 - 保存到全局变量防止被释放
 			连接丢失回调引用 = () => {
-				记录日志(LogLevel.WARN, 'Connection lost, attempting to reconnect...')
+				记录日志(日志级别.WARN, 'Connection lost, attempting to reconnect...')
 				连接管理器.handleConnectionLost()
 			}
 			助手!.setConnectionLostCallback(连接丢失回调引用!)
@@ -228,14 +228,14 @@ function 初始化助手() : void {
 /**
  * 触发事件
  */
-function 触发事件(事件 : string, 数据 : EventData) : void {
+function 触发事件(事件 : string, 数据 : 事件数据) : void {
 	const 监听器列表 = 用户事件回调.get(事件)
 	if (监听器列表 != null) {
 		监听器列表.forEach((回调) => {
 			try {
 				回调(数据)
 			} catch (原因) {
-				console.error('Error in event handler for ' + 事件 + ':', 原因)
+				console.错误('Error in event handler for ' + 事件 + ':', 原因)
 			}
 		})
 	}
@@ -244,7 +244,7 @@ function 触发事件(事件 : string, 数据 : EventData) : void {
 /**
  * 记录日志
  */
-function 记录日志(级别 : LogLevel, 消息文本 : string) : void {
+function 记录日志(级别 : 日志级别, 消息文本 : string) : void {
 	if (级别 >= 日志级别) {
 		console.log('[MQTT] ' + 消息文本)
 	}
@@ -253,7 +253,7 @@ function 记录日志(级别 : LogLevel, 消息文本 : string) : void {
 /**
  * 连接到 MQTT Broker
  */
-export function 连接(参数 : ConnectionOptions) : Promise<void> {
+export function 连接(参数 : 连接参数) : Promise<void> {
 	return new Promise<void>((完成, 拒绝) => {
 		try {
 			初始化助手()
@@ -267,46 +267,46 @@ export function 连接(参数 : ConnectionOptions) : Promise<void> {
 			连接管理器.enableReconnect()
 
 			// 保存连接选项用于重连
-			连接管理器.saveConnectionOptions(参数)
+			连接管理器.save连接参数(参数)
 
 			// 配置重连参数
-			if (参数.reconnectPeriod != null) {
+			if (参数.重连间隔 != null) {
 				const 重连配置 = {
 					enabled: true,
-					reconnectPeriod: 参数.reconnectPeriod,
-					maxReconnectAttempts: 10
+					重连间隔: 参数.重连间隔,
+					最大重连次数: 10
 				} as ReconnectConfig
 				连接管理器.setReconnectConfig(重连配置)
 			}
-			if (参数.maxReconnectAttempts != null) {
+			if (参数.最大重连次数 != null) {
 				const 重连配置 = {
 					enabled: true,
-					reconnectPeriod: 5000,
-					maxReconnectAttempts: 参数.maxReconnectAttempts
+					重连间隔: 5000,
+					最大重连次数: 参数.最大重连次数
 				} as ReconnectConfig
 				连接管理器.setReconnectConfig(重连配置)
 			}
 
 			状态管理器.setConnecting()
-			记录日志(LogLevel.INFO, 'Connecting to ' + 参数.url + '...')
+			记录日志(日志级别.INFO, 'Connecting to ' + 参数.地址 + '...')
 
-			const 用户名 = 参数.username != null ? 参数.username! : null
-			const 密码 = 参数.password != null ? 参数.password! : null
-			const 干净会话 = 参数.clean != null ? 参数.clean : true
-			const 连接超时 = 参数.connectTimeout != null ? 参数.connectTimeout : 30000
-			const 心跳间隔 = 参数.keepalive != null ? 参数.keepalive : 60
+			const 用户名 = 参数.用户名 != null ? 参数.用户名! : null
+			const 密码 = 参数.密码 != null ? 参数.密码! : null
+			const 干净会话 = 参数.清理会话 != null ? 参数.清理会话 : true
+			const 连接超时 = 参数.连接超时 != null ? 参数.连接超时 : 30000
+			const 心跳间隔 = 参数.心跳间隔 != null ? 参数.心跳间隔 : 60
 
-			const 允许不受信任 = 参数.allowUntrusted != null ? 参数.allowUntrusted! : false
+			const 允许不受信任 = 参数.允许不受信任证书 != null ? 参数.允许不受信任证书! : false
 
 			// Will 消息参数
-			const 遗嘱主题 : string | null = (参数.will != null && 参数.will!.topic != null) ? 参数.will!.topic : null
-			const 遗嘱载荷 : string | null = (参数.will != null && 参数.will!.payload != null) ? 参数.will!.payload : null
-			const 遗嘱服务质量 : number = (参数.will != null && 参数.will!.qos != null) ? 参数.will!.qos : 0
-			const 遗嘱保留标志 : boolean = (参数.will != null && 参数.will!.retain != null) ? 参数.will!.retain : false
+			const 遗嘱主题 : string | null = (参数.遗嘱 != null && 参数.遗嘱!.主题 != null) ? 参数.遗嘱!.主题 : null
+			const 遗嘱载荷 : string | null = (参数.遗嘱 != null && 参数.遗嘱!.载荷 != null) ? 参数.遗嘱!.载荷 : null
+			const 遗嘱服务质量 : number = (参数.遗嘱 != null && 参数.遗嘱!.服务质量 != null) ? 参数.遗嘱!.服务质量 : 0
+			const 遗嘱保留标志 : boolean = (参数.遗嘱 != null && 参数.遗嘱!.保留 != null) ? 参数.遗嘱!.保留 : false
 
 			助手!.connect(
-				参数.url,
-				参数.clientId,
+				参数.地址,
+				参数.客户端编号,
 				用户名,
 				密码,
 				干净会话,
@@ -327,20 +327,20 @@ export function 连接(参数 : ConnectionOptions) : Promise<void> {
 				},
 				(错误 : string) => {
 					状态管理器.setDisconnected(错误)
-					记录日志(LogLevel.ERROR, 'Connection failed: ' + 错误)
+					记录日志(日志级别.ERROR, 'Connection failed: ' + 错误)
 
 					// 触发错误事件
-					const 错误数据 : EventData = {
-						error: 错误
+					const 错误数据 : 事件数据 = {
+						错误: 错误
 					}
-					触发事件('error', 错误数据)
+					触发事件('错误', 错误数据)
 
 					拒绝(new Error(错误))
 				}
 			)
 
 		} catch (原因) {
-			const 错误消息 = 'Connection error: ' + 原因
+			const 错误消息 = 'Connection 错误: ' + 原因
 			状态管理器.setDisconnected(错误消息)
 			拒绝(new Error(错误消息))
 		}
@@ -362,7 +362,7 @@ export function 断开连接() : Promise<void> {
 			连接管理器.disableReconnect()
 
 			状态管理器.setDisconnecting()
-			记录日志(LogLevel.INFO, 'Disconnecting...')
+			记录日志(日志级别.INFO, 'Disconnecting...')
 
 			助手!.disconnect(
 				() => {
@@ -372,12 +372,12 @@ export function 断开连接() : Promise<void> {
 					if (应用上下文 != null) {
 						MqttForegroundService.stop(应用上下文)
 					}
-					// 清空订阅列表（clean session 时）
+					// 清空订阅列表（清理会话 session 时）
 					订阅管理器.clearSubscriptions()
 					主题订阅消息回调.clear()
 					// 重置连接管理器
 					连接管理器.reset()
-					记录日志(LogLevel.INFO, 'Disconnected and cleared subscriptions')
+					记录日志(日志级别.INFO, 'Disconnected and cleared subscriptions')
 					完成()
 				},
 				(错误 : string) => {
@@ -387,7 +387,7 @@ export function 断开连接() : Promise<void> {
 			)
 
 		} catch (原因) {
-			const 错误消息 = 'Disconnect error: ' + 原因
+			const 错误消息 = 'Disconnect 错误: ' + 原因
 			状态管理器.setDisconnected(错误消息)
 			拒绝(new Error(错误消息))
 		}
@@ -407,7 +407,7 @@ export function 是否已连接() : boolean {
 /**
  * 订阅主题
  */
-export function 订阅(主题 : string | string[], 服务质量 : QoS = 0) : Promise<void> {
+export function 订阅(主题 : string | string[], 服务质量 : 服务质量等级 = 0) : Promise<void> {
 	return new Promise<void>((完成, 拒绝) => {
 		try {
 			if (助手 == null) {
@@ -422,7 +422,7 @@ export function 订阅(主题 : string | string[], 服务质量 : QoS = 0) : Pro
 			主题列表.forEach((主题项) => {
 				// 检查是否已订阅
 				if (订阅管理器.hasSubscription(主题项)) {
-					记录日志(LogLevel.WARN, 'Already subscribed to ' + 主题项)
+					记录日志(日志级别.WARN, 'Already subscribed to ' + 主题项)
 					已完成数++
 					if (已完成数 == 主题列表.length && !有错误) {
 						完成()
@@ -436,7 +436,7 @@ export function 订阅(主题 : string | string[], 服务质量 : QoS = 0) : Pro
 					() => {
 						// 添加到订阅管理器
 						订阅管理器.addSubscription(主题项, 服务质量)
-						记录日志(LogLevel.INFO, 'Subscribed to ' + 主题项 + ' with QoS ' + 服务质量)
+						记录日志(日志级别.INFO, 'Subscribed to ' + 主题项 + ' with 服务质量等级 ' + 服务质量)
 						已完成数++
 						if (已完成数 == 主题列表.length && !有错误) {
 							完成()
@@ -452,7 +452,7 @@ export function 订阅(主题 : string | string[], 服务质量 : QoS = 0) : Pro
 			})
 
 		} catch (原因) {
-			拒绝(new Error('Subscribe error: ' + 原因))
+			拒绝(new Error('Subscribe 错误: ' + 原因))
 		}
 	})
 }
@@ -475,7 +475,7 @@ export function 取消订阅(主题 : string | string[]) : Promise<void> {
 			主题列表.forEach((主题项) => {
 				// 检查是否已订阅
 				if (!订阅管理器.hasSubscription(主题项)) {
-					记录日志(LogLevel.WARN, 'Not subscribed to ' + 主题项)
+					记录日志(日志级别.WARN, 'Not subscribed to ' + 主题项)
 					已完成数++
 					if (已完成数 == 主题列表.length && !有错误) {
 						完成()
@@ -489,7 +489,7 @@ export function 取消订阅(主题 : string | string[]) : Promise<void> {
 						// 从订阅管理器移除
 						订阅管理器.removeSubscription(主题项)
 						主题订阅消息回调.delete(主题项)
-						记录日志(LogLevel.INFO, 'Unsubscribed from ' + 主题项)
+						记录日志(日志级别.INFO, 'Unsubscribed from ' + 主题项)
 						已完成数++
 						if (已完成数 == 主题列表.length && !有错误) {
 							完成()
@@ -505,7 +505,7 @@ export function 取消订阅(主题 : string | string[]) : Promise<void> {
 			})
 
 		} catch (原因) {
-			拒绝(new Error('Unsubscribe error: ' + 原因))
+			拒绝(new Error('Unsubscribe 错误: ' + 原因))
 		}
 	})
 }
@@ -514,20 +514,20 @@ export function 取消订阅(主题 : string | string[]) : Promise<void> {
  * 发布消息
  * 已连接时直接发送；断线时将消息加入离线队列，重连成功后自动补发。
  */
-export function 发布(主题 : string, 消息内容 : string | ArrayBuffer, 选项 ?: PublishOptions) : Promise<void> {
+export function 发布(主题 : string, 消息内容 : string | ArrayBuffer, 选项 ?: 发布选项) : Promise<void> {
 	return new Promise<void>((完成, 拒绝) => {
 		try {
-			const 服务质量 = 选项 != null && 选项.qos != null ? 选项.qos : 0 as QoS
-			const 保留标志 = 选项 != null && 选项.retain != null ? 选项.retain : false
+			const 服务质量 = 选项 != null && 选项.服务质量 != null ? 选项.服务质量 : 0 as 服务质量等级
+			const 保留标志 = 选项 != null && 选项.保留 != null ? 选项.保留 : false
 
 			// 未连接时加入离线队列，不直接报错
 			if (助手 == null || !助手!.isConnected()) {
 				const 待发消息 = 消息处理器.queueMessage(主题, 消息内容, 服务质量, 保留标志)
-				质量统计.totalQueued++
-				质量统计.totalQueued = 消息处理器.getTotalQueued()
-				记录日志(LogLevel.WARN, 'Not connected, message queued: ' + 主题 + ' (queue size: ' + 消息处理器.getPendingMessages().length + ')')
-				const 排队数据 : EventData = {
-					queuedCount: 消息处理器.getPendingMessages().length
+				质量统计.已排队数量++
+				质量统计.已排队数量 = 消息处理器.getTotalQueued()
+				记录日志(日志级别.WARN, 'Not connected, message queued: ' + 主题 + ' (queue size: ' + 消息处理器.getPendingMessages().length + ')')
+				const 排队数据 : 事件数据 = {
+					排队数量: 消息处理器.getPendingMessages().length
 				}
 				触发事件('queued', 排队数据)
 				// queued 时 resolve（不 reject），调用方可通过 queued 事件感知
@@ -551,8 +551,8 @@ export function 发布(主题 : string, 消息内容 : string | ArrayBuffer, 选
 				服务质量.toInt(),
 				保留标志,
 				() => {
-					质量统计.totalPublished++
-					记录日志(LogLevel.DEBUG, 'Published to ' + 主题)
+					质量统计.已发布数量++
+					记录日志(日志级别.DEBUG, 'Published to ' + 主题)
 					完成()
 				},
 				(错误 : string) => {
@@ -561,7 +561,7 @@ export function 发布(主题 : string, 消息内容 : string | ArrayBuffer, 选
 			)
 
 		} catch (原因) {
-			拒绝(new Error('Publish error: ' + 原因))
+			拒绝(new Error('Publish 错误: ' + 原因))
 		}
 	})
 }
@@ -576,11 +576,11 @@ export function 补发消息队列() : void {
 		return
 	}
 	if (助手 == null || !助手!.isConnected()) {
-		记录日志(LogLevel.WARN, 'flushMessageQueue: not connected, skip')
+		记录日志(日志级别.WARN, 'flushMessageQueue: not connected, skip')
 		return
 	}
 
-	记录日志(LogLevel.INFO, 'Flushing ' + 待发消息.length + ' queued messages...')
+	记录日志(日志级别.INFO, 'Flushing ' + 待发消息.length + ' queued messages...')
 	// 取出当前队列快照，清空原队列，逐条发送
 	const 队列快照 = 待发消息.slice()
 	消息处理器.clearPendingMessages()
@@ -588,9 +588,9 @@ export function 补发消息队列() : void {
 	let 已补发数 : number = 0
 
 	队列快照.forEach((消息项) => {
-		let 原生载荷 : any = 消息项.payload
-		if (typeof 消息项.payload !== 'string') {
-			const 字节视图 = new Uint8Array(消息项.payload as ArrayBuffer)
+		let 原生载荷 : any = 消息项.载荷
+		if (typeof 消息项.载荷 !== 'string') {
+			const 字节视图 = new Uint8Array(消息项.载荷 as ArrayBuffer)
 			const 字节数组 = new ByteArray(字节视图.length.toInt())
 			for (let 索引 = 0; 索引 < 字节视图.length; 索引++) {
 				字节数组[索引.toInt()] = 字节视图[索引].toByte()
@@ -599,28 +599,28 @@ export function 补发消息队列() : void {
 		}
 
 		助手!.publish(
-			消息项.topic,
+			消息项.主题,
 			原生载荷,
-			(消息项.qos as number).toInt(),
-			消息项.retain,
+			(消息项.服务质量 as number).toInt(),
+			消息项.保留,
 			() => {
 				已补发数++
-				质量统计.totalPublished++
-				质量统计.totalQueueFlushed++
+				质量统计.已发布数量++
+				质量统计.已补发数量++
 				消息处理器.incrementFlushed(1)
 				// 全部补发完成时触发事件
 				if (已补发数 == 队列快照.length) {
-					记录日志(LogLevel.INFO, 'Queue flushed: ' + 已补发数 + ' messages sent')
-					const 事件数据 : EventData = {
-						flushedCount: 已补发数
+					记录日志(日志级别.INFO, 'Queue flushed: ' + 已补发数 + ' messages sent')
+					const 事件数据 : 事件数据 = {
+						补发数量: 已补发数
 					}
 					触发事件('queue_flushed', 事件数据)
 				}
 			},
 			(错误 : string) => {
 				// 发送失败的消息重新入队
-				消息处理器.queueMessage(消息项.topic, 消息项.payload, 消息项.qos, 消息项.retain)
-				记录日志(LogLevel.ERROR, 'Flush failed for ' + 消息项.topic + ': ' + 错误)
+				消息处理器.queueMessage(消息项.主题, 消息项.载荷, 消息项.服务质量, 消息项.保留)
+				记录日志(日志级别.ERROR, 'Flush failed for ' + 消息项.主题 + ': ' + 错误)
 			}
 		)
 	})
@@ -631,7 +631,7 @@ export function 补发消息队列() : void {
  * 使用 @UTSJS.keepAlive 装饰器，使回调函数可以持续触发
  */
 @UTSJS.keepAlive
-export function 注册事件监听(事件 : MQTTEvent, 回调 : EventCallback) : void {
+export function 注册事件监听(事件 : MQTT事件, 回调 : 事件回调) : void {
 	// 保存到专门的全局变量中，防止回调被释放
 	let 监听器列表 = 用户事件回调.get(事件)
 	if (监听器列表 == null) {
@@ -644,7 +644,7 @@ export function 注册事件监听(事件 : MQTTEvent, 回调 : EventCallback) :
 /**
  * 移除事件监听器
  */
-export function 移除事件监听(事件 : MQTTEvent, 回调 ?: EventCallback) : void {
+export function 移除事件监听(事件 : MQTT事件, 回调 ?: 事件回调) : void {
 	if (回调 == null) {
 		用户事件回调.delete(事件)
 	} else {
@@ -662,21 +662,21 @@ export function 移除事件监听(事件 : MQTTEvent, 回调 ?: EventCallback) 
  * 获取连接状态
  */
 export function 获取连接状态() : any {
-	const 当前状态 = 状态管理器.getConnectionState()
+	const 当前状态 = 状态管理器.get连接状态()
 	// 转换为兼容的格式
 	return {
-		status: 当前状态.status.toString(),
-		connectedAt: 当前状态.connectedAt,
-		lastError: 当前状态.lastError,
-		reconnectAttempts: 当前状态.reconnectAttempts,
-		sessionPresent: 当前状态.sessionPresent
+		状态: 当前状态.状态.toString(),
+		连接时间: 当前状态.connectedAt,
+		最后错误: 当前状态.最后错误,
+		重连次数: 当前状态.重连次数,
+		会话存在: 当前状态.会话存在
 	}
 }
 
 /**
  * 设置日志级别
  */
-export function 设置日志级别(级别 : LogLevel) : void {
+export function 设置日志级别(级别 : 日志级别) : void {
 	日志级别 = 级别
 }
 
@@ -720,25 +720,25 @@ export function 获取消息队列统计() : UTSJSONObject {
 export function 清空消息队列() : void {
 	消息处理器.clearPendingMessages()
 	消息处理器.clearReceivedMessages()
-	记录日志(LogLevel.INFO, 'Message queues cleared')
+	记录日志(日志级别.INFO, 'Message queues cleared')
 }
 
 /**
  * 获取连接质量统计
  */
-export function 获取连接质量统计() : ConnectionQualityStats {
+export function 获取连接质量统计() : 连接质量统计 {
 	// 同步最新的队列计数
-	质量统计.totalQueued = 消息处理器.getTotalQueued()
-	质量统计.totalQueueFlushed = 消息处理器.getTotalFlushed()
+	质量统计.已排队数量 = 消息处理器.getTotalQueued()
+	质量统计.已补发数量 = 消息处理器.getTotalFlushed()
 	return {
-		totalPublished: 质量统计.totalPublished,
-		totalReceived: 质量统计.totalReceived,
-		totalQueued: 质量统计.totalQueued,
-		totalQueueFlushed: 质量统计.totalQueueFlushed,
-		totalReconnects: 质量统计.totalReconnects,
-		lastConnectedAt: 质量统计.lastConnectedAt,
-		lastDisconnectedAt: 质量统计.lastDisconnectedAt,
-		avgReconnectMs: 质量统计.avgReconnectMs
+		已发布数量: 质量统计.已发布数量,
+		已接收数量: 质量统计.已接收数量,
+		已排队数量: 质量统计.已排队数量,
+		已补发数量: 质量统计.已补发数量,
+		重连次数: 质量统计.重连次数,
+		最后连接时间: 质量统计.最后连接时间,
+		最后断开时间: 质量统计.最后断开时间,
+		平均重连耗时: 质量统计.平均重连耗时
 	}
 }
 
@@ -746,15 +746,15 @@ export function 获取连接质量统计() : ConnectionQualityStats {
  * 重置连接质量统计
  */
 export function 重置连接质量统计() : void {
-	质量统计.totalPublished = 0
-	质量统计.totalReceived = 0
-	质量统计.totalQueued = 0
-	质量统计.totalQueueFlushed = 0
-	质量统计.totalReconnects = 0
-	质量统计.lastConnectedAt = null
-	质量统计.lastDisconnectedAt = null
-	质量统计.avgReconnectMs = 0
+	质量统计.已发布数量 = 0
+	质量统计.已接收数量 = 0
+	质量统计.已排队数量 = 0
+	质量统计.已补发数量 = 0
+	质量统计.重连次数 = 0
+	质量统计.最后连接时间 = null
+	质量统计.最后断开时间 = null
+	质量统计.平均重连耗时 = 0
 	重连耗时总和 = 0
 	断线时间戳 = 0
-	记录日志(LogLevel.INFO, 'Quality stats reset')
+	记录日志(日志级别.INFO, 'Quality stats reset')
 }

@@ -11,27 +11,27 @@ export type MQTT事件 =
   | 'connection_check'
 
 export type MQTT事件数据 = {
-  topic?: string
-  payload?: string | ArrayBuffer
-  payloadBytes?: ArrayBuffer
-  qos?: 0 | 1 | 2
-  retain?: boolean
-  error?: unknown
-  attempt?: number
-  reconnectAttempts?: number
-  queuedCount?: number
-  flushedCount?: number
-  isAlive?: boolean
-  sessionPresent?: boolean
+  主题?: string
+  载荷?: string | ArrayBuffer
+  二进制载荷?: ArrayBuffer
+  服务质量?: 0 | 1 | 2
+  保留?: boolean
+  错误?: unknown
+  尝试次数?: number
+  重连次数?: number
+  排队数量?: number
+  补发数量?: number
+  连接正常?: boolean
+  会话存在?: boolean
 }
 
 export type MQTT回调 = (数据: MQTT事件数据) => void
 
 export type MQTT订阅消息 = {
-  topic?: string
-  payload?: string | ArrayBuffer
-  qos?: 0 | 1 | 2
-  retain?: boolean
+  主题?: string
+  载荷?: string | ArrayBuffer
+  服务质量?: 0 | 1 | 2
+  保留?: boolean
 }
 
 export type MQTT订阅参数 = {

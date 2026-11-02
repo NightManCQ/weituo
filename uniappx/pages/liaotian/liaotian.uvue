@@ -6,6 +6,7 @@
 	import { 订阅实时事件 } from '../../common/实时'
 	import type { 实时事件 } from '../../common/实时'
 	import { 使用全局变量 } from "../../状态/全局.ts"
+	import { 清零会话新消息条数 } from '../xiaoxi/会话列表'
 
 	type 群成员 = { 用户编号 : string; 昵称 : string; 成员角色 : string }
 	type 群详情 = {
@@ -98,7 +99,7 @@
 	}
 
 	function 处理好友实时事件(事件 : 实时事件) {
-		if (事件.事件类型 != 'friend.message_created' || 事件.数据 == null) return
+		if (事件.事件类型 != '私聊消息已创建' || 事件.数据 == null) return
 		const 数据 = 事件.数据
 		const 联系人编号 = 数据['联系人编号'] ?? 数据['contact_user_id']
 		if (
@@ -148,7 +149,7 @@
 			void 刷新()
 			return
 		}
-		if (事件.事件类型 != 'group.message_created' || 事件.数据 == null) return
+		if (事件.事件类型 != '群聊消息已创建' || 事件.数据 == null) return
 		const 数据 = 事件.数据
 		const 当前群组 = 群组.value
 		if (!当前群组) return
@@ -334,8 +335,13 @@
 		当前用户.value = 读取当前用户()
 		群组编号.value = 参数['groupId'] as string || ''
 		好友编号.value = 参数['friendId'] as string || ''
-		联系人昵称.value = decodeURIComponent(参数['nickname'] as string || '好友')
+		联系人昵称.value = 参数['nickname'] as string || '好友'
 		任务编号 = 参数['taskId'] as string || ''
+		群组.value = null
+		群消息列表.value = []
+		好友消息列表.value = []
+		if (好友编号.value) 清零会话新消息条数(好友编号.value)
+		if (群组编号.value) 清零会话新消息条数(群组编号.value)
 	})
 	onShow(() => {
 		if (取消订阅 == null) {

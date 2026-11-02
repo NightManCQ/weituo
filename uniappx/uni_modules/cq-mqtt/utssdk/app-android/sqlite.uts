@@ -1,14 +1,19 @@
 /**
- * cq-mqtt 插件 · 前端 SQLite 引擎 · Android 底层实现
+ * cq-mqtt 插件 · 前端 SQLite 引擎 · Android 核心实现
  *
- * 直接调用 android.database.sqlite.*，不借助 Room/SQLCipher 等三方库，
- * 因此 config.json 里不需要任何 dependencies，也不会增加包体积。
+ * 直接调用 android.database.sqlite.*，不依赖 Room / SQLCipher 等三方库，
+ * 因此 config.json 不需要任何 dependencies，也不会增加包体积。
+ *
+ * 本文件只做原生能力封装，不做错误处理包装：
+ * 所有异常都以 Error 抛出，错误信息形如 [错误码]描述，
+ * 由 index.uts 统一转成结构化 SQLite失败。
  *
  * 约定：
- * 1. 错误信息统一为 [错误码]描述，上层用 解析SQLite错误() 还原；
- * 2. 写操作（INSERT/UPDATE/DELETE/DDL）走 execSQL，支持 ? 绑定且允许 null；
- * 3. 查询走 rawQuery，Android 的 selectionArgs 只接受 String 且不能含 null，
- *    因此查询遇到 null 参数会直接报错提示改写 SQL（例如改成 IS NULL）。
+ * 1. 参数不走原生绑定：UTS 的 Array 编到 Kotlin 是 UTSArray，传不进原生 Array 参数，
+ *    统一由 拼参数() 把 ? 占位符替换成 SQL 字面量后再执行；
+ * 2. 查询走 rawQuery，selectionArgs 直接传 null，
+ *    因此查询遇到 null 参数直接报错，提示调用方改写 SQL（例如改成 IS NULL）；
+ * 3. 连接用 Map 缓存，同名库只打开一次，重复调用 打开() 直接返回缓存结果。
  */
 
 import SQLiteDatabase from 'android.database.sqlite.SQLiteDatabase'
@@ -24,23 +29,37 @@ import {
 	SQL语句,
 	打开数据库参数,
 	打开数据库结果,
+	执行SQL参数,
+	批量执行参数,
+	查询SQL参数,
+	建表参数,
+	建索引参数,
+	删索引参数,
+	表参数,
+	列参数,
+	存键值参数,
+	取键值参数,
+	设版本参数,
 	执行结果,
-	查询结果,
-	批量执行结果
+	批量执行结果,
+	查询结果
 } from '../interface.uts'
 
 /* ---------- 运行时状态 ---------- */
 
 /** 已打开的数据库：数据库名 -> 连接 */
 const 已开库 : Map<string, SQLiteDatabase> = new Map()
-/** 数据库文件路径缓存：数据库名 -> 绝对路径 */
+/** 数据库名 -> 绝对路径 */
 const 路径表 : Map<string, string> = new Map()
-/** 事务标记：数据库名 -> 是否已开启手动事务 */
+/** 数据库名 -> 是否处于手动事务中 */
 const 事务标记 : Map<string, boolean> = new Map()
-/** 键值表已建标记，避免重复执行 DDL */
+/** 数据库名 -> 键值表是否已建 */
 const 键值表已建 : Map<string, boolean> = new Map()
+/** 已打开的数据库名列表，与 已开库 同步维护，避免遍历 Map */
+let 已开库名单 : Array<string> = new Array()
 
-/* 错误码前缀写成字符串常量，避免拼接时 UTS 的类型推断问题 */
+/* ---------- 错误常量 ---------- */
+
 const 错_参数缺失 = '[9010001]'
 const 错_未打开 = '[9010002]'
 const 错_无上下文 = '[9010003]'
@@ -56,6 +75,8 @@ const 错_键值失败 = '[9010012]'
 const 错_事务重复 = '[9010013]'
 
 const 空文本 = ''
+/** 键值表名，业务表不应占用该名字 */
+const 键值表名 = 'cq_kv'
 
 /* ---------- 内部工具 ---------- */
 
@@ -95,44 +116,782 @@ function 确保父目录(目标 : File) : void {
 	}
 }
 
-/** 把业务传入的参数数组转成 Object 数组，供 execSQL 使用 */
-function 绑定写参数(参数 : Array<SQLite值> | null) : Array<any> {
-	const 结果 : Array<any> = []
-	if (参数 == null) {
-		return 结果
+/** 解析数据库文件的绝对路径 */
+function 解析路径(数据库名 : string, 自定义路径 : string | null) : string {
+	if (自定义路径 != null && 自定义路径.length > 0) {
+		return 自定义路径!
 	}
-	for (let 序号 = 0; 序号 < 参数.length; 序号++) {
-		const 原值 = 参数[序号]
-		if (原值 == null) {
-			结果.push(null)
-		} else if (typeof 原值 == 'boolean') {
-			结果.push(原值 == true ? 1 : 0)
-		} else if (typeof 原值 == 'number') {
-			结果.push(原值)
+	const 上下文 = 取上下文()
+	const 文件 = 上下文.getDatabasePath(数据库名)
+	return 文件.getAbsolutePath()
+}
+
+/** 取已打开的连接，未打开则抛错 */
+function 取连接(数据库名 : string) : SQLiteDatabase {
+	校验库名(数据库名)
+	const 连接 = 已开库.get(数据库名)
+	if (连接 == null) {
+		throw new Error(错_未打开 + '数据库 ' + 数据库名 + ' 尚未打开，请先调用 打开数据库()')
+	}
+	return 连接!
+}
+
+/**
+ * 把单个取值转成 SQL 字面量
+ * 说明：UTS 的 Array 编到 Kotlin 是 UTSArray，无法传给 rawQuery / execSQL 的
+ * 原生 Array 参数（编译器报 UTSArray<String> 与 Array<(out) String!>? 不匹配），
+ * 所以这里不走参数绑定，改为把参数拼成字面量写进 SQL，原生方法统一传 null
+ */
+function 转字面量(值 : SQLite值) : string {
+	if (值 == null) {
+		return 'NULL'
+	}
+	if (typeof 值 == 'boolean') {
+		return 值 == true ? '1' : '0'
+	}
+	if (typeof 值 == 'number') {
+		return 空文本 + 值
+	}
+	return "'" + 转义引号(空文本 + 值) + "'"
+}
+
+/** 文本里的单引号转成两个单引号，避免把 SQL 截断 */
+function 转义引号(文本 : string) : string {
+	let 结果 = 空文本
+	for (let 序号 = 0; 序号 < 文本.length; 序号++) {
+		const 字符 = 文本.charAt(序号)
+		if (字符 == "'") {
+			结果 = 结果 + "''"
 		} else {
-			结果.push(空文本 + 原值)
+			结果 = 结果 + 字符
 		}
 	}
 	return 结果
 }
 
-/** 把业务传入的参数数组转成文本数组，供 rawQuery 使用 */
-function 绑定读参数(参数 : Array<SQLite值> | null) : Array<string> {
-	const 结果 : Array<string> = []
+/** 把 SQL 中引号外的 ? 占位符逐个替换成字面量 */
+function 拼参数(SQL : string, 参数 : any | null) : string {
 	if (参数 == null) {
-		return 结果
+		return SQL
 	}
-	for (let 序号 = 0; 序号 < 参数.length; 序号++) {
-		const 原值 = 参数[序号]
-		if (原值 == null) {
-			throw new Error(错_空参数 + '第 ' + (序号 + 1) + ' 个查询参数为 null，请改写 SQL')
-		} else if (typeof 原值 == 'boolean') {
-			结果.push(原值 == true ? '1' : '0')
-		} else if (typeof 原值 == 'number') {
-			结果.push(空文本 + 原值)
+	const 集合 = 参数! as Array<any>
+	if (集合.length == 0) {
+		return SQL
+	}
+	let 结果 = 空文本
+	let 序号 = 0
+	let 位置 = 0
+	while (位置 < SQL.length) {
+		const 字符 = SQL.charAt(位置)
+		if (字符 == "'") {
+			结果 = 结果 + 字符
+			位置 = 位置 + 1
+			let 已闭合 = false
+			while (位置 < SQL.length && 已闭合 == false) {
+				const 内部字符 = SQL.charAt(位置)
+				结果 = 结果 + 内部字符
+				if (内部字符 == "'") {
+					if (位置 + 1 < SQL.length && SQL.charAt(位置 + 1) == "'") {
+						结果 = 结果 + "'"
+						位置 = 位置 + 2
+					} else {
+						位置 = 位置 + 1
+						已闭合 = true
+					}
+				} else {
+					位置 = 位置 + 1
+				}
+			}
+		} else if (字符 == '?' && 序号 < 集合.length) {
+			结果 = 结果 + 转字面量(集合[序号])
+			序号 = 序号 + 1
+			位置 = 位置 + 1
 		} else {
-			结果.push(空文本 + 原值)
+			结果 = 结果 + 字符
+			位置 = 位置 + 1
 		}
 	}
+	if (序号 != 集合.length) {
+		throw new Error(错_参数缺失 + 'SQL 的 ? 占位符有 ' + 序号 + ' 个，实际传入 ' + 集合.length + ' 个')
+	}
 	return 结果
+}
+
+/**
+ * 无参数：rawQuery 的第二个参数传 null
+ * 类型用 any：UTS 的泛型不协变，Array<string> 传不进 Array<SQLite值>，
+ * 所以对外只收 any，内部再转成数组
+ */
+function 空读参数() : any | null {
+	return null
+}
+
+/* ---------- 游标读取 ---------- */
+
+/** Android Cursor 的字段类型常量 */
+const 类型_空 = 0
+const 类型_整数 = 1
+const 类型_浮点 = 2
+const 类型_文本 = 3
+const 类型_二进制 = 4
+
+/**
+ * 按列类型读出一个单元格的值
+ * Kotlin 原生方法的列序号参数要 Int，而 UTS 的 number 是 Number，必须 .toInt()
+ */
+function 读单元格(游标 : Cursor, 列序号 : number) : SQLite值 {
+	const 序号 = 列序号.toInt()
+	const 类型 = 游标.getType(序号)
+	if (类型 == 类型_空) {
+		return null
+	}
+	if (类型 == 类型_整数) {
+		return 游标.getLong(序号)
+	}
+	if (类型 == 类型_浮点) {
+		return 游标.getDouble(序号)
+	}
+	if (类型 == 类型_二进制) {
+		const 字节 = 游标.getBlob(序号)
+		return Base64.encodeToString(字节, Base64.DEFAULT)
+	}
+	return 游标.getString(序号)
+}
+
+/** 执行一条查询，取第一行第一列；没有结果返回 null */
+function 读单值(连接 : SQLiteDatabase, SQL : string, 参数 : any | null) : SQLite值 {
+	let 游标 : Cursor = 连接.rawQuery(拼参数(SQL, 参数), null)
+	try {
+		if (游标.moveToFirst() == false) {
+			游标.close()
+			return null
+		}
+		const 值 = 读单元格(游标, 0)
+		游标.close()
+		return 值
+	} catch (异常) {
+		游标.close()
+		throw new Error(错_查询失败 + 原文(异常))
+	}
+}
+
+/** 执行一条查询，返回列名与全部数据行 */
+function 读结果集(连接 : SQLiteDatabase, SQL : string, 参数 : any | null) : 查询结果 {
+	let 游标 : Cursor = 连接.rawQuery(拼参数(SQL, 参数), null)
+	const 列名 : Array<string> = []
+	const 行集合 : Array<SQLite数据行> = []
+	try {
+		const 列数 = 游标.getColumnCount()
+		for (let 序号 = 0; 序号 < 列数; 序号++) {
+			列名.push(游标.getColumnName(序号.toInt()))
+		}
+		const 有第一行 = 游标.moveToFirst()
+		if (有第一行 == true) {
+			let 还有下一行 = true
+			while (还有下一行 == true) {
+				const 行 : SQLite数据行 = new Map()
+				for (let 序号 = 0; 序号 < 列数; 序号++) {
+					行.set(游标.getColumnName(序号.toInt()), 读单元格(游标, 序号))
+				}
+				行集合.push(行)
+				还有下一行 = 游标.moveToNext()
+			}
+		}
+		游标.close()
+	} catch (异常) {
+		游标.close()
+		throw new Error(错_查询失败 + 原文(异常))
+	}
+	const 结果 : 查询结果 = {
+		列名: 列名,
+		行集合: 行集合,
+		行数: 行集合.length
+	}
+	return 结果
+}
+
+/** 执行一条不返回结果的 PRAGMA */
+function 执行PRAGMA(连接 : SQLiteDatabase, 语句 : string) : void {
+	let 游标 : Cursor = 连接.rawQuery(语句, null)
+	游标.close()
+}
+
+/* ---------- 打开 / 关闭 / 删除 ---------- */
+
+/** 打开数据库，同名库只打开一次 */
+export function 打开(参数 : 打开数据库参数) : 打开数据库结果 {
+	const 数据库名 = 参数.数据库名
+	校验库名(数据库名)
+
+	const 已存在的连接 = 已开库.get(数据库名)
+	if (已存在的连接 != null) {
+		const 旧结果 : 打开数据库结果 = {
+			数据库名: 数据库名,
+			文件路径: 路径表.get(数据库名) ?? 空文本,
+			版本: 取版本(数据库名),
+			是否新建: false
+		}
+		return 旧结果
+	}
+
+	const 路径 = 解析路径(数据库名, 参数.路径 ?? null)
+	const 文件 = new File(路径)
+	确保父目录(文件)
+	const 是否新建 = 文件.exists() == false
+
+	// 先声明成可空再判空：Kotlin 对「try 里赋值、catch 里 throw」的确定性赋值分析不通过
+	let 连接 : SQLiteDatabase | null = null
+	try {
+		if (参数.只读 == true) {
+			连接 = SQLiteDatabase.openDatabase(路径, null, SQLiteDatabase.OPEN_READONLY)
+		} else {
+			连接 = SQLiteDatabase.openOrCreateDatabase(路径, null)
+		}
+	} catch (异常) {
+		throw new Error(错_打开失败 + 原文(异常))
+	}
+	if (连接 == null) {
+		throw new Error(错_打开失败 + '连接创建失败：' + 路径)
+	}
+	const 已连接 : SQLiteDatabase = 连接!
+
+	已开库.set(数据库名, 已连接)
+	路径表.set(数据库名, 路径)
+	事务标记.set(数据库名, false)
+	已开库名单.push(数据库名)
+
+	if (参数.只读 != true) {
+		const 开预写日志 = 参数.预写日志 ?? true
+		const 开外键 = 参数.外键约束 ?? true
+		if (开预写日志 == true) {
+			执行PRAGMA(已连接, 'PRAGMA journal_mode=WAL')
+		}
+		if (开外键 == true) {
+			执行PRAGMA(已连接, 'PRAGMA foreign_keys=ON')
+		}
+		const 传入版本 = 参数.版本 ?? null
+		if (传入版本 != null) {
+			const 版本号 = 传入版本!
+			if (版本号 > 0) {
+				设版本({ 数据库名: 数据库名, 版本: 版本号 })
+			}
+		}
+	}
+
+	const 结果 : 打开数据库结果 = {
+		数据库名: 数据库名,
+		文件路径: 路径,
+		版本: 取版本(数据库名),
+		是否新建: 是否新建
+	}
+	return 结果
+}
+
+/** 关闭数据库 */
+export function 关闭(数据库名 : string) : void {
+	校验库名(数据库名)
+	const 连接 = 已开库.get(数据库名)
+	if (连接 == null) {
+		return
+	}
+	try {
+		连接!.close()
+	} catch (异常) {
+		throw new Error(错_关闭失败 + 原文(异常))
+	}
+	已开库.delete(数据库名)
+	事务标记.delete(数据库名)
+	键值表已建.delete(数据库名)
+	// 不用 splice：UTS 的 splice 下标类型在 Kotlin 侧容易对不上，直接重建列表
+	const 新名单 : Array<string> = new Array()
+	for (let 序号 = 0; 序号 < 已开库名单.length; 序号++) {
+		if (已开库名单[序号] != 数据库名) {
+			新名单.push(已开库名单[序号])
+		}
+	}
+	已开库名单 = 新名单
+}
+
+/** 关闭全部已打开的数据库，返回关闭数量 */
+export function 关闭全部() : number {
+	const 名单 = 已打开列表()
+	let 数量 = 0
+	for (let 序号 = 0; 序号 < 名单.length; 序号++) {
+		关闭(名单[序号])
+		数量 = 数量 + 1
+	}
+	return 数量
+}
+
+/** 删除数据库文件，已打开的会先关闭 */
+export function 删除(数据库名 : string) : void {
+	校验库名(数据库名)
+	const 连接 = 已开库.get(数据库名)
+	if (连接 != null) {
+		关闭(数据库名)
+	}
+	const 路径 = 路径表.get(数据库名)
+	let 目标路径 = 路径 ?? 空文本
+	if (目标路径.length == 0) {
+		目标路径 = 解析路径(数据库名, null)
+	}
+	const 文件 = new File(目标路径)
+	if (文件.exists() == false) {
+		路径表.delete(数据库名)
+		return
+	}
+	let 是否成功 = false
+	try {
+		是否成功 = SQLiteDatabase.deleteDatabase(文件)
+	} catch (异常) {
+		throw new Error(错_删除失败 + 原文(异常))
+	}
+	if (是否成功 == false) {
+		throw new Error(错_删除失败 + '数据库文件删除失败：' + 目标路径)
+	}
+	路径表.delete(数据库名)
+}
+
+/** 数据库文件是否存在 */
+export function 文件是否存在(数据库名 : string) : boolean {
+	const 路径 = 路径表.get(数据库名)
+	let 目标路径 = 路径 ?? 空文本
+	if (目标路径.length == 0) {
+		目标路径 = 解析路径(数据库名, null)
+	}
+	const 文件 = new File(目标路径)
+	return 文件.exists()
+}
+
+/** 数据库是否已打开 */
+export function 是否已打开(数据库名 : string) : boolean {
+	return 已开库.get(数据库名) != null
+}
+
+/** 取数据库文件绝对路径 */
+export function 取得路径(数据库名 : string) : string {
+	const 路径 = 路径表.get(数据库名)
+	if (路径 != null) {
+		return 路径!
+	}
+	return 解析路径(数据库名, null)
+}
+
+/** 取当前已打开的数据库名列表 */
+export function 已打开列表() : Array<string> {
+	const 列表 : Array<string> = new Array()
+	for (let 序号 = 0; 序号 < 已开库名单.length; 序号++) {
+		列表.push(已开库名单[序号])
+	}
+	return 列表
+}
+
+/* ---------- 数值转换 ---------- */
+
+/** 把读出来的值稳妥地转成数字，失败返回 0 */
+function 转数字(值 : SQLite值) : number {
+	if (值 == null) {
+		return 0
+	}
+	const 结果 = Number.parseFloat(空文本 + 值)
+	if (结果 != 结果) {
+		return 0
+	}
+	return 结果
+}
+
+/** 检查 SQL 非空 */
+function 校验SQL(SQL : string) : void {
+	if (SQL == null || SQL.length == 0) {
+		throw new Error(错_参数缺失 + 'SQL 不能为空')
+	}
+}
+
+/* ---------- 写操作 ---------- */
+
+/** 执行一条写 SQL（INSERT / UPDATE / DELETE / DDL） */
+export function 执行(参数 : 执行SQL参数) : 执行结果 {
+	const 连接 = 取连接(参数.数据库名)
+	const SQL = 参数.SQL
+	校验SQL(SQL)
+	const 完整SQL = 拼参数(SQL, 参数.参数 ?? null)
+
+	try {
+		连接.execSQL(完整SQL)
+	} catch (异常) {
+		throw new Error(错_执行失败 + 原文(异常) + ' | SQL: ' + SQL)
+	}
+
+	const 插入编号 = 转数字(读单值(连接, 'SELECT last_insert_rowid()', 空读参数()))
+	const 影响行数 = 转数字(读单值(连接, 'SELECT changes()', 空读参数()))
+	const 结果 : 执行结果 = {
+		受影响行数: 影响行数,
+		最后插入编号: 插入编号
+	}
+	return 结果
+}
+
+/** 依次执行多条 SQL；不在事务中时自动包一层事务，保证原子性 */
+export function 批量执行(参数 : 批量执行参数) : 批量执行结果 {
+	const 语句集合 = 参数.语句集合
+	if (语句集合 == null || 语句集合.length == 0) {
+		throw new Error(错_参数缺失 + '语句集合不能为空')
+	}
+	const 需要自己开事务 = 是否在事务中核心(参数.数据库名) == false
+	if (需要自己开事务 == true) {
+		开始事务(参数.数据库名)
+	}
+
+	let 总影响行数 = 0
+	let 最后插入编号 = 0
+	try {
+		for (let 序号 = 0; 序号 < 语句集合.length; 序号++) {
+			const 语句 : SQL语句 = 语句集合[序号]
+			const 单条结果 = 执行({
+				数据库名: 参数.数据库名,
+				SQL: 语句.SQL,
+				参数: 语句.参数 ?? null
+			})
+			总影响行数 = 总影响行数 + 单条结果.受影响行数
+			最后插入编号 = 单条结果.最后插入编号
+		}
+		if (需要自己开事务 == true) {
+			提交事务核心(参数.数据库名)
+		}
+	} catch (异常) {
+		if (需要自己开事务 == true) {
+			回滚事务核心(参数.数据库名)
+		}
+		throw 异常
+	}
+
+	const 结果 : 批量执行结果 = {
+		受影响行数: 总影响行数,
+		最后插入编号: 最后插入编号,
+		语句数: 语句集合.length
+	}
+	return 结果
+}
+
+/* ---------- 读操作 ---------- */
+
+/** 执行查询，返回列名与数据行 */
+export function 查询(参数 : 查询SQL参数) : 查询结果 {
+	const 连接 = 取连接(参数.数据库名)
+	const SQL = 参数.SQL
+	校验SQL(SQL)
+	return 读结果集(连接, SQL, 参数.参数 ?? null)
+}
+
+/** 执行查询，只取第一行第一列 */
+export function 查询单值(参数 : 查询SQL参数) : SQLite值 {
+	const 连接 = 取连接(参数.数据库名)
+	const SQL = 参数.SQL
+	校验SQL(SQL)
+	return 读单值(连接, SQL, 参数.参数 ?? null)
+}
+
+/** 执行 COUNT 类查询，返回数字 */
+export function 查询数量(参数 : 查询SQL参数) : number {
+	return 转数字(查询单值(参数))
+}
+
+/* ---------- 事务 ---------- */
+
+/** 开启手动事务 */
+export function 开始事务(数据库名 : string) : void {
+	const 连接 = 取连接(数据库名)
+	if (事务标记.get(数据库名) == true) {
+		throw new Error(错_事务重复 + '数据库 ' + 数据库名 + ' 已处于事务中')
+	}
+	连接.beginTransaction()
+	事务标记.set(数据库名, true)
+}
+
+/** 提交事务 */
+export function 提交事务核心(数据库名 : string) : void {
+	const 连接 = 取连接(数据库名)
+	if (事务标记.get(数据库名) != true) {
+		throw new Error(错_事务未开 + '数据库 ' + 数据库名 + ' 尚未开启事务')
+	}
+	连接.setTransactionSuccessful()
+	连接.endTransaction()
+	事务标记.set(数据库名, false)
+}
+
+/** 回滚事务 */
+export function 回滚事务核心(数据库名 : string) : void {
+	const 连接 = 取连接(数据库名)
+	if (事务标记.get(数据库名) != true) {
+		throw new Error(错_事务未开 + '数据库 ' + 数据库名 + ' 尚未开启事务')
+	}
+	连接.endTransaction()
+	事务标记.set(数据库名, false)
+}
+
+/** 是否处于手动事务中 */
+export function 是否在事务中核心(数据库名 : string) : boolean {
+	return 事务标记.get(数据库名) == true
+}
+
+/**
+ * 在一个事务里执行多条 SQL，全部成功才提交，任意一条失败整体回滚
+ * 与 批量执行() 的区别：这里一定会新开事务，
+ * 因此不能在已经手动开启的事务里调用。
+ */
+export function 执行事务(参数 : 批量执行参数) : 批量执行结果 {
+	const 语句集合 = 参数.语句集合
+	if (语句集合 == null || 语句集合.length == 0) {
+		throw new Error(错_参数缺失 + '语句集合不能为空')
+	}
+	开始事务(参数.数据库名)
+
+	let 总影响行数 = 0
+	let 最后插入编号 = 0
+	try {
+		for (let 序号 = 0; 序号 < 语句集合.length; 序号++) {
+			const 语句 : SQL语句 = 语句集合[序号]
+			const 单条结果 = 执行({
+				数据库名: 参数.数据库名,
+				SQL: 语句.SQL,
+				参数: 语句.参数 ?? null
+			})
+			总影响行数 = 总影响行数 + 单条结果.受影响行数
+			最后插入编号 = 单条结果.最后插入编号
+		}
+		提交事务核心(参数.数据库名)
+	} catch (异常) {
+		回滚事务核心(参数.数据库名)
+		throw 异常
+	}
+
+	const 结果 : 批量执行结果 = {
+		受影响行数: 总影响行数,
+		最后插入编号: 最后插入编号,
+		语句数: 语句集合.length
+	}
+	return 结果
+}
+
+/* ---------- 表结构 ---------- */
+
+/** 建表：已存在则直接返回，不重复执行 DDL */
+export function 建表(参数 : 建表参数) : void {
+	if (参数.表名 == null || 参数.表名.length == 0) {
+		throw new Error(错_参数缺失 + '表名不能为空')
+	}
+	校验SQL(参数.建表SQL)
+	if (表是否存在核心({ 数据库名: 参数.数据库名, 表名: 参数.表名 }) == true) {
+		return
+	}
+	执行({
+		数据库名: 参数.数据库名,
+		SQL: 参数.建表SQL,
+		参数: null
+	})
+}
+
+/** 判断表是否存在 */
+export function 表是否存在核心(参数 : 表参数) : boolean {
+	const 数量 = 查询数量({
+		数据库名: 参数.数据库名,
+		SQL: "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?",
+		参数: [参数.表名]
+	})
+	return 数量 > 0
+}
+
+/** 删表 */
+export function 删表(参数 : 表参数) : void {
+	if (是否在事务中核心(参数.数据库名) == true) {
+		throw new Error(错_事务禁止 + '事务进行中不允许删表')
+	}
+	执行({
+		数据库名: 参数.数据库名,
+		SQL: 'DROP TABLE IF EXISTS "' + 参数.表名 + '"',
+		参数: null
+	})
+}
+
+/** 清空表数据，并重置自增序号 */
+export function 清空表核心(参数 : 表参数) : void {
+	执行({
+		数据库名: 参数.数据库名,
+		SQL: 'DELETE FROM "' + 参数.表名 + '"',
+		参数: null
+	})
+	try {
+		执行({
+			数据库名: 参数.数据库名,
+			SQL: 'DELETE FROM sqlite_sequence WHERE name=?',
+			参数: [参数.表名]
+		})
+	} catch (忽略异常) {
+		// 表没有自增列时 sqlite_sequence 里没有记录，忽略即可
+	}
+}
+
+/** 判断列是否存在 */
+export function 列是否存在核心(参数 : 列参数) : boolean {
+	const 结果 = 查询({
+		数据库名: 参数.数据库名,
+		SQL: 'PRAGMA table_info("' + 参数.表名 + '")',
+		参数: null
+	})
+	for (let 序号 = 0; 序号 < 结果.行集合.length; 序号++) {
+		const 行 = 结果.行集合[序号]
+		const 列名 = 行.get('name')
+		if (列名 == 参数.列名) {
+			return true
+		}
+	}
+	return false
+}
+
+/* ---------- 索引 ---------- */
+
+/** 建索引 */
+export function 建索引(参数 : 建索引参数) : void {
+	const 列集合 = 参数.列集合
+	if (列集合 == null || 列集合.length == 0) {
+		throw new Error(错_参数缺失 + '索引列集合不能为空')
+	}
+	let 列串 = 空文本
+	for (let 序号 = 0; 序号 < 列集合.length; 序号++) {
+		if (序号 > 0) {
+			列串 = 列串 + ', '
+		}
+		列串 = 列串 + '"' + 列集合[序号] + '"'
+	}
+	const 唯一 = 参数.唯一 == true ? 'UNIQUE ' : 空文本
+	const SQL = 'CREATE ' + 唯一 + 'INDEX IF NOT EXISTS "' + 参数.索引名 + '" ON "' + 参数.表名 + '" (' + 列串 + ')'
+	执行({
+		数据库名: 参数.数据库名,
+		SQL: SQL,
+		参数: null
+	})
+}
+
+/** 删索引 */
+export function 删索引(参数 : 删索引参数) : void {
+	执行({
+		数据库名: 参数.数据库名,
+		SQL: 'DROP INDEX IF EXISTS "' + 参数.索引名 + '"',
+		参数: null
+	})
+}
+
+/* ---------- 键值表 ---------- */
+
+/** 确保键值表已建，同名库只建一次 */
+function 确保键值表(数据库名 : string) : void {
+	if (键值表已建.get(数据库名) == true) {
+		return
+	}
+	执行({
+		数据库名: 数据库名,
+		SQL: 'CREATE TABLE IF NOT EXISTS ' + 键值表名 + ' (k TEXT PRIMARY KEY NOT NULL, v TEXT)',
+		参数: null
+	})
+	键值表已建.set(数据库名, true)
+}
+
+/** 写键值，键已存在则覆盖 */
+export function 存键值(参数 : 存键值参数) : void {
+	确保键值表(参数.数据库名)
+	if (参数.键 == null || 参数.键.length == 0) {
+		throw new Error(错_键值失败 + '键不能为空')
+	}
+	执行({
+		数据库名: 参数.数据库名,
+		SQL: 'INSERT OR REPLACE INTO ' + 键值表名 + ' (k, v) VALUES (?, ?)',
+		参数: [参数.键, 参数.值 ?? null]
+	})
+}
+
+/** 读键值，不存在返回 null */
+export function 读键值(参数 : 取键值参数) : string | null {
+	确保键值表(参数.数据库名)
+	const 值 = 查询单值({
+		数据库名: 参数.数据库名,
+		SQL: 'SELECT v FROM ' + 键值表名 + ' WHERE k=?',
+		参数: [参数.键]
+	})
+	if (值 == null) {
+		return null
+	}
+	return 空文本 + 值
+}
+
+/** 删键值 */
+export function 删键值(参数 : 取键值参数) : void {
+	确保键值表(参数.数据库名)
+	执行({
+		数据库名: 参数.数据库名,
+		SQL: 'DELETE FROM ' + 键值表名 + ' WHERE k=?',
+		参数: [参数.键]
+	})
+}
+
+/** 清空键值表 */
+export function 清空键值核心(数据库名 : string) : void {
+	确保键值表(数据库名)
+	执行({
+		数据库名: 数据库名,
+		SQL: 'DELETE FROM ' + 键值表名,
+		参数: null
+	})
+}
+
+/** 列出全部键 */
+export function 列出键核心(数据库名 : string) : Array<string> {
+	确保键值表(数据库名)
+	const 结果 = 查询({
+		数据库名: 数据库名,
+		SQL: 'SELECT k FROM ' + 键值表名 + ' ORDER BY k',
+		参数: null
+	})
+	const 列表 : Array<string> = new Array()
+	for (let 序号 = 0; 序号 < 结果.行集合.length; 序号++) {
+		const 值 = 结果.行集合[序号].get('k')
+		if (值 != null) {
+			列表.push(空文本 + 值)
+		}
+	}
+	return 列表
+}
+
+/* ---------- 版本 / 维护 ---------- */
+
+/** 取 PRAGMA user_version，业务层据此做表结构升级 */
+export function 取版本(数据库名 : string) : number {
+	const 连接 = 取连接(数据库名)
+	return 转数字(读单值(连接, 'PRAGMA user_version', 空读参数()))
+}
+
+/** 设置 PRAGMA user_version */
+export function 设版本(参数 : 设版本参数) : void {
+	执行({
+		数据库名: 参数.数据库名,
+		SQL: 'PRAGMA user_version=' + 参数.版本,
+		参数: null
+	})
+}
+
+/** 整理数据库文件碎片，不能在事务中调用 */
+export function 重组(数据库名 : string) : void {
+	if (是否在事务中核心(数据库名) == true) {
+		throw new Error(错_事务禁止 + '事务进行中不允许 VACUUM')
+	}
+	执行({
+		数据库名: 数据库名,
+		SQL: 'VACUUM',
+		参数: null
+	})
+}
+
+/** 把 WAL 日志写回主库文件并截断 */
+export function 写回日志(数据库名 : string) : void {
+	const 连接 = 取连接(数据库名)
+	执行PRAGMA(连接, 'PRAGMA wal_checkpoint(TRUNCATE)')
 }

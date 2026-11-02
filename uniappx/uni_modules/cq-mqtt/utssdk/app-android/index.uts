@@ -1,220 +1,191 @@
 /**
- * index.uts 对外层
- * 平台：uts -> kotlin / swift(未实现)
+ * cq-mqtt 插件 · 前端 SQLite 引擎 · 对外 API 层
+ * 平台：Android（uts -> kotlin）
  *
  * 这一层只做三件事：
- * 1. 把 sqlite.uts 的原生能力包成业务能直接调用的中文函数；
- * 2. 统一错误处理：所有抛出去的都是 三石错误，前端 try/catch 即可；
- * 3. 提供异步版本：每个写操作都有 xxx异步，在 io 线程执行，回调回主线程；
+ * 1. 把 sqlite.uts 的原生能力包成业务层能直接调用的中文函数；
+ * 2. 统一错误处理：同步接口抛 Error（业务层 try/catch），
+ *    异步接口回调 SQLite失败（errCode / errMsg / errSubject）；
+ * 3. 耗时操作提供异步版本：任务投递到 io 线程，回调统一切回 main 线程。
  *
- * 参照 UTS 官方 andorid 平台异步写法：
- * https://uniapp.dcloud.net.cn/plugin/uts-plugin.html
- *
- * UTS 折叠掉 try/catch/finally 关键字编写的能力极其有限：
- *   - 每个 export 的 async 函数都要显式 type annotations
- *   - 不支持 catch 的类型语句
- *   - 没有 .catch / .then
- * 所以这里手写 success/fail/complete 三回调 回调风格。
+ * 线程说明（参考 uni-app x 官方 UTSAndroid 文档）：
+ *   耗时任务 UTSAndroid.getDispatcher("io").async(function(_){ ... }, null)
+ *   界面修改 UTSAndroid.getDispatcher("main").async(function(_){ ... }, null)
  */
 
-import SQLiteDatabase from "android.database.sqlite.SQLiteDatabase"
-import File from "java.io.File"
-import Context from "android.content.Context"
-import { UTSAndroid } from "io.dcloud.uts"
+import { UTSAndroid } from 'io.dcloud.uts'
+
 import {
+	SQLite值,
+	SQLite数据行,
+	SQL语句,
 	打开数据库参数,
 	打开数据库结果,
-	打开并初始化参数,
-	打开指定参数,
-	关闭参数,
-	删除参数,
-	批量SQL参数,
-	SQL语句,
-	打开打开SQLite表参数,
-	打开打开SQLite列参数,
-	打开打开SQLite行参数,
-	打开打开SQLite索引参数,
-	打开打开SQLite执行SQL参数,
-	打开打开SQLite查询SQL参数,
-	打开打开SQLite查询或缓存参数,
-	打开打开SQLite分页参数,
-	打开打开SQLite事务参数,
-	打开打开SQLite键值参数,
-	打开打开SQLite多个索引的参数,
-	打开打开SQLite多个表或列的参数,
-	打开打开SQLite数据修改的参数,
-	打开打开SQLite查询列表的参数,
-	打开打开SQLite明细查询的参数,
-	打开打开SQLite明细删除的参数,
-	打开打开SQLite批量查询类型的参数,
-	打开打开SQLite查询数据组类型的参数,
-	打开打开SQLite执行粘贴的参数,
-	打开打开SQLite count的参数,
-	打开打开SQLite存在的参数,
-	打开打开SQLite 4 个类型之一的参数,
-	打开打开SQLite按的书写的参数,
-	打开打开SQLite多个索引的参数 as 多个索引的参数别名,
-	SQLite失败的参数,
-	SQLite成功回调的参数,
-	失败回调
-} from "../interface.uts"
-import { SQLite失败信息 } from "../unierror.uts"
+	单库参数,
+	执行SQL参数,
+	批量执行参数,
+	查询SQL参数,
+	建表参数,
+	建索引参数,
+	删索引参数,
+	表参数,
+	列参数,
+	存键值参数,
+	取键值参数,
+	设版本参数,
+	执行结果,
+	批量执行结果,
+	查询结果,
+	操作结果,
+	SQLite失败,
+	打开数据库异步参数,
+	执行SQL异步参数,
+	批量执行异步参数,
+	查询SQL异步参数,
+	事务异步参数,
+	单库异步参数
+} from '../interface.uts'
+import { SQLite错误主题, SQLite未知错误码, SQLite错误前缀开始, 取得错误说明 } from '../unierror.uts'
 import {
-	打开 as 打开核心,
-	打开联合版 as 打开联合版核心,
-	关闭 as 关闭核心,
-	删除 as 删除核心,
-	数据库是否存在 as 数据库是否存在核心,
-	取得的数据文件路径 as 取得的数据文件路径核心,
-	当前打开的是否已打开 as 当前打开的是否已打开核心,
-	全部打开的名 as 全部打开的名核心,
-	取得SQLite.version核心,
-	检索 buff的行{} as 检索 buff的行核心,
-	执行多个同相同结构的SQL,
-	开始Transaction,
-	确认Transaction,
-	抛异常Transaction,
-	是否在Transaction,
-	执行SQL as 执行SQL核心,
-	批量同结构同参数不同值得采用不同数据类型的SQL as 批量同结构同参数不同值核心,
-	删除执行SQL核心,
-	执行查询SQL核心,
-	执行查询SQL返回组 WITH 选项的核心,
-	count核心,
-	exists核心,
-	打开打开SQLite所有行?() 核心,
-	打开打开SQLite执行捆绑核心,
-	打开打开SQLite执行粘贴核心,
-	打开打开SQLite创建表核心,
-	打开打开SQLite删除表核心,
-	打开打开SQLite清空 Table,
-	打开打开SQLite字段是否存在,
-	打开打开SQLite创建索引核心,
-	打开打开SQLite删除索引核心,
-	打开打开SQLite表是否存在核心,
-	打开打开SQLite取得打开数据库的行数据核心,
-	打开打开SQLite检索 buff 的列的和 Bulk无关的包装核心,
-	打开打开SQLite 自动 Structure 的表格核心,
-	打开打开SQLite开SQLite的键核心,
-	打开打开SQLite读取键核心,
-	打开打开SQLite删除键核心,
-	打开打开SQLite清空键核心,
-	打开打开SQLite所有键核心,
-	打开打开SQLite重组核心,
-	打开打开SQLite写入 WAL核心,
-	打开打开SQLite关闭全部核心
-} from "./sqlite.uts"
+	打开,
+	关闭,
+	关闭全部,
+	删除,
+	文件是否存在,
+	是否已打开,
+	取得路径,
+	已打开列表,
+	执行,
+	批量执行,
+	查询,
+	查询单值,
+	查询数量,
+	开始事务,
+	提交事务核心,
+	回滚事务核心,
+	是否在事务中核心,
+	执行事务,
+	建表,
+	表是否存在核心,
+	删表,
+	清空表核心,
+	列是否存在核心,
+	建索引,
+	删索引,
+	存键值,
+	读键值,
+	删键值,
+	清空键值核心,
+	列出键核心,
+	取版本,
+	设版本,
+	重组,
+	写回日志
+} from './sqlite.uts'
 
 /* ============================================================
  * 统一错误处理
  * ============================================================ */
 
-type X = string | null
-export type SQLite失败SAFECODE = number
-export type SQLite失败SAFE = { errCode: number, errMsg: string, errSubject: string }
-
 /**
- * 把底层抛出来的所有错，统一包成 SQLite失败SAFE
- * 这里不用 try/catch/finally 关键字：UTS 不支持级联嵌套 catch 的类型语句。
+ * 把底层抛出的任意异常，解析成结构化的 SQLite失败
+ *
+ * 注意两点：
+ * 1. 入参是 any，Kotlin 侧是 Any?，不能取 .message（Any 没有这个属性），
+ *    因此统一用字符串拼接拿到异常文本，再从里面摘 [错误码] 前缀；
+ * 2. UTS 的 throw new Error() 编译成 throw UTSError()，
+ *    文本形如 io.dcloud.uts.UTSError: [9010002]数据库 xxx 尚未打开，
+ *    所以这里按「任意位置的 [」来定位，而不是要求必须在开头。
  */
-export function 异常转失败(异常 : any) : SQLite失败SAFE {
-	let 错误信息 : string = ""
-	let 错误码 : number = 0
+export function 解析SQLite异常(异常 : any) : SQLite失败 {
+	let 错误信息 = ''
+	let 错误码 = SQLite未知错误码
 
 	try {
 		if (异常 == null) {
-			错误信息 = "未知错误"
+			错误信息 = '未知错误'
 		} else {
-			const 消息 : any = (异常 as any).message
-			if (typeof 消息 == "string" && 消息.length > 0) {
-				错误信息 = 消息 as string
-			} else {
-				错误信息 = "" + 异常
-			}
+			错误信息 = '' + 异常
 		}
 	} catch (忽略异常) {
-		错误信息 = "异常转失败时再次出错"
+		错误信息 = '解析异常时再次出错'
 	}
 
-	const 前缀位置 : number = 错误信息.indexOf(SQLite失败信息.错误前缀开始 Token)
-	if (前缀位置 == 0) {
-		const 后缀位置 : number = 错误信息.indexOf("]")
+	const 前缀位置 = 错误信息.indexOf(SQLite错误前缀开始)
+	if (前缀位置 >= 0) {
+		const 后半 = 错误信息.substring(前缀位置)
+		const 后缀位置 = 后半.indexOf(']')
 		if (后缀位置 > 0) {
-			const 码 : X = 错误信息.substring(7, 后缀位置)
-			try {
-				错误码 = Number.parseFloat(码 as string)
-			} catch (忽略异常) {
-				错误码 = SQLite失败信息.未知错误码
+			const 码文本 = 后半.substring(1, 后缀位置)
+			const 解析结果 = Number.parseFloat(码文本)
+			if (解析结果 != 解析结果) {
+				错误码 = SQLite未知错误码
+			} else {
+				错误码 = 解析结果
 			}
-			错误信息 = 错误信息.substring(后缀位置 + 1)
-		} else {
-			错误码 = SQLite失败信息.未知错误码
+			错误信息 = 后半.substring(后缀位置 + 1)
 		}
-	} else {
-		错误码 = SQLite失败信息.未知错误码
 	}
 
-	return {
+	if (错误信息.length == 0) {
+		错误信息 = 取得错误说明(错误码)
+	}
+
+	const 失败 : SQLite失败 = {
 		errCode: 错误码,
 		errMsg: 错误信息,
-		errSubject: SQLite失败信息.主题
+		errSubject: SQLite错误主题
 	}
+	return 失败
+}
+
+/** 异步包装的内部参数 */
+type 异步回调包 = {
+	任务 : (() => any)
+	成功回调 : ((任意结果 : any | null) => void) | null
+	失败回调 : ((失败 : SQLite失败) => void) | null
+	完成回调 : ((任意结果 : any | null) => void) | null
 }
 
 /**
- * 把一个 [错误码] xxx 格式的 UError 消息剥掉前缀，只留描述
+ * 统一异步包装：io 线程干活，main 线程回调
+ * 返回值的具体类型由各 api 自己保证，这里统一按 any 传递
  */
-function 剥掉错误前缀(信息 : string) : string {
-	const 起始 : number = 信息.indexOf(SQLite失败信息.错误前缀开始 Token)
-	if (起始 != 0) {
-		return 信息
-	}
-	const 终止 : number = 信息.indexOf("]")
-	if (终止 <= 起始) {
-		return 信息
-	}
-	return 信息.substring(终止 + 1)
-}
+function 异步执行(包 : 异步回调包) : void {
+	const 任务 = 包.任务
+	const 成功回调 = 包.成功回调
+	const 失败回调 = 包.失败回调
+	const 完成回调 = 包.完成回调
 
-/* ============================================================
- * 异步调度
- * ============================================================ */
-
-/**
- * 统一异步包装
- * 注意其 /申请不到全部参数是 UTS 官方 andorid 平台异步写法
- * 耗时任务：UTSAndroid.getDispatcher("io").async(function(_){}, null)
- * 界面修改：UTSAndroid.getDispatcher("main").async(function(_){}, null)
- */
-function 异步执行(参数 : SQLite失败的参数) : void {
-	const 任务 : (() => any) = 参数.任务
-	const 成功回调 : ((任意结果 : any) => void) | null = 参数.成功回调 ?? null
-	const 失败回调 : ((失败 : SQLite失败SAFE) => void) | null = 参数.失败回调 ?? null
-	const 完成回调 : ((任意结果 : any) => void) | null = 参数.完成回调 ?? null
-
-	UTSAndroid.getDispatcher("io").async(function(忽略 : any) {
-		let 结果 : any = null
-		let 失败 : SQLite失败SAFE | null = null
+	UTSAndroid.getDispatcher('io').async(function(_ : any | null) {
+		let 结果 : any | null = null
+		let 失败 : SQLite失败 | null = null
 
 		try {
 			结果 = 任务()
-		} catch (异常 : any) {
-			失败 = 异常转失败(异常)
+		} catch (异常) {
+			失败 = 解析SQLite异常(异常)
 		}
 
-		const 确定的结果 : any = 结果
-		const 确定的失败 : SQLite失败SAFE | null = 失败
+		const 确定的结果 : any | null = 结果
+		const 确定的失败 : SQLite失败 | null = 失败
 
-		UTSAndroid.getDispatcher("main").async(function(忽略2 : any) {
+		UTSAndroid.getDispatcher('main').async(function(_ : any | null) {
 			if (确定的失败 != null) {
 				if (失败回调 != null) {
 					失败回调!(确定的失败!)
 				}
-			} else if (成功回调 != null) {
-				成功回调!(确定的结果)
+			} else {
+				if (成功回调 != null) {
+					成功回调!(确定的结果)
+				}
 			}
 			if (完成回调 != null) {
-				完成回调!(确定的失败 != null ? 确定的失败! : 确定的结果)
+				if (确定的失败 != null) {
+					完成回调!(确定的失败!)
+				} else {
+					完成回调!(确定的结果)
+				}
 			}
 		}, null)
 	}, null)
@@ -224,323 +195,384 @@ function 异步执行(参数 : SQLite失败的参数) : void {
  * 打开 / 关闭 / 删除
  * ============================================================ */
 
+/**
+ * 打开数据库
+ * 同名库只打开一次，重复调用直接返回已有连接的结果
+ * 失败时抛出 Error，业务层用 try/catch 捕获
+ */
 export function 打开数据库(参数 : 打开数据库参数) : 打开数据库结果 {
-	return 打开联合版核心(参数)
+	return 打开(参数)
 }
 
-export function 打开数据库异步(参数 : 打开并初始化参数) : void {
+/** 打开数据库（异步）：在 io 线程打开，回调回 main 线程 */
+export function 打开数据库异步(参数 : 打开数据库异步参数) : void {
+	const 入参 : 打开数据库参数 = {
+		数据库名: 参数.数据库名,
+		版本: 参数.版本 ?? null,
+		路径: 参数.路径 ?? null,
+		只读: 参数.只读 ?? false,
+		预写日志: 参数.预写日志 ?? true,
+		外键约束: 参数.外键约束 ?? true
+	}
+	const 用户成功 = 参数.success ?? null
 	异步执行({
 		任务: function() : any {
-			return 打开联合版核心(参数)
+			return 打开(入参) as any
 		},
-		成功回调: 参数.success ?? null,
+		成功回调: function(任意结果 : any | null) : void {
+			if (用户成功 != null) {
+				用户成功!(任意结果! as 打开数据库结果)
+			}
+		},
 		失败回调: 参数.fail ?? null,
 		完成回调: 参数.complete ?? null
 	})
 }
 
-export function 打开并初始化(参数 : 打开并初始化参数) : 打开数据库结果 {
-	return 打开联合版核心(参数)
+/** 关闭数据库，未打开时直接返回 */
+export function 关闭数据库(数据库名 : string) : void {
+	关闭(数据库名)
 }
 
-export function 关闭数据库(参数 : 关闭参数) : void {
-	关闭核心(参数.数据库名)
-}
-
-export function 关闭数据库异步(参数 : 关闭回调参数) : void {
+/** 关闭数据库（异步） */
+export function 关闭数据库异步(参数 : 单库异步参数) : void {
+	const 数据库名 = 参数.数据库名
+	const 用户成功 = 参数.success ?? null
 	异步执行({
 		任务: function() : any {
-			关闭核心(参数.数据库名)
-			return null
+			关闭(数据库名)
+			const 结果 = { 数据库名: 数据库名, 是否成功: true }
+			return 结果 as any
 		},
-		成功回调: 参数.success ?? null,
+		成功回调: function(任意结果 : any | null) : void {
+			if (用户成功 != null) {
+				用户成功!(任意结果! as 操作结果)
+			}
+		},
 		失败回调: 参数.fail ?? null,
 		完成回调: 参数.complete ?? null
 	})
 }
 
-export function 关闭全部() : number {
-	return 打开打开SQLite关闭全部核心()
+/** 关闭全部已打开的数据库，返回关闭数量 */
+export function 关闭全部数据库() : number {
+	return 关闭全部()
 }
 
-export function 删除数据库(参数 : 删除参数) : void {
-	删除核心(参数.数据库名)
+/** 删除数据库文件，已打开的会先关闭 */
+export function 删除数据库(数据库名 : string) : void {
+	删除(数据库名)
 }
 
-export function 删除数据库异步(参数 : 删除回调参数) : void {
+/** 删除数据库（异步） */
+export function 删除数据库异步(参数 : 单库异步参数) : void {
+	const 数据库名 = 参数.数据库名
+	const 用户成功 = 参数.success ?? null
 	异步执行({
 		任务: function() : any {
-			删除核心(参数.数据库名)
-			return null
+			删除(数据库名)
+			const 结果 = { 数据库名: 数据库名, 是否成功: true }
+			return 结果 as any
 		},
-		成功回调: 参数.success ?? null,
+		成功回调: function(任意结果 : any | null) : void {
+			if (用户成功 != null) {
+				用户成功!(任意结果! as 操作结果)
+			}
+		},
 		失败回调: 参数.fail ?? null,
 		完成回调: 参数.complete ?? null
 	})
 }
 
-export function 数据库是否已打开(参数 : 关闭参数) : boolean {
-	return 当前打开的是否已打开核心(参数.数据库名)
+/** 数据库是否已打开 */
+export function 数据库是否已打开(数据库名 : string) : boolean {
+	return 是否已打开(数据库名)
 }
 
-export function 数据库文件是否存在(参数 : 删除参数) : boolean {
-	return 数据库是否存在核心(参数.数据库名)
+/** 数据库文件是否存在于磁盘 */
+export function 数据库文件是否存在(数据库名 : string) : boolean {
+	return 文件是否存在(数据库名)
 }
 
-export function 取得的数据文件路径(参数 : 删除参数) : string {
-	return 取得的数据文件路径核心(参数.数据库名)
+/** 取数据库文件的绝对路径 */
+export function 取得数据库文件路径(数据库名 : string) : string {
+	return 取得路径(数据库名)
 }
 
-export function 取得打开的数据库名列表() : string[] {
-	return 全部打开的名核心()
+/** 取当前已打开的数据库名列表 */
+export function 取得已打开数据库名列表() : Array<string> {
+	return 已打开列表()
 }
 
 /* ============================================================
- * 执行 SQL
+ * 执行 / 查询
  * ============================================================ */
 
-export function 执行SQL(参数 : 打开打开SQLite执行SQL参数) : number {
-	return 执行SQL核心(参数)
+/** 执行一条写 SQL（INSERT / UPDATE / DELETE / DDL） */
+export function 执行SQL(参数 : 执行SQL参数) : 执行结果 {
+	return 执行(参数)
 }
 
-export function 执行SQL异步(参数 : 打开打开SQLite执行SQL异步参数) : void {
+/** 执行一条写 SQL（异步） */
+export function 执行SQL异步(参数 : 执行SQL异步参数) : void {
+	const 入参 : 执行SQL参数 = {
+		数据库名: 参数.数据库名,
+		SQL: 参数.SQL,
+		参数: 参数.参数 ?? null
+	}
+	const 用户成功 = 参数.success ?? null
 	异步执行({
 		任务: function() : any {
-			return 执行SQL核心(参数)
+			return 执行(入参) as any
 		},
-		成功回调: 参数.success ?? null,
+		成功回调: function(任意结果 : any | null) : void {
+			if (用户成功 != null) {
+				用户成功!(任意结果! as 执行结果)
+			}
+		},
 		失败回调: 参数.fail ?? null,
 		完成回调: 参数.complete ?? null
 	})
 }
 
-export function 查询SQL(参数 : 打开打开SQLite查询SQL参数) : any[] {
-	return 执行查询SQL核心(参数)
+/** 依次执行多条 SQL，不在事务中时自动包一层事务 */
+export function 批量执行SQL(参数 : 批量执行参数) : 批量执行结果 {
+	return 批量执行(参数)
 }
 
-export function 查询SQL异步(参数 : 打开打开SQLite查询SQL异步参数) : void {
+/** 批量执行 SQL（异步） */
+export function 批量执行SQL异步(参数 : 批量执行异步参数) : void {
+	const 入参 : 批量执行参数 = {
+		数据库名: 参数.数据库名,
+		语句集合: 参数.语句集合
+	}
+	const 用户成功 = 参数.success ?? null
 	异步执行({
 		任务: function() : any {
-			return 执行查询SQL核心(参数)
+			return 批量执行(入参) as any
 		},
-		成功回调: 参数.success ?? null,
+		成功回调: function(任意结果 : any | null) : void {
+			if (用户成功 != null) {
+				用户成功!(任意结果! as 批量执行结果)
+			}
+		},
 		失败回调: 参数.fail ?? null,
 		完成回调: 参数.complete ?? null
 	})
 }
 
-export function 查询SQL返回组(参数 : 打开打开SQLite查询SQL参数) : SQLite原始数据 {
-	return 执行查询SQL返回组 WITH 选项的核心(参数)
+/** 执行查询，返回列名与数据行 */
+export function 查询SQL(参数 : 查询SQL参数) : 查询结果 {
+	return 查询(参数)
 }
 
-export function 查询单行(参数 : 打开打开SQLite查询SQL参数) : SQLite原始数据 | null {
-	const 行组 : SQLite原始数据 = 执行查询SQL返回组 WITH 选项的核心(参数)
-	const 行数组 : any[] = 行组.数据
-	if (行数组.length == 0) {
+/** 执行查询（异步） */
+export function 查询SQL异步(参数 : 查询SQL异步参数) : void {
+	const 入参 : 查询SQL参数 = {
+		数据库名: 参数.数据库名,
+		SQL: 参数.SQL,
+		参数: 参数.参数 ?? null
+	}
+	const 用户成功 = 参数.success ?? null
+	异步执行({
+		任务: function() : any {
+			return 查询(入参) as any
+		},
+		成功回调: function(任意结果 : any | null) : void {
+			if (用户成功 != null) {
+				用户成功!(任意结果! as 查询结果)
+			}
+		},
+		失败回调: 参数.fail ?? null,
+		完成回调: 参数.complete ?? null
+	})
+}
+
+/** 执行查询，只取第一行；没有结果返回 null */
+export function 查询单行(参数 : 查询SQL参数) : SQLite数据行 | null {
+	const 结果 = 查询(参数)
+	if (结果.行数 == 0) {
 		return null
 	}
-	return 行数组[0] as SQLite原始数据
+	return 结果.行集合[0]
 }
 
-export function 查询单值(参数 : 打开打开SQLite查询SQL参数) : SQLite单一的值 | null {
-	const 行组 : SQLite原始数据 = 执行查询SQL返回组 WITH 选项的核心(参数)
-	const 行数组 : any[] = 行组.数据
-	if (行数组.length == 0) {
-		return null
-	}
-	const 首行 : any = 行数组[0]
-	const 键组 : string[] = (首行 as SQLite原始数据).键
-	if (键组.length == 0) {
-		return null
-	}
-	return (首行 as SQLite原始数据).取(键组[0])
+/** 执行查询，只取第一行第一列 */
+export function 查询单个值(参数 : 查询SQL参数) : SQLite值 {
+	return 查询单值(参数)
 }
 
-export function 查询数量(参数 : 打开打开SQLite count的参数) : number {
-	return count核心(参数)
-}
-
-export function 是否存在(参数 : 打开打开SQLite存在的参数) : boolean {
-	return exists核心(参数)
-}
-
-export function 批量同结构同参数不同值(参数 : 打开打开SQLite批量查询类型的参数) : number | null {
-	return 批量同结构同参数不同值核心(参数)
-}
-
-export function 批量同结构同参数不同值异步(参数 : 打开打开SQLite批量查询类型的异步参数) : void {
-	异步执行({
-		任务: function() : any {
-			return 批量同结构同参数不同值核心(参数)
-		},
-		成功回调: 参数.success ?? null,
-		失败回调: 参数.fail ?? null,
-		完成回调: 参数.complete ?? null
-	})
-}
-
-export function 执行多个不同结构的SQL(参数 : 批量SQL参数) : void {
-	执行多个同相同结构的SQL核心(参数)
-}
-
-export function 执行多个不同结构的SQL异步(参数 : 打开打开SQLite事务异步参数) : void {
-	异步执行({
-		任务: function() : any {
-			执行多个同相同结构的SQL核心(参数)
-			return null
-		},
-		成功回调: 参数.success ?? null,
-		失败回调: 参数.fail ?? null,
-		完成回调: 参数.complete ?? null
-	})
+/** 执行 COUNT 类查询，返回数字 */
+export function 查询记录数(参数 : 查询SQL参数) : number {
+	return 查询数量(参数)
 }
 
 /* ============================================================
  * 事务
  * ============================================================ */
 
-export function 开始事务(参数 : 打开打开SQLite事务参数) : void {
-	开始Transaction核心(参数.数据库名)
+/** 开启手动事务，已开启时抛错 */
+export function 开启事务(数据库名 : string) : void {
+	开始事务(数据库名)
 }
 
-export function 提交事务(参数 : 打开打开SQLite事务参数) : void {
-	确认Transaction核心(参数.数据库名)
+/** 提交事务，未开启时抛错 */
+export function 提交事务(数据库名 : string) : void {
+	提交事务核心(数据库名)
 }
 
-export function 回滚事务(参数 : 打开打开SQLite事务参数) : void {
-	抛异常Transaction核心(参数.数据库名)
+/** 回滚事务，未开启时抛错 */
+export function 回滚事务(数据库名 : string) : void {
+	回滚事务核心(数据库名)
 }
 
-export function 是否在事务中(参数 : 打开打开SQLite事务参数) : boolean {
-	return 是否在Transaction核心(参数.数据库名)
+/** 是否处于手动事务中 */
+export function 是否在事务中(数据库名 : string) : boolean {
+	return 是否在事务中核心(数据库名)
 }
 
-export function 执行事务(参数 : 打开打开SQLite事务异步参数) : void {
+/**
+ * 在一个事务里执行多条 SQL，全部成功才提交，任意一条失败整体回滚
+ * 不能在已经手动开启的事务里调用
+ */
+export function 在一个事务里执行(参数 : 批量执行参数) : 批量执行结果 {
+	return 执行事务(参数)
+}
+
+/** 在一个事务里执行多条 SQL（异步） */
+export function 在一个事务里执行异步(参数 : 事务异步参数) : void {
+	const 入参 : 批量执行参数 = {
+		数据库名: 参数.数据库名,
+		语句集合: 参数.语句集合
+	}
+	const 用户成功 = 参数.success ?? null
 	异步执行({
 		任务: function() : any {
-			开始Transaction核心(参数.数据库名)
-			try {
-				for (let 序号 = 0; 序号 < 参数.SQL语句集合.length; 序号++) {
-					const 一条 : SQL语句 = 参数.SQL语句集合[序号]
-					执行SQL核心({
-						数据库名: 参数.数据库名,
-						SQL语句: 一条.SQL语句,
-						SQL参数: 一条.SQL参数 ?? null
-					})
-				}
-				确认Transaction核心(参数.数据库名)
-			} catch (异常 : any) {
-				抛异常Transaction核心(参数.数据库名)
-				throw 异常
+			return 执行事务(入参) as any
+		},
+		成功回调: function(任意结果 : any | null) : void {
+			if (用户成功 != null) {
+				用户成功!(任意结果! as 批量执行结果)
 			}
-			return null
 		},
-		成功回调: 参数.success ?? null,
 		失败回调: 参数.fail ?? null,
 		完成回调: 参数.complete ?? null
 	})
 }
 
 /* ============================================================
- * 表 / 列 / 索引
+ * 表结构
  * ============================================================ */
 
-export function 创建表(参数 : 打开打开SQLite表参数) : void {
-	打开打开SQLite创建表核心(参数)
+/** 建表：已存在则直接返回，不重复执行 DDL */
+export function 创建表(参数 : 建表参数) : void {
+	建表(参数)
 }
 
-export function 删除表(参数 : 打开打开SQLite多个表或列的参数) : void {
-	打开打开SQLite删除表核心(参数)
+/** 判断表是否存在 */
+export function 表是否存在(参数 : 表参数) : boolean {
+	return 表是否存在核心(参数)
 }
 
-export function 清空表(参数 : 打开打开SQLite多个表或列的参数) : void {
-	打开打开SQLite清空 Table核心(参数)
+/** 删表 */
+export function 删除表(参数 : 表参数) : void {
+	删表(参数)
 }
 
-export function 表是否存在(参数 : 打开打开SQLite多个表或列的参数) : boolean {
-	return 打开打开SQLite表是否存在核心(参数)
+/** 清空表数据，并重置自增序号 */
+export function 清空表(参数 : 表参数) : void {
+	清空表核心(参数)
 }
 
-export function 列是否存在(参数 : 打开打开SQLite列参数) : boolean {
-	return 打开打开SQLite字段是否存在核心(参数)
+/** 判断列是否存在，用于表结构升级时补列 */
+export function 列是否存在(参数 : 列参数) : boolean {
+	return 列是否存在核心(参数)
 }
 
-export function 创建索引(参数 : 打开打开SQLite索引参数) : void {
-	打开打开SQLite创建索引核心(参数)
+/** 建索引 */
+export function 创建索引(参数 : 建索引参数) : void {
+	建索引(参数)
 }
 
-export function 删除索引(参数 : 打开打开SQLite索引参数) : void {
-	打开打开SQLite删除索引核心(参数)
+/** 删索引 */
+export function 删除索引(参数 : 删索引参数) : void {
+	删索引(参数)
 }
 
 /* ============================================================
- * 键值 / 配置
+ * 键值表
  * ============================================================ */
 
-export function 存储键值(参数 : 打开打开SQLite键值参数) : void {
-	打开打开SQLite开SQLite的键核心(参数)
+/** 写键值，键已存在则覆盖；值为 null 表示删除内容 */
+export function 存储键值(参数 : 存键值参数) : void {
+	存键值(参数)
 }
 
-export function 读取键值(参数 : 打开打开SQLite键值参数) : string | null {
-	return 打开打开SQLite读取键核心(参数)
+/** 读键值，不存在返回 null */
+export function 读取键值(参数 : 取键值参数) : string | null {
+	return 读键值(参数)
 }
 
-export function 删除键值(参数 : 打开打开SQLite键值参数) : void {
-	打开打开SQLite删除键核心(参数)
+/** 删键值 */
+export function 删除键值(参数 : 取键值参数) : void {
+	删键值(参数)
 }
 
-export function 清空键值(参数 : 打开打开SQLite数据修改的参数) : void {
-	打开打开SQLite清空键核心(参数)
+/** 清空键值表 */
+export function 清空键值(数据库名 : string) : void {
+	清空键值核心(数据库名)
 }
 
-export function 列出键(参数 : 打开打开SQLite数据修改的参数) : string[] {
-	return 打开打开SQLite所有键核心(参数)
+/** 列出全部键 */
+export function 列出键(数据库名 : string) : Array<string> {
+	return 列出键核心(数据库名)
 }
 
 /* ============================================================
- * 维护
+ * 版本 / 维护
  * ============================================================ */
 
-export function 重组(参数 : 打开打开SQLite数据修改的参数) : void {
-	打开打开SQLite重组核心(参数)
+/** 取 PRAGMA user_version，业务层据此做表结构升级 */
+export function 取得用户版本号(数据库名 : string) : number {
+	return 取版本(数据库名)
 }
 
-export function 重组异步(参数 : 打开打开SQLite重组异步参数) : void {
+/** 设置 PRAGMA user_version */
+export function 设置用户版本号(参数 : 设版本参数) : void {
+	设版本(参数)
+}
+
+/** 整理数据库文件碎片，不能在事务中调用 */
+export function 重组数据库(数据库名 : string) : void {
+	重组(数据库名)
+}
+
+/** 整理数据库文件碎片（异步） */
+export function 重组数据库异步(参数 : 单库异步参数) : void {
+	const 数据库名 = 参数.数据库名
+	const 用户成功 = 参数.success ?? null
 	异步执行({
 		任务: function() : any {
-			打开打开SQLite重组核心(参数)
-			return null
+			重组(数据库名)
+			const 结果 = { 数据库名: 数据库名, 是否成功: true }
+			return 结果 as any
 		},
-		成功回调: 参数.success ?? null,
+		成功回调: function(任意结果 : any | null) : void {
+			if (用户成功 != null) {
+				用户成功!(任意结果! as 操作结果)
+			}
+		},
 		失败回调: 参数.fail ?? null,
 		完成回调: 参数.complete ?? null
 	})
 }
 
-export function 写入WAL(参数 : 打开打开SQLite数据修改的参数) : void {
-	打开打开SQLite写入 WAL核心(参数)
+/** 把 WAL 日志写回主库文件并截断 */
+export function 写回预写日志(数据库名 : string) : void {
+	写回日志(数据库名)
 }
 
-/* ============================================================
- * 版本
- * ============================================================ */
-
-export function 取得用户版本号(参数 : 打开打开SQLite数据修改的参数) : number {
-	return 取得SQLite.version核心(参数.数据库名)
-}
-
-export function 设置用户版本号(参数 : 打开打开SQLite用户版本参数) : void {
-	设置SQLite版本核心(参数.数据库名, 参数.版本号)
-}
-
-/* ============================================================
- * 诊断
- * ============================================================ */
-
-export function 取得错误说明(参数 : 打开打开SQLite取得错误说明参数) : string {
-	return SQLite失败信息.取得错误信息ECB(参数.错误码)
-}
-
-export function 解析SQLite异常(参数 : 打开打开SQLite取得错误说明参数) : SQLite失败SAFE {
-	return 异常转失败(参数)
+/** 按错误码取错误说明文案 */
+export function 取得SQLite错误说明(错误码 : number) : string {
+	return 取得错误说明(错误码)
 }

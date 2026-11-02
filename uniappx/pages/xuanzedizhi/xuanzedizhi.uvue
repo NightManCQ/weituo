@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import type { 任务位置 } from '../../common/leixing'
+import { 存储委托位置 } from '../../common/本地存储'
 
 const 正在定位 = ref(false)
 const 错误 = ref('')
@@ -10,7 +11,7 @@ function 选择当前位置() {
   错误.value = ''
   uni.chooseLocation({
     success: (结果) => {
-      uni.setStorageSync('renwu_location', {
+      存储委托位置({
         经度: 结果.longitude,
         纬度: 结果.latitude,
         国: null,

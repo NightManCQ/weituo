@@ -1,0 +1,920 @@
+/**
+ * cq-mqtt 插件 · 前端 SQLite 引擎 · Web 端核心层（utssdk/web）
+ *
+ * 底层用的是 SQLite 官方 WebAssembly 构建：
+ *   文档 https://www.sqlite.org/wasm/doc/trunk/index.md
+ *   产物 @sqlite.org/sqlite-wasm（本文件默认从 jsdelivr CDN 取 ESM 入口，
+ *   sqlite3.wasm 会按同目录自动定位，不需要额外配置 locateFile）
+ *
+ * 为什么不用 OPFS（persistence.md 的结论）：
+ *   1. OPFS 只能在 Worker 线程里用，uni-app x 的 H5 跑在主线程；
+ *   2. "opfs" / "opfs-wl" 两个 VFS 还要求服务端下发 COOP/COEP 响应头，
+ *      HBuilderX 的 H5 开发服务器拿不到这两个头；
+ *   所以这里用官方提供的另一种持久化方案：**kvvfs（localStorage）**，
+ *   对应 oo1 封装类 sqlite3.oo1.JsStorageDb('local')。
+ *
+ * kvvfs 的三条硬限制（业务层必须知道）：
+ *   1. 只在主 UI 线程可用（正好符合 H5 场景，不需要 COOP/COEP）；
+ *   2. 一个 storage 只能放一个数据库，库名固定是 'local' 或 'session'，
+ *      因此 Web 端同一时刻只支持一个逻辑数据库（本项目就是 im_renwu.db）；
+ *   3. 容量上限约 5MB，写满后写操作会失败。
+ *
+ * 这一层只封装能力，错误处理与同步/异步包装放在 index.uts。
+ */
+
+import {
+	SQLite值,
+	SQLite数据行,
+	SQL语句,
+	打开数据库参数,
+	打开数据库结果,
+	执行SQL参数,
+	批量执行参数,
+	查询SQL参数,
+	建表参数,
+	建索引参数,
+	删索引参数,
+	表参数,
+	列参数,
+	存键值参数,
+	取键值参数,
+	设版本参数,
+	执行结果,
+	批量执行结果,
+	查询结果
+} from '../interface.uts'
+
+/* ---------- 常量 ---------- */
+
+const 错_参数缺失 = '[9010001]'
+const 错_未打开 = '[9010002]'
+const 错_打开失败 = '[9010004]'
+const 错_执行失败 = '[9010005]'
+const 错_查询失败 = '[9010006]'
+const 错_关闭失败 = '[9010007]'
+const 错_删除失败 = '[9010008]'
+const 错_事务未开 = '[9010009]'
+const 错_事务禁止 = '[9010010]'
+const 错_键值失败 = '[9010012]'
+const 错_事务重复 = '[9010013]'
+const 错_未就绪 = '[9010014]'
+const 错_Web限制 = '[9010015]'
+
+const 空文本 = ''
+const 键值表名 = 'cq_kv'
+
+/**
+ * 插件自带产物（首选）：utssdk/web/sqlite-wasm/ 下同时放了
+ * index.mjs 与 sqlite3.wasm，随插件一起走，不依赖项目任何目录
+ * 相对路径由运行时按当前模块位置解析，打包后只要目录结构保留就能命中
+ */
+const 插件模块地址 = './sqlite-wasm/index.mjs'
+
+/** 次选：项目静态目录副本，用于打包器没有把插件资源拷进产物时兜底 */
+const 项目模块地址 = '/static/sqlite/index.mjs'
+
+/** 最后兜底：官方 CDN */
+const 远端模块地址 = 'https://cdn.jsdelivr.net/npm/@sqlite.org/sqlite-wasm@3.54.1-build1/dist/index.mjs'
+
+/** kvvfs 的固定库名，只能是 local 或 session */
+const 存储库名 = 'local'
+
+/* ---------- 运行时状态 ---------- */
+
+/** sqlite3InitModule() 的返回值，即官方的 sqlite3 命名空间对象 */
+let 引擎 : any = null
+/** 正在进行的加载，避免并发重复加载 */
+let 加载承诺 : Promise<any> | null = null
+/** 业务层自行 import 官方模块后注入进来，可绕开打包器对动态 import 的限制 */
+let 外部模块 : any = null
+/** 业务层指定的地址，设过就排在最前面 */
+let 模块地址 : string = 空文本
+/** 当前打开的 oo1 数据库连接 */
+let 连接 : any = null
+/** 当前逻辑库名（Web 端只会有一个） */
+let 库名 : string = 空文本
+/** 是否处于手动事务中 */
+let 事务标记 : boolean = false
+/** 键值表是否已建 */
+let 键值表已建 : boolean = false
+/** 本次打开是否为首次创建（kvvfs 无法直接判断，用 storageSize 近似） */
+let 是否新建标记 : boolean = false
+
+/* ---------- 引擎加载 ---------- */
+
+/** 换成自定义的 index.mjs 地址；留空表示走自动探测 */
+export function 设置模块地址(地址 : string) : void {
+	if (地址 != null) {
+		模块地址 = 地址
+	}
+}
+
+/** 实际会尝试的地址列表，按优先级排列 */
+export function 候选模块地址() : Array<string> {
+	const 列表 : Array<string> = []
+	if (模块地址.length > 0) {
+		列表.push(模块地址)
+	}
+	列表.push(插件模块地址)
+	列表.push(项目模块地址)
+	列表.push(远端模块地址)
+	return 列表
+}
+
+/** 当前模块地址（第一个候选） */
+export function 取得模块地址() : string {
+	const 列表 = 候选模块地址()
+	return 列表[0]
+}
+
+/**
+ * 注入业务层自己 import 好的官方模块，优先级高于地址加载
+ * 用法：import sqlite3Module from '/static/sqlite/index.mjs'; 注入模块(sqlite3Module)
+ */
+export function 注入模块(模块 : any) : void {
+	if (模块 != null) {
+		外部模块 = 模块
+	}
+}
+
+/** WASM 是否已加载完成 */
+export function 引擎是否已就绪() : boolean {
+	return 引擎 != null
+}
+
+/**
+ * 加载 SQLite 官方 WASM 并初始化，可重复调用（幂等）
+ * 业务层在任何同步 API 之前必须先 await 它一次
+ */
+export async function 加载引擎() : Promise<any> {
+	if (引擎 != null) {
+		return 引擎
+	}
+	if (加载承诺 != null) {
+		return await 加载承诺!
+	}
+	加载承诺 = 载入并初始化()
+	try {
+		引擎 = await 加载承诺!
+	} catch (异常) {
+		引擎 = null
+		加载承诺 = null
+		throw 异常
+	}
+	加载承诺 = null
+	return 引擎
+}
+
+/**
+ * 按优先级依次尝试所有候选地址：
+ * 1. 业务层注入的模块（绕开打包器时最稳）
+ * 2. 业务层指定的地址
+ * 3. 插件自带的 ./sqlite-wasm/index.mjs
+ * 4. 项目 /static/sqlite/index.mjs
+ * 5. 官方 CDN
+ * 谁先成功用谁，全失败才抛出最后一个错误
+ */
+async function 载入并初始化() : Promise<any> {
+	if (外部模块 != null) {
+		return await 从模块初始化(外部模块)
+	}
+	const 候选 = 候选模块地址()
+	let 最后异常 : any = null
+	for (let 序号 = 0; 序号 < 候选.length; 序号++) {
+		const 地址 = 候选[序号]
+		try {
+			const 实例 = await 从地址初始化(地址)
+			console.log('[cq-mqtt] SQLite WASM 加载成功：' + 地址)
+			return 实例
+		} catch (异常) {
+			最后异常 = 异常
+			console.warn('[cq-mqtt] SQLite WASM 加载失败，尝试下一个：' + 地址 + ' → ' + 原文(异常))
+		}
+	}
+	if (最后异常 == null) {
+		throw new Error(错_打开失败 + 'SQLite WASM 全部候选地址均加载失败')
+	}
+	throw 最后异常
+}
+
+/** 从指定地址加载官方 ESM 并调 sqlite3InitModule() */
+async function 从地址初始化(地址 : string) : Promise<any> {
+	const 模块 : any = await import(地址)
+	return await 从模块初始化(模块)
+}
+
+/** 拿到官方模块后统一做初始化 */
+async function 从模块初始化(模块 : any) : Promise<any> {
+	const 初始化 : any = 模块.default
+	if (typeof 初始化 != 'function') {
+		throw new Error(错_打开失败 + 'SQLite 官方模块加载异常：未拿到 sqlite3InitModule 默认导出')
+	}
+	const 实例 : any = await 初始化({
+		print: function(文本 : string) : void {
+			console.log('[sqlite3] ' + 文本)
+		},
+		printErr: function(文本 : string) : void {
+			console.error('[sqlite3] ' + 文本)
+		}
+	})
+	return 实例
+}
+
+/** 取已就绪的引擎，未就绪时抛错 */
+function 取引擎() : any {
+	if (引擎 == null) {
+		throw new Error(错_未就绪 + 'Web 端 SQLite 尚未就绪，请先 await 加载引擎()（或对外 API 准备SQLite()）')
+	}
+	return 引擎!
+}
+
+/** 取当前连接，未打开时抛错 */
+export function 取连接(数据库名 : string) : any {
+	if (连接 == null) {
+		throw new Error(错_未打开 + '数据库 ' + 数据库名 + ' 尚未打开，请先调用 打开数据库()')
+	}
+	if (数据库名.length > 0 && 库名 != 数据库名) {
+		throw new Error(错_Web限制 + 'Web 端只支持一个数据库，当前已打开的是 ' + 库名)
+	}
+	return 连接!
+}
+
+/** 校验库名 */
+export function 校验库名(数据库名 : string) : void {
+	if (数据库名 == null || 数据库名.length == 0) {
+		throw new Error(错_参数缺失 + '数据库名不能为空')
+	}
+}
+
+/** 校验 SQL */
+export function 校验SQL(SQL : string) : void {
+	if (SQL == null || SQL.length == 0) {
+		throw new Error(错_参数缺失 + 'SQL 不能为空')
+	}
+}
+
+/** 取异常文本 */
+export function 原文(异常 : any) : string {
+	if (异常 == null) {
+		return '未知错误'
+	}
+	return 空文本 + 异常
+}
+
+/**
+ * 把业务参数数组转成 WASM 能接受的绑定值
+ * 布尔转 1/0，undefined 转 null，其余原样
+ */
+export function 转换绑定(参数 : any) : Array<any> | null {
+	if (参数 == null) {
+		return null
+	}
+	const 集合 : Array<any> = []
+	const 源 : Array<any> = 参数 as Array<any>
+	for (let 序号 = 0; 序号 < 源.length; 序号++) {
+		const 原值 : any = 源[序号]
+		if (原值 == null) {
+			集合.push(null)
+		} else if (typeof 原值 == 'boolean') {
+			集合.push(原值 == true ? 1 : 0)
+		} else {
+			集合.push(原值)
+		}
+	}
+	if (集合.length == 0) {
+		return null
+	}
+	return 集合
+}
+
+/** 把数字统一成 number，读出来的可能是 BigInt 或字符串 */
+export function 转数字(值 : any) : number {
+	if (值 == null) {
+		return 0
+	}
+	if (typeof 值 == 'number') {
+		return 值
+	}
+	const 结果 = Number.parseFloat(空文本 + 值)
+	if (结果 != 结果) {
+		return 0
+	}
+	return 结果
+}
+
+/* ---------- 打开 / 关闭 / 删除 ---------- */
+
+/** 估算 kvvfs 已占用的字节数，取不到时返回 0 */
+function 存储占用() : number {
+	try {
+		const 接口 : any = 引擎
+		if (接口 != null && 接口.capi != null && typeof 接口.capi.sqlite3_js_kvvfs_size == 'function') {
+			return 转数字(接口.capi.sqlite3_js_kvvfs_size(存储库名))
+		}
+	} catch (异常) {
+		// 不支持就算了，只是用来判断是不是首次创建
+	}
+	return 0
+}
+
+/**
+ * 打开数据库
+ * Web 端走 kvvfs（localStorage），一个页面只能有一个逻辑库，
+ * 重复打开同名库是幂等的；传了别的库名会明确报错
+ */
+export function 打开(参数 : 打开数据库参数) : 打开数据库结果 {
+	const 引擎实例 = 取引擎()
+	校验库名(参数.数据库名)
+
+	if (连接 != null) {
+		if (库名 != 参数.数据库名) {
+			throw new Error(错_Web限制 + 'Web 端 localStorage 只能存放一个数据库，当前已打开 ' + 库名)
+		}
+		return 组装打开结果(参数.数据库名)
+	}
+
+	是否新建标记 = 存储占用() == 0
+	try {
+		const 构造器 : any = 引擎实例.oo1.JsStorageDb
+		if (typeof 构造器 != 'function') {
+			throw new Error('当前环境没有 sqlite3.oo1.JsStorageDb，请确认加载的是浏览器版 SQLite WASM')
+		}
+		连接 = new 构造器(存储库名)
+	} catch (异常) {
+		连接 = null
+		throw new Error(错_打开失败 + 原文(异常))
+	}
+	库名 = 参数.数据库名
+	键值表已建 = false
+
+	if (参数.外键约束 == true) {
+		try {
+			连接!.exec('PRAGMA foreign_keys=ON')
+		} catch (异常) {
+			// kvvfs 下这条 PRAGMA 不支持也不影响使用
+		}
+	}
+	if (参数.版本 != null && 转数字(参数.版本) > 0) {
+		设版本({ 数据库名: 参数.数据库名, 版本: 转数字(参数.版本) })
+	}
+	return 组装打开结果(参数.数据库名)
+}
+
+function 组装打开结果(数据库名 : string) : 打开数据库结果 {
+	const 结果 : 打开数据库结果 = {
+		数据库名: 数据库名,
+		文件路径: 'kvvfs:' + 存储库名,
+		版本: 取版本(数据库名),
+		是否新建: 是否新建标记
+	}
+	return 结果
+}
+
+/** 关闭数据库 */
+export function 关闭(数据库名 : string) : void {
+	if (连接 == null) {
+		return
+	}
+	if (数据库名.length > 0 && 库名 != 数据库名) {
+		return
+	}
+	try {
+		if (事务标记 == true) {
+			连接!.exec('ROLLBACK')
+		}
+		连接!.close()
+	} catch (异常) {
+		throw new Error(错_关闭失败 + 原文(异常))
+	}
+	连接 = null
+	库名 = 空文本
+	事务标记 = false
+	键值表已建 = false
+}
+
+/** 关闭全部 */
+export function 关闭全部() : number {
+	if (连接 == null) {
+		return 0
+	}
+	关闭(库名)
+	return 1
+}
+
+/** 删除数据库：清空 kvvfs 里的 localStorage 库 */
+export function 删除(数据库名 : string) : void {
+	const 引擎实例 = 取引擎()
+	校验库名(数据库名)
+	try {
+		if (连接 != null && 库名 == 数据库名) {
+			连接!.close()
+			连接 = null
+			库名 = 空文本
+			事务标记 = false
+			键值表已建 = false
+		}
+		if (引擎实例.capi != null && typeof 引擎实例.capi.sqlite3_js_kvvfs_clear == 'function') {
+			引擎实例.capi.sqlite3_js_kvvfs_clear(存储库名)
+		} else {
+			const 构造器 : any = 引擎实例.oo1.JsStorageDb
+			const 临时 : any = new 构造器(存储库名)
+			临时.clearStorage()
+			临时.close()
+		}
+	} catch (异常) {
+		throw new Error(错_删除失败 + 原文(异常))
+	}
+}
+
+/** 是否已打开 */
+export function 是否已打开(数据库名 : string) : boolean {
+	if (连接 == null) {
+		return false
+	}
+	if (数据库名.length == 0) {
+		return true
+	}
+	return 库名 == 数据库名
+}
+
+/** 数据库文件是否存在：Web 端等价于 localStorage 里是否已有数据 */
+export function 文件是否存在(数据库名 : string) : boolean {
+	return 存储占用() > 0
+}
+
+/** 取得数据库路径：kvvfs 没有真实文件路径，这里给出可读的标识 */
+export function 取得路径(数据库名 : string) : string {
+	return 'kvvfs:' + 存储库名 + ' (localStorage)'
+}
+
+/** 已打开库名列表 */
+export function 已打开列表() : Array<string> {
+	const 列表 : Array<string> = []
+	if (连接 != null && 库名.length > 0) {
+		列表.push(库名)
+	}
+	return 列表
+}
+
+/* ---------- 写操作 ---------- */
+
+/** 执行一条写 SQL（INSERT / UPDATE / DELETE / DDL） */
+export function 执行(参数 : 执行SQL参数) : 执行结果 {
+	const 连接实例 = 取连接(参数.数据库名)
+	校验SQL(参数.SQL)
+	const 绑定 = 转换绑定(参数.参数 ?? null)
+
+	try {
+		if (绑定 == null) {
+			连接实例.exec({ sql: 参数.SQL })
+		} else {
+			连接实例.exec({ sql: 参数.SQL, bind: 绑定 })
+		}
+	} catch (异常) {
+		throw new Error(错_执行失败 + 原文(异常) + ' | SQL: ' + 参数.SQL)
+	}
+
+	const 受影响行数 = 转数字(连接实例.changes())
+	let 最后插入编号 = 0
+	try {
+		最后插入编号 = 转数字(连接实例.selectValue('SELECT last_insert_rowid()'))
+	} catch (异常) {
+		最后插入编号 = 0
+	}
+	const 结果 : 执行结果 = {
+		受影响行数: 受影响行数,
+		最后插入编号: 最后插入编号
+	}
+	return 结果
+}
+
+/** 依次执行多条 SQL；不在事务中时自动包一层事务 */
+export function 批量执行(参数 : 批量执行参数) : 批量执行结果 {
+	const 语句集合 = 参数.语句集合
+	if (语句集合 == null || 语句集合.length == 0) {
+		const 空结果 : 批量执行结果 = { 受影响行数: 0, 最后插入编号: 0, 语句数: 0 }
+		return 空结果
+	}
+	const 需要自己开事务 = 事务标记 == false
+	if (需要自己开事务 == true) {
+		开始事务(参数.数据库名)
+	}
+	let 受影响行数 = 0
+	try {
+		for (let 序号 = 0; 序号 < 语句集合.length; 序号++) {
+			const 语句 = 语句集合[序号]
+			const 单条结果 = 执行({
+				数据库名: 参数.数据库名,
+				SQL: 语句.SQL,
+				参数: 语句.参数 ?? null
+			})
+			受影响行数 = 受影响行数 + 单条结果.受影响行数
+		}
+		if (需要自己开事务 == true) {
+			提交事务核心(参数.数据库名)
+		}
+	} catch (异常) {
+		if (需要自己开事务 == true && 事务标记 == true) {
+			回滚事务核心(参数.数据库名)
+		}
+		throw 异常
+	}
+	let 最后插入编号 = 0
+	try {
+		最后插入编号 = 转数字(取连接(参数.数据库名).selectValue('SELECT last_insert_rowid()'))
+	} catch (异常) {
+		最后插入编号 = 0
+	}
+	const 结果 : 批量执行结果 = {
+		受影响行数: 受影响行数,
+		最后插入编号: 最后插入编号,
+		语句数: 语句集合.length
+	}
+	return 结果
+}
+
+/* ---------- 读操作 ---------- */
+
+/** 执行查询，返回列名与数据行 */
+export function 查询(参数 : 查询SQL参数) : 查询结果 {
+	const 连接实例 = 取连接(参数.数据库名)
+	校验SQL(参数.SQL)
+	const 绑定 = 转换绑定(参数.参数 ?? null)
+	const 列名 : Array<string> = []
+	const 原始行 : Array<any> = []
+
+	try {
+		if (绑定 == null) {
+			连接实例.exec({
+				sql: 参数.SQL,
+				rowMode: 'array',
+				resultRows: 原始行,
+				columnNames: 列名
+			})
+		} else {
+			连接实例.exec({
+				sql: 参数.SQL,
+				bind: 绑定,
+				rowMode: 'array',
+				resultRows: 原始行,
+				columnNames: 列名
+			})
+		}
+	} catch (异常) {
+		throw new Error(错_查询失败 + 原文(异常) + ' | SQL: ' + 参数.SQL)
+	}
+
+	const 行集合 : Array<SQLite数据行> = []
+	for (let 序号 = 0; 序号 < 原始行.length; 序号++) {
+		const 值集合 : Array<any> = 原始行[序号] as Array<any>
+		const 行 : SQLite数据行 = new Map()
+		for (let 列序号 = 0; 列序号 < 列名.length; 列序号++) {
+			let 单元格 : SQLite值 = null
+			if (列序号 < 值集合.length) {
+				单元格 = 值集合[列序号]
+			}
+			行.set(列名[列序号], 单元格)
+		}
+		行集合.push(行)
+	}
+	const 结果 : 查询结果 = {
+		列名: 列名,
+		行集合: 行集合,
+		行数: 行集合.length
+	}
+	return 结果
+}
+
+/** 执行查询，只取第一行第一列 */
+export function 查询单值(参数 : 查询SQL参数) : SQLite值 {
+	const 结果 = 查询(参数)
+	if (结果.行集合.length == 0) {
+		return null
+	}
+	const 第一行 = 结果.行集合[0]
+	if (结果.列名.length == 0) {
+		return null
+	}
+	return 第一行.get(结果.列名[0])
+}
+
+/** 执行 COUNT 类查询，返回数字 */
+export function 查询数量(参数 : 查询SQL参数) : number {
+	return 转数字(查询单值(参数))
+}
+
+/* ---------- 事务 ---------- */
+
+/** 开启事务，重复开启会抛错 */
+export function 开始事务(数据库名 : string) : void {
+	const 连接实例 = 取连接(数据库名)
+	if (事务标记 == true) {
+		throw new Error(错_事务重复 + '事务已经开启，请勿重复开启')
+	}
+	try {
+		连接实例.exec('BEGIN')
+	} catch (异常) {
+		throw new Error(错_执行失败 + 原文(异常))
+	}
+	事务标记 = true
+}
+
+/** 提交事务 */
+export function 提交事务核心(数据库名 : string) : void {
+	const 连接实例 = 取连接(数据库名)
+	if (事务标记 == false) {
+		throw new Error(错_事务未开 + '事务尚未开启，请先调用 开启事务()')
+	}
+	try {
+		连接实例.exec('COMMIT')
+	} catch (异常) {
+		throw new Error(错_执行失败 + 原文(异常))
+	}
+	事务标记 = false
+}
+
+/** 回滚事务 */
+export function 回滚事务核心(数据库名 : string) : void {
+	const 连接实例 = 取连接(数据库名)
+	if (事务标记 == false) {
+		throw new Error(错_事务未开 + '事务尚未开启，请先调用 开启事务()')
+	}
+	try {
+		连接实例.exec('ROLLBACK')
+	} catch (异常) {
+		throw new Error(错_执行失败 + 原文(异常))
+	}
+	事务标记 = false
+}
+
+/** 是否在事务中 */
+export function 是否在事务中核心(数据库名 : string) : boolean {
+	return 事务标记
+}
+
+/** 在一个事务里执行多条语句，结束后恢复原状态 */
+export function 执行事务(参数 : 批量执行参数) : 批量执行结果 {
+	return 批量执行(参数)
+}
+
+/* ---------- 表结构 ---------- */
+
+/** 建表：已存在则直接返回，不重复执行 DDL */
+export function 建表(参数 : 建表参数) : void {
+	if (参数.表名 == null || 参数.表名.length == 0) {
+		throw new Error(错_参数缺失 + '表名不能为空')
+	}
+	校验SQL(参数.建表SQL)
+	if (表是否存在核心({ 数据库名: 参数.数据库名, 表名: 参数.表名 }) == true) {
+		return
+	}
+	执行({
+		数据库名: 参数.数据库名,
+		SQL: 参数.建表SQL,
+		参数: null
+	})
+}
+
+/** 判断表是否存在 */
+export function 表是否存在核心(参数 : 表参数) : boolean {
+	const 数量 = 查询数量({
+		数据库名: 参数.数据库名,
+		SQL: "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?",
+		参数: [参数.表名]
+	})
+	return 数量 > 0
+}
+
+/** 删表 */
+export function 删表(参数 : 表参数) : void {
+	if (是否在事务中核心(参数.数据库名) == true) {
+		throw new Error(错_事务禁止 + '事务进行中不允许删表')
+	}
+	执行({
+		数据库名: 参数.数据库名,
+		SQL: 'DROP TABLE IF EXISTS "' + 参数.表名 + '"',
+		参数: null
+	})
+}
+
+/** 清空表数据，并重置自增序号 */
+export function 清空表核心(参数 : 表参数) : void {
+	执行({
+		数据库名: 参数.数据库名,
+		SQL: 'DELETE FROM "' + 参数.表名 + '"',
+		参数: null
+	})
+	try {
+		执行({
+			数据库名: 参数.数据库名,
+			SQL: 'DELETE FROM sqlite_sequence WHERE name=?',
+			参数: [参数.表名]
+		})
+	} catch (异常) {
+		// 表没有自增列时 sqlite_sequence 里没有记录，忽略即可
+	}
+}
+
+/** 判断列是否存在 */
+export function 列是否存在核心(参数 : 列参数) : boolean {
+	const 结果 = 查询({
+		数据库名: 参数.数据库名,
+		SQL: 'PRAGMA table_info("' + 参数.表名 + '")',
+		参数: null
+	})
+	for (let 序号 = 0; 序号 < 结果.行集合.length; 序号++) {
+		const 行 = 结果.行集合[序号]
+		const 列名 = 行.get('name')
+		if (列名 == 参数.列名) {
+			return true
+		}
+	}
+	return false
+}
+
+/* ---------- 索引 ---------- */
+
+/** 建索引 */
+export function 建索引(参数 : 建索引参数) : void {
+	const 列集合 = 参数.列集合
+	if (列集合 == null || 列集合.length == 0) {
+		throw new Error(错_参数缺失 + '索引列集合不能为空')
+	}
+	let 列串 = 空文本
+	for (let 序号 = 0; 序号 < 列集合.length; 序号++) {
+		if (序号 > 0) {
+			列串 = 列串 + ', '
+		}
+		列串 = 列串 + '"' + 列集合[序号] + '"'
+	}
+	const 唯一 = 参数.唯一 == true ? 'UNIQUE ' : 空文本
+	const SQL = 'CREATE ' + 唯一 + 'INDEX IF NOT EXISTS "' + 参数.索引名 + '" ON "' + 参数.表名 + '" (' + 列串 + ')'
+	执行({
+		数据库名: 参数.数据库名,
+		SQL: SQL,
+		参数: null
+	})
+}
+
+/** 删索引 */
+export function 删索引(参数 : 删索引参数) : void {
+	执行({
+		数据库名: 参数.数据库名,
+		SQL: 'DROP INDEX IF EXISTS "' + 参数.索引名 + '"',
+		参数: null
+	})
+}
+
+/* ---------- 键值表 ---------- */
+
+/** 确保键值表已建，只建一次 */
+function 确保键值表(数据库名 : string) : void {
+	if (键值表已建 == true) {
+		return
+	}
+	执行({
+		数据库名: 数据库名,
+		SQL: 'CREATE TABLE IF NOT EXISTS ' + 键值表名 + ' (k TEXT PRIMARY KEY NOT NULL, v TEXT)',
+		参数: null
+	})
+	键值表已建 = true
+}
+
+/** 写键值，键已存在则覆盖 */
+export function 存键值(参数 : 存键值参数) : void {
+	确保键值表(参数.数据库名)
+	if (参数.键 == null || 参数.键.length == 0) {
+		throw new Error(错_键值失败 + '键不能为空')
+	}
+	执行({
+		数据库名: 参数.数据库名,
+		SQL: 'INSERT OR REPLACE INTO ' + 键值表名 + ' (k, v) VALUES (?, ?)',
+		参数: [参数.键, 参数.值 ?? null]
+	})
+}
+
+/** 读键值，不存在返回 null */
+export function 读键值(参数 : 取键值参数) : string | null {
+	确保键值表(参数.数据库名)
+	const 值 = 查询单值({
+		数据库名: 参数.数据库名,
+		SQL: 'SELECT v FROM ' + 键值表名 + ' WHERE k=?',
+		参数: [参数.键]
+	})
+	if (值 == null) {
+		return null
+	}
+	return 空文本 + 值
+}
+
+/** 删键值 */
+export function 删键值(参数 : 取键值参数) : void {
+	确保键值表(参数.数据库名)
+	执行({
+		数据库名: 参数.数据库名,
+		SQL: 'DELETE FROM ' + 键值表名 + ' WHERE k=?',
+		参数: [参数.键]
+	})
+}
+
+/** 清空键值表 */
+export function 清空键值核心(数据库名 : string) : void {
+	确保键值表(数据库名)
+	执行({
+		数据库名: 数据库名,
+		SQL: 'DELETE FROM ' + 键值表名,
+		参数: null
+	})
+}
+
+/** 列出全部键 */
+export function 列出键核心(数据库名 : string) : Array<string> {
+	确保键值表(数据库名)
+	const 结果 = 查询({
+		数据库名: 数据库名,
+		SQL: 'SELECT k FROM ' + 键值表名 + ' ORDER BY k',
+		参数: null
+	})
+	const 列表 : Array<string> = []
+	for (let 序号 = 0; 序号 < 结果.行集合.length; 序号++) {
+		const 行 = 结果.行集合[序号]
+		const 键 = 行.get('k')
+		if (键 != null) {
+			列表.push(空文本 + 键)
+		}
+	}
+	return 列表
+}
+
+/* ---------- 版本 / 维护 ---------- */
+
+/** 取 PRAGMA user_version，业务层据此做表结构升级 */
+export function 取版本(数据库名 : string) : number {
+	if (连接 == null) {
+		return 0
+	}
+	try {
+		const 值 = 连接!.selectValue('PRAGMA user_version')
+		return 转数字(值)
+	} catch (异常) {
+		return 0
+	}
+}
+
+/** 设置 PRAGMA user_version */
+export function 设版本(参数 : 设版本参数) : void {
+	const 连接实例 = 取连接(参数.数据库名)
+	try {
+		连接实例.exec('PRAGMA user_version=' + 参数.版本)
+	} catch (异常) {
+		throw new Error(错_执行失败 + 原文(异常))
+	}
+}
+
+/** 整理数据库文件碎片，不能在事务中调用 */
+export function 重组(数据库名 : string) : void {
+	if (是否在事务中核心(数据库名) == true) {
+		throw new Error(错_事务禁止 + '事务进行中不允许 VACUUM')
+	}
+	执行({
+		数据库名: 数据库名,
+		SQL: 'VACUUM',
+		参数: null
+	})
+}
+
+/** Web 端没有 WAL，这里只做一次 checkpoint 尝试，失败也不影响使用 */
+export function 写回日志(数据库名 : string) : void {
+	if (连接 == null) {
+		return
+	}
+	try {
+		连接!.exec('PRAGMA wal_checkpoint(TRUNCATE)')
+	} catch (异常) {
+		// kvvfs 不使用 WAL，忽略
+	}
+}
+
+/** 取 SQLite 版本；引擎未加载时返回空串 */
+export function 取SQLite版本() : string {
+	if (引擎 == null) {
+		return 空文本
+	}
+	try {
+		const 接口 : any = 引擎
+		if (接口.capi != null && typeof 接口.capi.sqlite3_libversion == 'function') {
+			return 空文本 + 接口.capi.sqlite3_libversion()
+		}
+		if (接口.version != null && 接口.version.libversion != null) {
+			return 空文本 + 接口.version.libversion
+		}
+	} catch (异常) {
+		// 取不到就返回空串
+	}
+	return 空文本
+}
+
+/** 估算 localStorage 里已占用的字节数，业务层可用于容量告警 */
+export function 取得存储占用() : number {
+	return 存储占用()
+}
