@@ -54,6 +54,13 @@
 			}
 		},
 		{
+			"path": "pages/rong_he_di_tu/rong_he_di_tu",
+			"style": {
+				"navigationStyle": "custom",
+				"backgroundColor": "#070814"
+			}
+		},
+		{
 			"path": "pages/liaotian/liaotian",
 			"style": {
 				"navigationStyle": "custom"

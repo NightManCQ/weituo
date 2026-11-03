@@ -2,8 +2,8 @@
 	"name": "委托协作",
 	"appid": "__UNI__F1B5730",
 	"description": "委托与实时协作",
-	"versionName": "1.0.0",
-	"versionCode": "100",
+	"versionName": "1.0.1",
+	"versionCode": "101",
 	"uni-app-x": {
 		"vapor": true,
 		"styleIsolationVersion": "2",
@@ -47,7 +47,19 @@
 	},
 	"app-android": {
 		"distribute": {
-			"modules": {},
+			"modules": {
+				"uni-map": {
+					"tencent": {
+						"key": "Q3IBZ-EX567-QWCXD-P5CDW-EERBZ-BPBHC"
+					}
+				},
+				"uni-location": {
+					"system": {},
+					"tencent": {
+						"key": "Q3IBZ-EX567-QWCXD-P5CDW-EERBZ-BPBHC"
+					}
+				}
+			},
 			"icons": {
 				"hdpi": "",
 				"xhdpi": "",

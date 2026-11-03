@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512"><defs><radialGradient id="C_glow"><stop offset="0.000" stop-color="#DFF7E6" stop-opacity="0.65"/><stop offset="0.500" stop-color="#4ADE80" stop-opacity="0.4833333333333334"/><stop offset="1" stop-color="#15803D" stop-opacity="0"/></radialGradient>
+  <filter id="C_pg" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="16"/></filter>
+  <linearGradient id="C_plate" x1="0" y1="0" x2="1" y2="1"><stop offset="0.000" stop-color="#DFF7E6"/><stop offset="0.500" stop-color="#5BE08A"/><stop offset="1.000" stop-color="#15803D"/></linearGradient>
+  <clipPath id="C_clip"><rect x="98" y="98" width="316" height="316" rx="34" transform="rotate(45 256 256)"/></clipPath>
+  <linearGradient id="C_gloss" x1="0" y1="0" x2="0.6" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.55"/><stop offset="0.45" stop-color="#fff" stop-opacity="0.08"/><stop offset="1" stop-color="#000" stop-opacity="0.18"/></linearGradient>
+  <radialGradient id="C_vig"><stop offset="0.18" stop-color="#070B16" stop-opacity="0"/><stop offset="1" stop-color="#070B16" stop-opacity="0.34"/></radialGradient>
+  <clipPath id="C_iclip"><circle cx="256" cy="256" r="112"/></clipPath>
+  <filter id="C_ig" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="12"/></filter>
+  <linearGradient id="C_igrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0.000" stop-color="#DCFCE7"/><stop offset="0.333" stop-color="#6EE7A0"/><stop offset="0.667" stop-color="#22C55E"/><stop offset="1.000" stop-color="#15803D"/></linearGradient></defs><circle cx="256" cy="256" r="250" fill="url(#C_glow)"/>
+  <g filter="url(#C_pg)" opacity="0.8"><rect x="98" y="98" width="316" height="316" rx="34" transform="rotate(45 256 256)"/></g>
+  <g><rect x="98" y="98" width="316" height="316" rx="34" transform="rotate(45 256 256)" fill="url(#C_plate)"/></g>
+  <g clip-path="url(#C_clip)"><rect x="0" y="0" width="512" height="512" fill="url(#C_gloss)"/></g>
+  <g clip-path="url(#C_clip)"><circle cx="256" cy="256" r="174" fill="url(#C_vig)"/></g>
+  <rect x="98" y="98" width="316" height="316" rx="34" transform="rotate(45 256 256)" fill="none" stroke="#A7F3C0" stroke-width="7"/>
+  <rect x="98" y="98" width="316" height="316" rx="34" transform="rotate(45 256 256)" fill="none" stroke="#FFFFFF" stroke-opacity="0.55" stroke-width="2.5"/>
+  <g transform="rotate(45 256 256)"><rect x="105" y="105" width="302" height="302" rx="28" fill="none" stroke="#FFFFFF" stroke-opacity="0.4" stroke-width="2"/></g>
+  <g filter="url(#C_ig)" opacity="0.7"><path d="M 256.00,152.00 L 346.07,204.00 L 346.07,308.00 L 256.00,360.00 L 165.93,308.00 L 165.93,204.00 Z" fill="#A7F3C0"/></g>
+  <path d="M 256.00,152.00 L 346.07,204.00 L 346.07,308.00 L 256.00,360.00 L 165.93,308.00 L 165.93,204.00 Z" fill="url(#C_igrad)" stroke="#FFFFFF" stroke-opacity="0.7" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M 256.00,174.88 L 326.25,215.44 L 326.25,296.56 L 256.00,337.12 L 185.75,296.56 L 185.75,215.44 Z" fill="none" stroke="#FFFFFF" stroke-opacity="0.45" stroke-width="2.5" stroke-linejoin="round"/>
+  <g stroke="#FFFFFF" stroke-opacity="0.3" stroke-width="2"><line x1="256" y1="256" x2="256.00" y2="174.88"/><line x1="256" y1="256" x2="326.25" y2="215.44"/><line x1="256" y1="256" x2="326.25" y2="296.56"/><line x1="256" y1="256" x2="256.00" y2="337.12"/><line x1="256" y1="256" x2="185.75" y2="296.56"/><line x1="256" y1="256" x2="185.75" y2="215.44"/></g>
+  <circle cx="256" cy="256" r="20.8" fill="#FFFFFF" opacity="0.85"/>
+  <rect x="345" y="123" width="44" height="44" rx="12" fill="#22C55E" stroke="#FFFFFF" stroke-opacity="0.85" stroke-width="3"/>
+  <text x="367" y="154.36" font-family="Arial, Helvetica, sans-serif" font-weight="bold" font-size="26" text-anchor="middle" fill="#FFFFFF" letter-spacing="1">C</text></svg>

@@ -1,0 +1,665 @@
+<script setup lang="ts">
+import { onLoad } from '@dcloudio/uni-app'
+import { ref } from 'vue'
+
+/**
+ * 融合地图（游戏化委托地图）：由原型「委托广场-融合地图.html」迁移而来。
+ * 地图为 CSS 示意绘制（非真实地理数据），标记与任务为演示占位，
+ * 接入时替换为接口数据，正式版可换高德/腾讯地图 SDK + 游戏化图层。
+ */
+type 演示委托 = {
+  编号: string
+  标题: string
+  地址: string
+  距离: string
+  报酬: number
+  热度: number
+  等级: 'SSR' | 'SSS' | 'SS' | 'S' | 'A' | 'B' | 'C' | 'D' // 委托等级（八级体系：SSR 天命级最高 → D 日常级最低）
+  类型: '任务' | '宝箱' | '锁定'
+  位置x: number // 地图容器内水平百分比
+  位置y: number // 地图容器内垂直百分比
+}
+
+const 状态栏高 = ref(20)
+const 搜索词 = ref('')
+
+const 委托池: 演示委托[] = [
+  // 八种委托等级测试委托：SSR 天命级最高 → D 日常级最低，热度取各等级初始值，报酬取各等级区间示意值
+  { 编号: 'ceshi-ssr', 标题: '开发中文编程语言原生框架', 地址: '深圳市南山区科技园', 距离: '0.6km', 报酬: 1000000, 热度: 100, 等级: 'SSR', 类型: '任务', 位置x: 52, 位置y: 30 },
+  { 编号: 'ceshi-sss', 标题: '限时悬赏：搭建分布式任务调度系统', 地址: '福田区', 距离: '3.2km', 报酬: 600000, 热度: 100, 等级: 'SSS', 类型: '任务', 位置x: 18, 位置y: 38 },
+  { 编号: 'ceshi-ss', 标题: '企业级 ERP 系统整体交付', 地址: '宝安区', 距离: '7.4km', 报酬: 300000, 热度: 90, 等级: 'SS', 类型: '任务', 位置x: 82, 位置y: 42 },
+  { 编号: 'ceshi-s', 标题: '大型直播电商平台架构设计', 地址: '龙华区', 距离: '9.5km', 报酬: 80000, 热度: 85, 等级: 'S', 类型: '锁定', 位置x: 30, 位置y: 71 },
+  { 编号: 'ceshi-a', 标题: '开发 Rust 后端 API 服务', 地址: '深圳市南山区科技园', 距离: '1.2km', 报酬: 5000, 热度: 70, 等级: 'A', 类型: '任务', 位置x: 50, 位置y: 52 },
+  { 编号: 'ceshi-b', 标题: '委托广场 UI 设计', 地址: '南山区', 距离: '2.5km', 报酬: 1280, 热度: 60, 等级: 'B', 类型: '任务', 位置x: 24, 位置y: 20 },
+  { 编号: 'ceshi-c', 标题: '功能测试与验收', 地址: '福田区', 距离: '4.1km', 报酬: 300, 热度: 50, 等级: 'C', 类型: '任务', 位置x: 72, 位置y: 18 },
+  { 编号: 'ceshi-d', 标题: '文案校对', 地址: '罗湖区', 距离: '3.4km', 报酬: 150, 热度: 40, 等级: 'D', 类型: '任务', 位置x: 86, 位置y: 68 },
+]
+
+/** 八级委托等级 → 对应等级徽章 SVG（static/svg 下与等级同名的独立文件，image 只能引用 /static 内资源） */
+const 等级图标表: Record<string, string> = {
+  SSR: '/static/svg/SSR.svg',
+  SSS: '/static/svg/SSS.svg',
+  SS: '/static/svg/SS.svg',
+  S: '/static/svg/S.svg',
+  A: '/static/svg/A.svg',
+  B: '/static/svg/B.svg',
+  C: '/static/svg/C.svg',
+  D: '/static/svg/D.svg',
+}
+
+/** 取等级徽章 SVG 路径；未知等级兜底为 D 日常级 */
+function 等级图标(等级: string): string {
+  return 等级图标表[等级] ?? '/static/svg/D.svg'
+}
+
+/** 八级徽章尺寸（px）：D 最小，逐级放大到 SSR 最大。单一数据源，标记容器/价格气泡都按它换算 */
+const 等级尺寸表: Record<string, number> = {
+  D: 60,
+  C: 66,
+  B: 72,
+  A: 78,
+  S: 84,
+  SS: 90,
+  SSS: 96,
+  SSR: 104,
+}
+
+/** 取等级徽章尺寸 */
+function 徽章尺寸(等级: string): number {
+  return 等级尺寸表[等级] ?? 等级尺寸表['D']
+}
+
+/** 标记居中偏移（负半宽半高），让任意尺寸的徽章都以坐标点为圆心 */
+function 徽章偏移(等级: string): number {
+  return -(徽章尺寸(等级) / 2)
+}
+
+/** 极个别平台 image 加载 svg 失败时降级：记录失败等级，回退显示等级字母 */
+const 图标失败等级 = ref<string[]>([])
+function 图标加载失败(等级: string) {
+  if (图标失败等级.value.includes(等级)) return
+  图标失败等级.value = 图标失败等级.value.concat(等级)
+}
+function 图标是否失败(等级: string): boolean {
+  return 图标失败等级.value.includes(等级)
+}
+
+const 选中编号 = ref('ceshi-a')
+
+function 选中委托(): 演示委托 | null {
+  return 委托池.find((委托) => 委托.编号 == 选中编号.value) ?? null
+}
+
+function 选择委托(编号: string) {
+  const 委托 = 委托池.find((d) => d.编号 == 编号)
+  if (委托 == null) return
+  if (委托.类型 == '锁定') {
+    uni.showToast({ title: '等级不足，Lv.5 解锁（演示）', icon: 'none' })
+    return
+  }
+  选中编号.value = 编号
+}
+
+function 标记样式(委托: 演示委托): string {
+  if (委托.编号 == 选中编号.value) return 'biao_ji biao_ji_ji_huo'
+  if (委托.类型 == '锁定') return 'biao_ji biao_ji_suo'
+  return 'biao_ji'
+}
+
+/** 标记内容统一用等级徽章 SVG 展示（见模板 biao_ji_tu）；锁定点在其上叠加 🔒 角标 */
+
+/** 等级中文名：任务卡徽章展示用 */
+function 等级中文名(等级: string): string {
+  const 表: Record<string, string> = {
+    SSR: '天命级',
+    SSS: '传奇级',
+    SS: '传说级',
+    S: '史诗级',
+    A: '稀有级',
+    B: '精良级',
+    C: '普通级',
+    D: '日常级',
+  }
+  return 表[等级] ?? ''
+}
+
+/** 顶部「列表」切换：从哪来回哪去，直接打开则跳委托广场列表页 */
+function 返回列表() {
+  const 栈 = getCurrentPages()
+  if (栈.length > 1) uni.navigateBack()
+  else uni.redirectTo({ url: '/pages/zhuye/zhuye' })
+}
+
+function 领取任务() {
+  const 委托 = 选中委托()
+  if (委托 == null) return
+  uni.showToast({ title: `已领取「${委托.标题}」（演示）`, icon: 'none' })
+}
+
+function 搜索输入() {
+  // 演示占位：接入接口数据后在此过滤委托池
+}
+
+onLoad(() => {
+  const 信息 = uni.getSystemInfoSync()
+  状态栏高.value = 信息.statusBarHeight ?? 20
+})
+</script>
+
+<template>
+  <view class="rong_he_di_tu_ye" :style="{ paddingTop: 状态栏高 + 'px' }">
+    <!-- 顶部：标题 + 列表/地图切换 -->
+    <view class="ding_bu">
+      <view class="biao_ti_hang">
+        <text class="ye_biao_ti">委托广场</text>
+        <view class="fen_duan">
+          <text class="fen_duan_xiang" @click="返回列表">列表</text>
+          <text class="fen_duan_xiang fen_duan_ji_huo">地图</text>
+        </view>
+      </view>
+      <!-- 搜索栏 + 游戏化 HUD -->
+      <view class="sou_suo_hang">
+        <view class="sou_suo_kuang">
+          <text class="sou_suo_tu_biao">🔍</text>
+          <input v-model="搜索词" class="sou_suo_shu_ru" placeholder="搜索附近需求" placeholder-class="sou_suo_zhan_wei" @input="搜索输入" />
+        </view>
+        <view class="hud">
+          <view class="hud_chip hud_jin_bi"><text class="hud_zi hud_zi_jin hud_tu_biao">¥</text><text class="hud_zi hud_zi_jin">1280</text></view>
+          <view class="hud_chip hud_deng_ji"><text class="hud_zi hud_zi_deng_ji">Lv.3</text></view>
+          <view class="hud_chip hud_ti_li"><text class="hud_zi hud_zi_ti_li hud_tu_biao">⚡</text><text class="hud_zi hud_zi_ti_li">80</text></view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 地图区 -->
+    <view class="di_tu_qu">
+      <view class="di_tu_bg">
+        <!-- 街区区块 -->
+        <view class="qu_kuai q1"></view>
+        <view class="qu_kuai q2"></view>
+        <view class="qu_kuai q3"></view>
+        <view class="qu_kuai q4"></view>
+        <!-- 网格线 -->
+        <view class="wang_ge_heng"></view>
+        <view class="wang_ge_shu"></view>
+        <!-- 霓虹道路 -->
+        <view class="dao_lu d1"></view>
+        <view class="dao_lu d2"></view>
+        <view class="dao_lu d3"></view>
+        <!-- 数据光点 -->
+        <view class="guang_dian g1"></view>
+        <view class="guang_dian g2"></view>
+        <view class="guang_dian g3"></view>
+        <view class="guang_dian g4"></view>
+        <view class="guang_dian g5"></view>
+        <view class="guang_dian g6"></view>
+        <view class="guang_dian g7"></view>
+        <view class="guang_dian g8"></view>
+        <!-- 任务标记 -->
+        <view
+          v-for="委托 in 委托池"
+          :key="委托.编号"
+          :class="标记样式(委托)"
+          :style="{ left: 委托.位置x + '%', top: 委托.位置y + '%', width: 徽章尺寸(委托.等级) + 'px', height: 徽章尺寸(委托.等级) + 'px', marginLeft: 徽章偏移(委托.等级) + 'px', marginTop: 徽章偏移(委托.等级) + 'px' }"
+          @click="选择委托(委托.编号)"
+        >
+          <!-- 等级徽章 SVG（尺寸随等级递增：D 最小 → SSR 最大；加载失败时降级为该等级字母） -->
+          <image
+            v-if="!图标是否失败(委托.等级)"
+            class="biao_ji_tu"
+            :style="{ width: 徽章尺寸(委托.等级) + 'px', height: 徽章尺寸(委托.等级) + 'px' }"
+            :src="等级图标(委托.等级)"
+            mode="aspectFit"
+            @error="图标加载失败(委托.等级)"
+          />
+          <text v-else class="biao_ji_zi" :class="'biao_ji_zi_' + 委托.等级.toLowerCase()">{{ 委托.等级 }}</text>
+          <!-- 锁定点角标 -->
+          <text v-if="委托.类型 == '锁定'" class="biao_ji_suo_biao">🔒</text>
+          <view v-if="委托.编号 == 选中编号" class="jia_ge_pao"><text class="jia_ge_pao_zi">¥{{ 委托.报酬 }}</text></view>
+        </view>
+      </view>
+
+      <!-- 底部任务卡 -->
+      <view v-if="选中委托() != null" class="wei_tuo_ka">
+        <view class="ka_shang">
+          <!-- 任务卡等级徽章 SVG（与地图标记同一套八级图标） -->
+          <image
+            v-if="!图标是否失败(选中委托()!.等级)"
+            class="ka_deng_ji_tu"
+            :src="等级图标(选中委托()!.等级)"
+            mode="aspectFit"
+            @error="图标加载失败(选中委托()!.等级)"
+          />
+          <view class="ka_zuo">
+            <view class="ka_deng_ji" :class="'ka_deng_ji_' + 选中委托()!.等级.toLowerCase()">
+              <text class="ka_deng_ji_zi">{{ 选中委托()!.等级 }} {{ 等级中文名(选中委托()!.等级) }}</text>
+            </view>
+            <text class="ka_biao_ti">{{ 选中委托()!.标题 }}</text>
+            <view class="ka_di_zhi">
+              <text class="ka_di_zhi_tu_biao">📍</text>
+              <text class="ka_di_zhi_wen_ben">{{ 选中委托()!.地址 }} · 距离 {{ 选中委托()!.距离 }}</text>
+            </view>
+          </view>
+          <view class="ka_bao_chou">
+            <text class="ka_bao_chou_qian">报酬</text>
+            <text class="ka_bao_chou_zhi">¥{{ 选中委托()!.报酬 }}</text>
+          </view>
+        </view>
+        <view class="ka_xia">
+          <view class="re_du">
+            <view class="re_du_tiao"><view class="re_du_fill" :style="{ width: 选中委托()!.热度 + '%' }"></view></view>
+            <text class="re_du_wen_zi">任务热度 {{ 选中委托()!.热度 }}%</text>
+          </view>
+          <view class="ling_qu_an_niu" @click="领取任务"><text class="ling_qu_an_niu_zi">领取任务</text></view>
+        </view>
+      </view>
+    </view>
+  </view>
+</template>
+
+<style scoped>
+.rong_he_di_tu_ye {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  max-width: 430px;
+  margin-left: auto;
+  margin-right: auto;
+  background-color: #070814;
+}
+
+/* 顶部区域 */
+.ding_bu {
+  padding: 6px 14px 0;
+}
+.biao_ti_hang {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+.ye_biao_ti {
+  font-size: 20px;
+  font-weight: 800;
+  color: #ffffff;
+  text-shadow: 0 0 14px rgba(167, 139, 250, 0.75);
+}
+.fen_duan {
+  display: flex;
+  flex-direction: row;
+  padding: 2px;
+  border-radius: 16px;
+  border-width: 1px;
+  border-style: solid;
+  border-color: #7c6cff;
+  background-color: rgba(10, 14, 38, 0.85);
+}
+.fen_duan_xiang {
+  padding: 4px 12px;
+  font-size: 12px;
+  color: #aab1e8;
+}
+.fen_duan_ji_huo {
+  border-radius: 14px;
+  background-color: #a78bfa;
+  color: #141a3c;
+  font-weight: 700;
+}
+
+/* 搜索栏 + HUD */
+.sou_suo_hang {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin-top: 6px;
+}
+.sou_suo_kuang {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 18px;
+  border-width: 1px;
+  border-style: solid;
+  border-color: rgba(124, 108, 255, 0.45);
+  background-color: rgba(12, 16, 46, 0.8);
+}
+.sou_suo_tu_biao {
+  font-size: 12px;
+  color: #c4b5fd;
+}
+.sou_suo_shu_ru {
+  flex: 1;
+  margin-left: 6px;
+  font-size: 14px;
+  color: #ffffff;
+}
+.sou_suo_zhan_wei {
+  color: #aab1e8;
+}
+.hud {
+  display: flex;
+  flex-direction: row;
+  margin-left: 8px;
+}
+.hud_chip {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  margin-left: 4px;
+  padding: 0 7px;
+  border-radius: 12px;
+  border-width: 1px;
+  border-style: solid;
+}
+.hud_zi {
+  font-size: 11px;
+  font-weight: 800;
+}
+.hud_zi_jin {
+  color: #ffd25e;
+}
+.hud_zi_deng_ji {
+  color: #c4b5fd;
+}
+.hud_zi_ti_li {
+  color: #9fe3ee;
+}
+.hud_tu_biao {
+  margin-right: 2px;
+  font-size: 10px;
+}
+.hud_jin_bi {
+  border-color: rgba(255, 210, 94, 0.45);
+  background-color: rgba(12, 16, 46, 0.85);
+}
+.hud_deng_ji {
+  border-color: rgba(167, 139, 250, 0.6);
+  background-color: rgba(12, 16, 46, 0.85);
+}
+.hud_ti_li {
+  border-color: rgba(77, 208, 225, 0.5);
+  background-color: rgba(12, 16, 46, 0.85);
+}
+
+/* 地图区 */
+.di_tu_qu {
+  position: relative;
+  flex: 1;
+  margin-top: 8px;
+  overflow: hidden;
+}
+.di_tu_bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(170deg, #0c1030, #1c2150);
+}
+.qu_kuai {
+  position: absolute;
+  border-radius: 6px;
+  background-color: rgba(167, 139, 250, 0.07);
+}
+.q1 { left: 10%; top: 8%; width: 18%; height: 12%; }
+.q2 { left: 64%; top: 12%; width: 23%; height: 14%; }
+.q3 { left: 15%; top: 42%; width: 20%; height: 18%; }
+.q4 { left: 62%; top: 44%; width: 26%; height: 16%; }
+.wang_ge_heng {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: linear-gradient(rgba(124, 108, 255, 0.14) 1px, transparent 1px);
+  background-size: 100% 26px;
+}
+.wang_ge_shu {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: linear-gradient(90deg, rgba(124, 108, 255, 0.14) 1px, transparent 1px);
+  background-size: 26px 100%;
+}
+.dao_lu {
+  position: absolute;
+  height: 5px;
+  border-radius: 3px;
+  background-color: #8b5cf6;
+  opacity: 0.85;
+  box-shadow: 0 0 12px rgba(139, 92, 246, 0.8);
+}
+.d1 { left: -10%; top: 38%; width: 120%; transform: rotate(-6deg); }
+.d2 { left: -10%; top: 72%; width: 120%; height: 4px; transform: rotate(-3deg); opacity: 0.5; }
+.d3 {
+  left: 66%;
+  top: -10%;
+  width: 4px;
+  height: 120%;
+  background-color: #4dd0e1;
+  opacity: 0.55;
+  box-shadow: 0 0 12px rgba(77, 208, 225, 0.7);
+  transform: rotate(8deg);
+}
+.guang_dian {
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background-color: #c4b5fd;
+  box-shadow: 0 0 8px rgba(167, 139, 250, 0.8);
+}
+.g1 { left: 30%; top: 24%; }
+.g2 { left: 77%; top: 36%; }
+.g3 { left: 46%; top: 66%; }
+.g4 { left: 85%; top: 60%; }
+.g5 { left: 23%; top: 84%; }
+.g6 { left: 67%; top: 24%; }
+.g7 { left: 38%; top: 12%; }
+.g8 { left: 90%; top: 12%; }
+
+/* 任务标记：容器尺寸与居中偏移由内联样式按等级尺寸注入（见 徽章尺寸/徽章偏移），
+   此处仅保留 A 级尺寸作兜底；不画圆形底色，SVG 自带底板与光晕 */
+.biao_ji {
+  position: absolute;
+  width: 78px;
+  height: 78px;
+  margin-left: -39px;
+  margin-top: -39px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.biao_ji_tu {
+  width: 78px;
+  height: 78px;
+}
+/* 降级文字：个别平台 image 加载 svg 失败时回退显示等级字母 */
+.biao_ji_zi {
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.5px;
+}
+.biao_ji_suo {
+  opacity: 0.55;
+}
+.biao_ji_suo_biao {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  font-size: 16px;
+}
+.biao_ji_ji_huo {
+  transform: scale(1.12);
+  z-index: 2;
+}
+
+/* 八级委托等级降级文字配色与字号（D 朴素 → SSR 白金，字号同徽章一样逐级增大） */
+.biao_ji_zi_d { color: #9ca3af; font-size: 22px; }
+.biao_ji_zi_c { color: #4ade80; font-size: 24px; }
+.biao_ji_zi_b { color: #60a5fa; font-size: 24px; }
+.biao_ji_zi_a { color: #a78bfa; font-size: 26px; }
+.biao_ji_zi_s { color: #facc15; font-size: 26px; }
+.biao_ji_zi_ss { color: #e9c46a; font-size: 28px; }
+.biao_ji_zi_sss { color: #f0abfc; font-size: 30px; }
+.biao_ji_zi_ssr { color: #ffffff; font-size: 32px; }
+.jia_ge_pao {
+  position: absolute;
+  top: -24px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 2px 8px;
+  border-radius: 10px;
+  background-color: #e9e6ff;
+  white-space: nowrap;
+}
+.jia_ge_pao_zi {
+  font-size: 12px;
+  font-weight: 800;
+  color: #3c2f9e;
+}
+
+/* 底部任务卡 */
+.wei_tuo_ka {
+  position: absolute;
+  bottom: 14px;
+  left: 12px;
+  right: 12px;
+  padding: 14px;
+  border-radius: 18px;
+  border-width: 1px;
+  border-style: solid;
+  border-color: #7c6cff;
+  background: linear-gradient(165deg, #181e4c, #0d112e);
+  box-shadow: 0 0 22px rgba(124, 108, 255, 0.3), 0 6px 20px rgba(0, 0, 0, 0.45);
+}
+.ka_shang {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+/* 任务卡等级徽章 SVG（与地图标记同一套八级图标，加载失败时回退为下方文字徽章） */
+.ka_deng_ji_tu {
+  flex: none;
+  width: 46px;
+  height: 46px;
+  margin-right: 10px;
+}
+.ka_zuo {
+  flex: 1;
+  min-width: 0;
+  margin-right: 10px;
+}
+/* 任务卡等级徽章（等级字母 + 中文名，配色与发光同等级体系） */
+.ka_deng_ji {
+  align-self: flex-start;
+  margin-bottom: 6px;
+  padding: 2px 8px;
+  border-radius: 8px;
+}
+.ka_deng_ji_zi {
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.3;
+}
+.ka_deng_ji_d { background-color: rgba(156, 163, 175, 0.2); }
+.ka_deng_ji_d .ka_deng_ji_zi { color: #9ca3af; }
+.ka_deng_ji_c { background-color: rgba(74, 222, 128, 0.18); }
+.ka_deng_ji_c .ka_deng_ji_zi { color: #4ade80; }
+.ka_deng_ji_b { background-color: rgba(96, 165, 250, 0.2); box-shadow: 0 0 10px rgba(59, 130, 246, 0.5); }
+.ka_deng_ji_b .ka_deng_ji_zi { color: #60a5fa; }
+.ka_deng_ji_a { background-color: rgba(167, 139, 250, 0.22); box-shadow: 0 0 12px rgba(139, 92, 246, 0.6); }
+.ka_deng_ji_a .ka_deng_ji_zi { color: #a78bfa; }
+.ka_deng_ji_s { background-color: rgba(250, 204, 21, 0.2); box-shadow: 0 0 14px rgba(250, 204, 21, 0.7); }
+.ka_deng_ji_s .ka_deng_ji_zi { color: #facc15; }
+.ka_deng_ji_ss { background-color: rgba(233, 196, 106, 0.22); box-shadow: 0 0 14px rgba(233, 196, 106, 0.8); }
+.ka_deng_ji_ss .ka_deng_ji_zi { color: #e9c46a; }
+.ka_deng_ji_sss { background-color: rgba(192, 132, 252, 0.24); box-shadow: 0 0 14px rgba(244, 114, 182, 0.75); }
+.ka_deng_ji_sss .ka_deng_ji_zi { color: #f0abfc; }
+.ka_deng_ji_ssr { background-color: rgba(255, 255, 255, 0.18); box-shadow: 0 0 14px rgba(255, 255, 255, 0.8); }
+.ka_deng_ji_ssr .ka_deng_ji_zi { color: #ffffff; }
+
+.ka_biao_ti {
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.35;
+  color: #ffffff;
+}
+.ka_di_zhi {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin-top: 5px;
+}
+.ka_di_zhi_tu_biao {
+  font-size: 11px;
+}
+.ka_di_zhi_wen_ben {
+  margin-left: 3px;
+  font-size: 12px;
+  color: #aab1e8;
+}
+.ka_bao_chou {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+.ka_bao_chou_qian {
+  font-size: 11px;
+  color: #aab1e8;
+}
+.ka_bao_chou_zhi {
+  font-size: 20px;
+  font-weight: 900;
+  color: #ffd25e;
+}
+.ka_xia {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+}
+.re_du {
+  flex: 1;
+  margin-right: 12px;
+}
+.re_du_tiao {
+  height: 6px;
+  border-radius: 3px;
+  background-color: rgba(124, 108, 255, 0.2);
+  overflow: hidden;
+}
+.re_du_fill {
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #a78bfa, #4dd0e1);
+}
+.re_du_wen_zi {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #aab1e8;
+}
+.ling_qu_an_niu {
+  padding: 9px 18px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #c4b5fd, #8b5cf6);
+}
+.ling_qu_an_niu_zi {
+  font-size: 14px;
+  font-weight: 800;
+  color: #141a3c;
+}
+</style>

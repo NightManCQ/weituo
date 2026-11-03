@@ -97,8 +97,16 @@
 					:data-key="`${会话.会话类型}:${会话.会话编号}`"
 					@click="打开会话"
 				>
-					<view class="hui_hua_tou_xiang">
-						{{ 会话.会话类型 == '好友验证' ? '验' : 会话.会话类型 == '群邀请' ? '群' : 会话.会话类型 == '群聊' ? '群' : 会话.会话名称.slice(0, 1) }}
+					<!-- 外层只负责定位，不裁切；圆形裁切只在里面的头像上 -->
+					<view class="hui_hua_tou_xiang_kuang">
+						<view class="hui_hua_tou_xiang">
+							<text class="hui_hua_tou_xiang_zi">{{ 会话.会话类型 == '好友验证' ? '验' : 会话.会话类型 == '群邀请' ? '群' : 会话.会话类型 == '群聊' ? '群' : 会话.会话名称.slice(0, 1) }}</text>
+						</view>
+						<!-- 未读红点压在头像右上角，允许超出头像范围 -->
+						<text
+							v-if="(会话.新消息条数 ?? 0) > 0"
+							class="wei_du_xin_xi_shu"
+						>{{ 会话.新消息条数 > 99 ? '99+' : 会话.新消息条数 }}</text>
 					</view>
 					<view class="zhan_kai hui_hua_wen_ben">
 						<view class="liang_duan_dui_qi">
@@ -109,11 +117,6 @@
 							{{ 会话.最近消息 || (会话.会话类型 == '好友验证' ? '请求添加你为好友' : 会话.会话类型 == '群邀请' ? '邀请你加入群聊' : 会话.会话类型 == '好友' ? '开始聊天吧' : '暂无消息') }}
 						</text>
 					</view>
-					
-					<text
-						v-if="(会话.新消息条数 ?? 0) > 0"
-						class="wei_du_xin_xi_shu"
-					>{{ 会话.新消息条数 > 99 ? '99+' : 会话.新消息条数 }}</text>
 					<TongYiJueJue
 						v-if="会话.会话类型 == '好友验证' || 会话.会话类型 == '群邀请'"
 						:会话="会话"
@@ -137,19 +140,32 @@
 		overflow: hidden;
 	}
 
+	/* 头像外框：48px 留白盒，42px 头像居中，右上角 6px 余量正好放红点。
+	   外框不裁切（overflow: visible），红点又完全落在盒内，任何平台都不会被切 */
+	.hui_hua_tou_xiang_kuang {
+		position: relative;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 48px;
+		min-width: 48px;
+		height: 48px;
+		margin-right: 6px;
+		overflow: visible;
+	}
+
 	.hui_hua_tou_xiang {
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		width: 42px;
-		min-width: 42px;
 		height: 42px;
-		margin-right: 12px;
 		border-radius: 21px;
 		background-color: #e7f4ef;
 		color: #087e67;
 		font-size: 16px;
 		font-weight: 700;
+		overflow: hidden;
 	}
 
 	.hui_hua_wen_ben {
@@ -180,10 +196,11 @@
 		white-space: nowrap;
 	}
 
+	/* 未读红点：定位父级是 48px 头像外框，压在 42px 头像右上角并留出外扩余量 */
 	.wei_du_xin_xi_shu {
 		position: absolute;
-		top: 7px;
-		right: 7px;
+		top: 0;
+		right: 0;
 		min-width: 18px;
 		height: 18px;
 		padding: 0 5px;
@@ -191,7 +208,9 @@
 		background-color: #f02d2d;
 		color: #ffffff;
 		font-size: 11px;
+		font-weight: 400;
 		line-height: 18px;
 		text-align: center;
+		z-index: 2;
 	}
 </style>

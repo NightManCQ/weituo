@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512"><defs><radialGradient id="SS_glow"><stop offset="0.000" stop-color="#E2CCFF" stop-opacity="0.65"/><stop offset="0.500" stop-color="#B07CFF" stop-opacity="0.4833333333333334"/><stop offset="1" stop-color="#7A3FD0" stop-opacity="0"/></radialGradient>
+  <filter id="SS_pg" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="16"/></filter>
+  <linearGradient id="SS_plate" x1="0" y1="0" x2="1" y2="1"><stop offset="0.000" stop-color="#EAD8FF"/><stop offset="0.500" stop-color="#A46CFF"/><stop offset="1.000" stop-color="#5B2DA8"/></linearGradient>
+  <clipPath id="SS_clip"><rect x="98" y="98" width="316" height="316" rx="34" transform="rotate(45 256 256)"/></clipPath>
+  <linearGradient id="SS_gloss" x1="0" y1="0" x2="0.6" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.55"/><stop offset="0.45" stop-color="#fff" stop-opacity="0.08"/><stop offset="1" stop-color="#000" stop-opacity="0.18"/></linearGradient>
+  <radialGradient id="SS_vig"><stop offset="0.18" stop-color="#070B16" stop-opacity="0"/><stop offset="1" stop-color="#070B16" stop-opacity="0.34"/></radialGradient>
+  <clipPath id="SS_iclip"><circle cx="256" cy="256" r="118"/></clipPath>
+  <filter id="SS_ig" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="12"/></filter>
+  <linearGradient id="SS_igrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0.000" stop-color="#E9C9FF"/><stop offset="0.333" stop-color="#A855F7"/><stop offset="0.667" stop-color="#F0B323"/><stop offset="1.000" stop-color="#FFD75E"/></linearGradient></defs><circle cx="256" cy="256" r="250" fill="url(#SS_glow)"/>
+  <g filter="url(#SS_pg)" opacity="0.8"><rect x="98" y="98" width="316" height="316" rx="34" transform="rotate(45 256 256)"/></g>
+  <g><rect x="98" y="98" width="316" height="316" rx="34" transform="rotate(45 256 256)" fill="url(#SS_plate)"/></g>
+  <g clip-path="url(#SS_clip)"><rect x="0" y="0" width="512" height="512" fill="url(#SS_gloss)"/></g>
+  <g clip-path="url(#SS_clip)"><circle cx="256" cy="256" r="180" fill="url(#SS_vig)"/></g>
+  <rect x="98" y="98" width="316" height="316" rx="34" transform="rotate(45 256 256)" fill="none" stroke="#D6B6FF" stroke-width="7"/>
+  <rect x="98" y="98" width="316" height="316" rx="34" transform="rotate(45 256 256)" fill="none" stroke="#FFFFFF" stroke-opacity="0.55" stroke-width="2.5"/>
+  <g transform="rotate(45 256 256)"><rect x="105" y="105" width="302" height="302" rx="28" fill="none" stroke="#FFFFFF" stroke-opacity="0.4" stroke-width="2"/></g>
+  <g filter="url(#SS_ig)" opacity="0.7"><path d="M 256.00,146.00 283.16,218.62 360.62,222.01 299.94,270.28 320.66,344.99 256.00,302.20 191.34,344.99 212.06,270.28 151.38,222.01 228.84,218.62 Z" fill="#D6B6FF"/></g>
+  <path d="M 256.00,146.00 283.16,218.62 360.62,222.01 299.94,270.28 320.66,344.99 256.00,302.20 191.34,344.99 212.06,270.28 151.38,222.01 228.84,218.62 Z" fill="url(#SS_igrad)" stroke="#FFFFFF" stroke-opacity="0.7" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M 256.00,201.00 268.93,238.20 308.31,239.00 276.92,262.80 288.33,300.50 256.00,278.00 223.67,300.50 235.08,262.80 203.69,239.00 243.07,238.20 Z" fill="#FFFFFF" opacity="0.3"/>
+  <rect x="343" y="121" width="48" height="48" rx="12" fill="#A855F7" stroke="#FFFFFF" stroke-opacity="0.85" stroke-width="3"/>
+  <text x="367" y="153.28" font-family="Arial, Helvetica, sans-serif" font-weight="bold" font-size="23" text-anchor="middle" fill="#FFFFFF" letter-spacing="1">SS</text></svg>

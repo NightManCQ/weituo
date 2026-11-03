@@ -31,8 +31,7 @@
 		// #ifdef APP-ANDROID || WEB
 		void 启动本地数据库()
 		// #endif
-
-
+		
 		uni.getSystemInfo({
 			success(结果) {
 				使用全局变量.系统信息 = {
@@ -47,11 +46,12 @@
 					窗口顶高: 结果.statusBarHeight,
 					窗口底高: 结果.windowBottom,
 					系统语言: 结果.osLanguage,
-
 				}
 				console.log("系统信息", 使用全局变量.系统信息, 结果);
 			}
 		})
+		
+		
 	})
 
 	onAppShow(() => {
@@ -225,7 +225,7 @@
 	.fen_lei_biao_qian {
 		padding: 5px 9px;
 		border-radius: 14px;
-		background-color: #e7f4ef;
+		/* background-color: #e7f4ef; */
 		color: #087e67;
 		font-size: 12px;
 	}

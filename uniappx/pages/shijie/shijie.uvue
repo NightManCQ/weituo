@@ -12,6 +12,10 @@
       <text class="ka_pian_biao_ti">地图委托</text>
       <text class="fu_zhu_wen_ben">浏览正在招募的委托，发现可以参与的机会。</text>
     </view>
+    <view class="ka_pian ke_dian_ji" @click="uni.navigateTo({ url: '/pages/rong_he_di_tu/rong_he_di_tu' })">
+      <text class="ka_pian_biao_ti">融合地图</text>
+      <text class="fu_zhu_wen_ben">游戏化委托地图，像接冒险任务一样接单。</text>
+    </view>
     <view class="ka_pian ke_dian_ji" @click="uni.navigateTo({ url: '/pages/woderenwu/woderenwu' })">
       <text class="ka_pian_biao_ti">我的委托</text>
       <text class="fu_zhu_wen_ben">查看发布和接单的委托及处理进度。</text>

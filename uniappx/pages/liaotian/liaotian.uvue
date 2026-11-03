@@ -22,6 +22,11 @@
 	const 正在加载 = ref(false)
 	const 正在发送 = ref(false)
 	const 错误 = ref('')
+	// 输入框焦点受控：发送动作（点发送按钮 / 键盘发送键）会让原生输入框失焦，
+	// 这里主动补回焦点，保证发完能继续输入；其他失焦（点消息区、返回等）不干预
+	const 输入框聚焦 = ref(false)
+	let 发送后保持聚焦 = false
+	let 保持聚焦计时器 = 0
 	let 正在刷新 = false
 	let 取消订阅 : (() => void) | null = null
 
@@ -189,15 +194,16 @@
 	async function 发送() {
 		const 正文 = 消息正文.value.trim()
 		if (!正文 || 正在发送.value || 当前用户.value == null) return
+		// 好友会话先定好客户端消息编号：成功前不写入待重试态，失败时复用它保证重发幂等
+		const 待发送消息 : { 客户端消息编号 : string; 正文 : string } | null = 会话类型.value == '好友'
+			? (好友消息待确认.value ?? { 客户端消息编号: 创建编号(), 正文 })
+			: null
 		正在发送.value = true
 		错误.value = ''
+		// 点击发送按钮 / 键盘发送键都会让输入框失焦，先补回焦点保证可以接着输入
+		恢复输入状态()
 		try {
-			if (会话类型.value == '好友') {
-				const 待发送消息 = 好友消息待确认.value ?? {
-					客户端消息编号: 创建编号(),
-					正文,
-				}
-				好友消息待确认.value = 待发送消息
+			if (待发送消息 != null) {
 				const 消息 = await 发送请求<好友消息>(`/my/friends/${encodeURIComponent(业务编号.value)}/messages`, {
 					method: 'POST',
 					data: {
@@ -216,8 +222,11 @@
 			}
 			消息正文.value = ''
 			滚动到最新消息()
+			恢复输入状态()
 		} catch (原因) {
 			错误.value = 原因 instanceof Error ? 原因.message : '发送消息失败'
+			// 仅真正失败才进入「待重试」态：发送中不置位，否则输入框被 disabled 会收起键盘
+			if (待发送消息 != null) 好友消息待确认.value = 待发送消息
 		} finally {
 			正在发送.value = false
 		}
@@ -244,6 +253,41 @@
 		uni.navigateTo({
 			url: `/pages/lianxiren/hao_you?userId=${encodeURIComponent(业务编号.value)}`,
 		})
+	}
+
+	function 处理聚焦() {
+		输入框聚焦.value = true
+	}
+
+	function 处理失焦() {
+		输入框聚焦.value = false
+		// 因发送而失焦：立刻补回焦点（同步设置，避免键盘收起动画）
+		if (发送后保持聚焦) 输入框聚焦.value = true
+	}
+
+	/** 发送后恢复输入状态：已在输入中则不动（避免键盘闪一下），已失焦才重新聚焦 */
+	function 恢复输入状态() {
+		if (当前用户.value == null) return
+		发送后保持聚焦 = true
+		if (保持聚焦计时器 != 0) clearTimeout(保持聚焦计时器)
+		nextTick(() => {
+			if (!输入框聚焦.value) 输入框聚焦.value = true
+		})
+		// 失焦事件可能晚于本次调用到达，保留一小段窗口兜底
+		保持聚焦计时器 = setTimeout(() => {
+			保持聚焦计时器 = 0
+			发送后保持聚焦 = false
+				if (当前用户.value != null && !输入框聚焦.value) 输入框聚焦.value = true
+			}, 300)
+	}
+
+	/** 取消发送后的聚焦兜底：离开页面或不再需要连续输入时调用 */
+	function 停止保持聚焦() {
+		if (保持聚焦计时器 != 0) {
+			clearTimeout(保持聚焦计时器)
+			保持聚焦计时器 = 0
+		}
+		发送后保持聚焦 = false
 	}
 
 	function 处理键盘高度变化(事件 : { detail : { height : number } }) {
@@ -273,6 +317,8 @@
 	onHide(() => {
 		取消订阅?.()
 		取消订阅 = null
+		// 离开页面时收掉发送后的聚焦兜底，避免在别的页面被抢焦点
+		停止保持聚焦()
 	})
 </script>
 
@@ -343,7 +389,8 @@
 				<input v-model="消息正文" class="liao_tian_shu_ru_kuang" maxlength="4000"
 					:placeholder="好友消息待确认 != null ? '发送失败，可重试原消息' : '输入消息'" confirm-type="send"
 					:adjust-position="true" :confirm-hold="true" :hold-keyboard="true"
-					:disabled="好友消息待确认 != null" @confirm="发送"
+					:disabled="好友消息待确认 != null" :focus="输入框聚焦"
+					@focus="处理聚焦" @blur="处理失焦" @confirm="发送"
 					@keyboardheightchange="处理键盘高度变化" />
 				<button class="liao_tian_fa_song"
 					:class="{ 'liao_tian_fa_song_jin_yong': 正在发送 || 消息正文.trim().length == 0 }"
