@@ -1,4 +1,4 @@
-import type { 任务, 任务位置, 用户 } from './leixing'
+import type { 任务, 任务位置, 周边地址结果, 用户 } from './leixing'
 import {
 	读取API地址,
 	读取令牌,
@@ -151,6 +151,25 @@ export function 格式化时间(值 : string) : string {
 export function 创建编号() : string {
 	const 随机 = `${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`
 	return `${Date.now()}-${随机.slice(0, 20)}`
+}
+
+/**
+ * 逆地理编码：把地图中心点解析成可读地址。
+ * 解析由后端调用高德完成，App 与 Web 走同一条链路，端上不保存地图密钥。
+ */
+export async function 解析坐标地址(经度 : number, 纬度 : number) : Promise<任务位置> {
+	return await 发送请求<任务位置>(`/map/reverse-geocode?longitude=${经度}&latitude=${纬度}`)
+}
+
+/**
+ * 周边地址：列出地图中心点附近的地址（或与关键词匹配的地址），按距离由近到远。
+ * 不带关键词时后端优先按 50 米搜索，数量不足会自动放大半径，实际半径在结果的 半径 字段里；
+ * 带关键词时后端在中心点周边大范围搜索，本地按距离排序，结果里 关键词 字段会回显。
+ */
+export async function 查询周边地址(经度 : number, 纬度 : number, 关键词 : string = '') : Promise<周边地址结果> {
+	const 词 = 关键词.trim()
+	const 关键词参数 = 词.length > 0 ? `&keywords=${encodeURIComponent(词)}` : ''
+	return await 发送请求<周边地址结果>(`/map/nearby-addresses?longitude=${经度}&latitude=${纬度}&count=10${关键词参数}`)
 }
 
 export async function 发布委托(

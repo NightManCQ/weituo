@@ -44,6 +44,28 @@ export type 任务位置 = {
   地址: string | null
 }
 
+// 地图中心点附近的一个可选地址（高德周边搜索 POI）
+export type 周边地址 = {
+  编号: string
+  名称: string
+  地址: string | null
+  省: string | null
+  市: string | null
+  县: string | null
+  经度: number
+  纬度: number
+  距离: number
+}
+
+export type 周边地址结果 = {
+  经度: number
+  纬度: number
+  半径: number
+  // 实际生效的关键词，null 表示这次是周边地址而不是关键词搜索
+  关键词: string | null
+  地址列表: 周边地址[]
+}
+
 export type 任务 = {
   任务编号: string
   发布者编号: string

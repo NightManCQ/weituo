@@ -5,8 +5,6 @@ import type { 联系人列表数据, 用户 } from '../../common/leixing'
 import { 读取当前用户 } from '../../common/wangluo'
 import { 联系人列表, 刷新联系人列表 } from './联系人列表'
 
-type 好友 = Extract<联系人列表数据['数据'][number], { 项目类型: '好友' }>
-type 群组 = Extract<联系人列表数据['数据'][number], { 项目类型: '群聊' }>
 type 联系人项目 = 联系人列表数据['数据'][number]
 const 当前用户 = ref<用户 | null>(null)
 const 搜索 = ref('')
@@ -35,20 +33,29 @@ async function 刷新() {
   }
 }
 
-function 打开好友(好友项: 好友) {
-  uni.navigateTo({ url: `/pages/lianxiren/hao_you?userId=${encodeURIComponent(好友项.用户编号)}` })
-}
-
-function 打开群聊(编号: string) {
-  uni.navigateTo({ url: `/pages/liaotian/liaotian?hui_hua=${encodeURIComponent(编号)}&ming_cheng=群聊&lei_xing=群聊&bian_hao=${encodeURIComponent(编号)}` })
+// 进入聊天页：四个参数的结构与「消息」页打开会话时保持一致
+// hui_hua = 会话编号，ming_cheng = 会话名称，lei_xing = 会话类型，bian_hao = 业务编号
+// 名称必须传真实值并编码，传占位文字会让聊天页顶部一直显示「聊天」
+function 进入聊天(会话编号: string, 会话名称: string, 会话类型: string, 业务编号: string) {
+  if (!会话编号) {
+    uni.showToast({ title: '编号缺失，无法打开聊天', icon: 'none' })
+    return
+  }
+  uni.navigateTo({
+    url: `/pages/liaotian/liaotian?hui_hua=${encodeURIComponent(会话编号)}&ming_cheng=${encodeURIComponent(会话名称 || '聊天')}&lei_xing=${会话类型}&bian_hao=${encodeURIComponent(业务编号)}`,
+  })
 }
 
 function 打开联系人(项目: 联系人项目) {
+  // 好友：联系人列表只给到好友的用户编号，没有私聊会话编号。
+  // 后端 /my/friends/{编号}/messages 两种编号都接受，传用户编号会按好友关系找到（或创建）私聊会话，
+  // 所以这里 hui_hua 和 bian_hao 都填好友用户编号。
   if (项目.项目类型 == '好友') {
-    打开好友(项目)
+    进入聊天(项目.用户编号, 项目.昵称, '好友', 项目.用户编号)
     return
   }
-  打开群聊(项目.群组编号)
+  // 群聊：聊天的拉取和发送都走 /groups/{群组编号}/messages，编号就是群组编号
+  进入聊天(项目.群组编号, 项目.群组名称, '群聊', 项目.群组编号)
 }
 
 onShow(() => {
@@ -85,8 +92,7 @@ onShow(() => {
             {{ 项目.项目类型 == '好友' ? `@${项目.登录名}` : 项目.最近消息 || 项目.群组公告 || '还没有消息' }}
           </text>
         </view>
-        <text v-if="项目.项目类型 == '好友'" class="jian_tou">›</text>
-        <text v-else class="jian_tou">›</text>
+        <text class="jian_tou">›</text>
       </view>
       <view v-if="正在加载" class="kong_zhuang_tai">正在同步联系人…</view>
     </template>

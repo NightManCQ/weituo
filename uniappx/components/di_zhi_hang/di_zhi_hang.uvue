@@ -1,0 +1,82 @@
+<script setup lang="ts">
+// 地址列表的一行：只负责展示和上报点击，选中逻辑留在页面里
+const 属性 = defineProps({
+	编号: { type: String, default: '' },
+	名称: { type: String, default: '' },
+	说明: { type: String, default: '' },
+	距离文本: { type: String, default: '' },
+	选中: { type: Boolean, default: false },
+})
+
+const 发出 = defineEmits(['选中'])
+
+function 点选() {
+	发出('选中', 属性.编号)
+}
+</script>
+
+<template>
+	<view :class="属性.选中 ? 'di_zhi_hang di_zhi_hang_xuan' : 'di_zhi_hang'" @click="点选">
+		<view class="hang_zuo">
+			<text class="hang_ming">{{ 属性.名称 }}</text>
+			<text v-if="属性.说明" class="hang_shuo_ming">{{ 属性.说明 }}</text>
+		</view>
+		<text class="hang_juli">{{ 属性.距离文本 }}</text>
+	</view>
+</template>
+
+<style scoped>
+.di_zhi_hang {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	height: 52px;
+	padding: 0 10px;
+	border-radius: 10px;
+	background-color: #f7f8fa;
+	margin-bottom: 4px;
+	overflow: hidden;
+}
+
+/* 选中行用浅蓝底 + 左侧竖条，一眼能看出当前用的是哪一条 */
+.di_zhi_hang_xuan {
+	background-color: #eaf2ff;
+	border-left-width: 3px;
+	border-left-style: solid;
+	border-left-color: #2f6bff;
+	padding-left: 7px;
+}
+
+.hang_zuo {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	overflow: hidden;
+}
+
+.hang_ming {
+	font-size: 14px;
+	line-height: 19px;
+	color: #1a2332;
+	overflow: hidden;
+	white-space: nowrap;
+}
+
+.hang_shuo_ming {
+	margin-top: 2px;
+	font-size: 11px;
+	line-height: 15px;
+	color: #8b95a5;
+	overflow: hidden;
+	white-space: nowrap;
+}
+
+.hang_juli {
+	width: 46px;
+	margin-left: 8px;
+	font-size: 12px;
+	color: #6b7280;
+	text-align: right;
+}
+</style>

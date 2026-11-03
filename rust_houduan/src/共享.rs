@@ -23,6 +23,8 @@ pub(crate) struct 应用状态 {
     pub(crate) 消息代理: 消息发布器,
     pub(crate) 高德客户端: reqwest::Client,
     pub(crate) 高德安全密钥: Option<String>,
+    /// 高德 Web 服务 Key，仅后端使用，不下发到前端
+    pub(crate) 高德服务密钥: Option<String>,
 }
 
 #[derive(Debug, Serialize)]

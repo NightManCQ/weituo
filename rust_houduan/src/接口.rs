@@ -1,5 +1,7 @@
 #[path = "接口/任务.rs"]
 mod 任务;
+#[path = "接口/地图.rs"]
+mod 地图;
 #[path = "接口/好友.rs"]
 mod 好友;
 #[path = "接口/消息.rs"]
@@ -45,6 +47,8 @@ pub(crate) async fn 启动(状态: 应用状态, 配置: 运行配置) -> Result
         .route("/_AMapService/{*path}", get(代理高德地图服务))
         .route("/api/v1/auth/register", post(认证::注册用户))
         .route("/api/v1/auth/login", post(认证::登录用户))
+        .route("/api/v1/map/reverse-geocode", get(地图::逆向地理编码))
+        .route("/api/v1/map/nearby-addresses", get(地图::周边地址))
         .route("/api/v1/groups", post(群聊::创建群组))
         .route("/api/v1/my/groups", get(群聊::查询我的群组))
         .route("/api/v1/groups/{group_id}", get(群聊::查询群详情))

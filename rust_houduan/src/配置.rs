@@ -11,6 +11,8 @@ pub(crate) struct 运行配置 {
     pub(crate) 运行模式: String,
     pub(crate) 日志过滤器: String,
     pub(crate) 高德安全密钥: Option<String>,
+    /// 高德 Web 服务 Key，用于后端代理逆地理编码（与 JS API Key 不能混用）
+    pub(crate) 高德服务密钥: Option<String>,
 }
 
 impl 运行配置 {
@@ -41,6 +43,9 @@ impl 运行配置 {
             日志过滤器: env::var("RUST_LOG")
                 .unwrap_or_else(|_| "renwu_houduan=info,tower_http=info".to_owned()),
             高德安全密钥: env::var("AMAP_SECURITY_CODE")
+                .ok()
+                .filter(|值| !值.trim().is_empty()),
+            高德服务密钥: env::var("AMAP_WEB_KEY")
                 .ok()
                 .filter(|值| !值.trim().is_empty()),
         })

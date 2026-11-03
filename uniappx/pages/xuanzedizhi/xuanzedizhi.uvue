@@ -1,45 +1,577 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import type { 任务位置 } from '../../common/leixing'
+import { onLoad, onReady } from '@dcloudio/uni-app'
+import { computed, getCurrentInstance, ref } from 'vue'
+import type { 周边地址, 任务位置 } from '../../common/leixing'
+import { 查询周边地址, 解析坐标地址 } from '../../common/wangluo'
 import { 存储委托位置 } from '../../common/本地存储'
 
-const 正在定位 = ref(false)
-const 错误 = ref('')
-
-function 选择当前位置() {
-  正在定位.value = true
-  错误.value = ''
-  uni.chooseLocation({
-    success: (结果) => {
-      存储委托位置({
-        经度: 结果.longitude,
-        纬度: 结果.latitude,
-        国: null,
-        省: null,
-        市: null,
-        县: null,
-        镇: null,
-        村: null,
-        地址: `${结果.name || ''} ${结果.address || ''}`.trim() || null,
-      } as 任务位置)
-      uni.navigateBack()
-    },
-    fail: (原因) => {
-      if (!原因.errMsg.includes('cancel')) 错误.value = 原因.errMsg || '无法打开系统地图选点'
-    },
-    complete: () => { 正在定位.value = false },
-  })
+// 底部列表的一行：周边模式下地图中心点本身也算一行，键固定，其余行用高德 POI 编号
+type 地址候选 = {
+	键 : string
+	名称 : string
+	说明 : string
+	距离 : number
+	位置 : 任务位置
 }
+
+// 程序主动移动地图后触发的 regionchange 需要忽略一次，避免把搜索结果冲掉
+type 移动目标 = {
+	纬度 : number
+	经度 : number
+	时间 : number
+}
+
+const 中心点键 = 'center'
+// 列表固定显示 4 行，每行 52px + 4px 间距，高度固定在样式里（.di_zhi_lie_biao）
+
+const 地图编号 = 'xuan_dian_di_tu'
+// 默认落在深圳南山科技园：定位失败或被拒绝权限时，地图仍有可用视野
+const 中心纬度 = ref(22.5403)
+const 中心经度 = ref(113.9344)
+const 当前地址 = ref<任务位置 | null>(null)
+const 地址文本 = ref('正在获取当前位置…')
+const 提示 = ref('')
+const 正在解析 = ref(false)
+
+const 候选列表 = ref<地址候选[]>([])
+const 选中键 = ref(中心点键)
+// 后端实际使用的搜索半径（米），50 米内地点不足时会自动放大
+const 搜索半径 = ref(0)
+const 正在搜索附近 = ref(false)
+// 当前列表对应的关键词：空表示周边地址，非空表示搜索结果
+const 当前关键词 = ref('')
+// 搜索框里的输入内容
+const 搜索词 = ref('')
+
+let 地图上下文 : MapContext | null = null
+let 解析定时器 = -1
+let 搜索定时器 = -1
+// 同一个坐标点不重复请求，拖动回来时才重新解析
+let 上次解析坐标 = ''
+// 同一个关键词不重复打接口
+let 上次请求关键词 = ''
+let 程序移动目标 : 移动目标 | null = null
+
+/** 只认国内坐标：代理或 VPN 会把浏览器定位解析到境外，境外没有可用的地址数据 */
+function 在国境内(纬度 : number, 经度 : number) : boolean {
+	return 纬度 >= 18 && 纬度 <= 54 && 经度 >= 73 && 经度 <= 135
+}
+
+function 坐标键(纬度 : number, 经度 : number) : string {
+	return `${纬度.toFixed(5)},${经度.toFixed(5)}`
+}
+
+function 准备地图上下文() {
+	// #ifdef WEB
+	地图上下文 = uni.createMapContext(地图编号)
+	// #endif
+	// #ifndef WEB
+	// App 端必须把组件实例一起传入，否则拿不到原生地图对象
+	地图上下文 = uni.createMapContext(地图编号, getCurrentInstance()!.proxy!)
+	// #endif
+}
+
+/** 距离转成列表右侧的短文本，千米以上保留一位小数 */
+function 距离文本(距离 : number) : string {
+	if (距离 < 1000) return `${Math.round(距离)}m`
+	return `${(距离 / 1000).toFixed(1)}km`
+}
+
+/** 程序性移动地图，并记下目标点，用于忽略随之而来的那次 regionchange */
+function 移动地图中心(纬度 : number, 经度 : number) {
+	程序移动目标 = { 纬度, 经度, 时间: Date.now() }
+	中心纬度.value = 纬度
+	中心经度.value = 经度
+}
+
+/** 选中一行：回填整条地址，同时把地图中心移到该点，让指针和回填位置一致 */
+function 选择候选(项 : 地址候选) {
+	选中键.value = 项.键
+	当前地址.value = 项.位置
+	地址文本.value = 项.位置.地址 ?? 项.名称
+	移动地图中心(项.位置.纬度, 项.位置.经度)
+}
+
+/**
+ * 行组件只上报编号，这里按编号找回整条数据。
+ * 不能把 项 直接传给 v-for 里的事件：编译器会把事件闭包缓存到第一行，点哪行都变成第一行。
+ */
+function 选中地址编号(键 : string) {
+	for (const 项 of 候选列表.value) {
+		if (项.键 == 键) {
+			选择候选(项)
+			return
+		}
+	}
+}
+
+/** 周边模式下把中心点自己作为列表第一行，保证用户不选也能直接确定 */
+function 中心点候选(中心点 : 任务位置) : 地址候选 {
+	return {
+		键: 中心点键,
+		名称: '地图中心点',
+		说明: 中心点.地址 ?? '',
+		距离: 0,
+		位置: 中心点,
+	}
+}
+
+/** 把高德 POI 转成回填用的位置；省市县缺失时用地图中心点的信息补齐 */
+function 由地点构造位置(地点 : 周边地址, 中心点 : 任务位置 | null) : 任务位置 {
+	// 有门牌号时把名称和门牌拼在一起，回填到发布页更完整
+	const 完整地址 = 地点.地址 != null && 地点.地址 != '' ? `${地点.名称}（${地点.地址}）` : 地点.名称
+	return {
+		经度: 地点.经度,
+		纬度: 地点.纬度,
+		国: 中心点 != null ? 中心点.国 : null,
+		省: 地点.省 != null ? 地点.省 : (中心点 != null ? 中心点.省 : null),
+		市: 地点.市 != null ? 地点.市 : (中心点 != null ? 中心点.市 : null),
+		县: 地点.县 != null ? 地点.县 : (中心点 != null ? 中心点.县 : null),
+		镇: 中心点 != null ? 中心点.镇 : null,
+		村: 中心点 != null ? 中心点.村 : null,
+		地址: 完整地址,
+	}
+}
+
+/**
+ * 拉取列表：关键词为空时列中心点附近地点（第一行是中心点本身），
+ * 非空时按关键词搜索，结果默认选中第一条并同步移动地图。
+ */
+async function 载入地址列表(纬度 : number, 经度 : number, 中心点 : 任务位置 | null, 关键词 : string) {
+	正在搜索附近.value = true
+	当前关键词.value = 关键词
+	上次请求关键词 = 关键词
+	候选列表.value = []
+	try {
+		const 结果 = await 查询周边地址(经度, 纬度, 关键词)
+		const 列表 : 地址候选[] = []
+		if (关键词 == '' && 中心点 != null) 列表.push(中心点候选(中心点))
+		for (const 地点 of 结果.地址列表) {
+			列表.push({
+				键: 地点.编号,
+				名称: 地点.名称,
+				说明: 地点.地址 ?? '',
+				距离: 地点.距离,
+				位置: 由地点构造位置(地点, 中心点),
+			})
+		}
+		候选列表.value = 列表
+		搜索半径.value = 结果.半径
+		if (关键词 == '') {
+			// 重新搜索后默认选中中心点，避免残留上一轮的选中项
+			选中键.value = 中心点键
+		} else if (列表.length > 0) {
+			选择候选(列表[0])
+		} else {
+			选中键.value = ''
+		}
+	} catch (原因) {
+		const 说明 = 原因 instanceof Error ? 原因.message : '地址搜索失败'
+		if (关键词 == '') {
+			候选列表.value = 中心点 != null ? [中心点候选(中心点)] : []
+			搜索半径.value = 0
+			选中键.value = 中心点键
+		} else {
+			// 搜索失败不动 当前地址，用户仍可用地图中心点确定
+			候选列表.value = []
+			选中键.value = ''
+			提示.value = 说明
+		}
+	} finally {
+		正在搜索附近.value = false
+	}
+}
+
+async function 解析中心地址(纬度 : number, 经度 : number) {
+	const 键 = 坐标键(纬度, 经度)
+	if (键 == 上次解析坐标) return
+	上次解析坐标 = 键
+	正在解析.value = true
+	提示.value = ''
+	// 旧列表对应的是拖动前的位置，先清空避免误选
+	候选列表.value = []
+	当前关键词.value = ''
+	上次请求关键词 = ''
+	try {
+		const 结果 = await 解析坐标地址(经度, 纬度)
+		当前地址.value = 结果
+		地址文本.value = 结果.地址
+		选中键.value = 中心点键
+		// 中心点地址拿到后再补附近地点，两者互不阻塞
+		await 载入地址列表(纬度, 经度, 结果, '')
+	} catch (原因) {
+		当前地址.value = null
+		地址文本.value = '这个位置暂时解析不出地址，请拖动地图重试'
+		提示.value = 原因 instanceof Error ? 原因.message : '地址解析失败'
+		候选列表.value = []
+		// 允许用户拖回同一位置重新尝试
+		上次解析坐标 = ''
+	} finally {
+		正在解析.value = false
+	}
+}
+
+/** 清掉关键词上下文，回到"地图中心点附近" */
+function 退出搜索状态() {
+	if (搜索定时器 >= 0) {
+		clearTimeout(搜索定时器)
+		搜索定时器 = -1
+	}
+	搜索词.value = ''
+}
+
+/** 执行搜索：始终以地图中心点为参照，保证距离与排序可解释 */
+async function 执行搜索(词 : string) {
+	const 关键词 = 词.trim()
+	if (关键词 == 上次请求关键词 && 候选列表.value.length > 0) return
+	await 载入地址列表(中心纬度.value, 中心经度.value, 当前地址.value, 关键词)
+}
+
+/** 输入去抖：连续打字只发最后一次请求 */
+function 触发搜索() {
+	if (搜索定时器 >= 0) clearTimeout(搜索定时器)
+	搜索定时器 = setTimeout(() => {
+		搜索定时器 = -1
+		void 执行搜索(搜索词.value)
+	}, 500)
+}
+
+/** 回车或点搜索按钮：立刻请求，不等去抖 */
+function 立即搜索() {
+	if (搜索定时器 >= 0) {
+		clearTimeout(搜索定时器)
+		搜索定时器 = -1
+	}
+	void 执行搜索(搜索词.value)
+}
+
+/** 清空输入并恢复周边地址列表 */
+function 清空搜索() {
+	if (搜索定时器 >= 0) {
+		clearTimeout(搜索定时器)
+		搜索定时器 = -1
+	}
+	搜索词.value = ''
+	void 执行搜索('')
+}
+
+function 读取中心地址() {
+	if (地图上下文 == null) {
+		void 解析中心地址(中心纬度.value, 中心经度.value)
+		return
+	}
+	地图上下文!.getCenterLocation({
+		success: (结果) => {
+			const 目标 = 程序移动目标
+			程序移动目标 = null
+			// 点选列表项时地图是我们自己移过去的，这次回调不必重新解析
+			if (目标 != null
+				&& Date.now() - 目标.时间 < 2000
+				&& Math.abs(结果.latitude - 目标.纬度) < 0.001
+				&& Math.abs(结果.longitude - 目标.经度) < 0.001) {
+				return
+			}
+			// 用户真的拖动了地图：关键词搜索结果失效，回到周边地址
+			退出搜索状态()
+			void 解析中心地址(结果.latitude, 结果.longitude)
+		},
+		fail: () => {
+			提示.value = '无法读取地图中心点，请重试'
+		},
+	})
+}
+
+/** 地图停下后再解析：拖动过程中会连续触发，去抖可以避免大量请求 */
+function 地图区域变化() {
+	if (解析定时器 >= 0) clearTimeout(解析定时器)
+	解析定时器 = setTimeout(() => {
+		解析定时器 = -1
+		读取中心地址()
+	}, 400)
+}
+
+function 定位到当前位置() {
+	uni.getLocation({
+		type: 'gcj02',
+		success: (结果) => {
+			if (!在国境内(结果.latitude, 结果.longitude)) {
+				地址文本.value = '当前定位在境外，请拖动地图选择地址'
+				void 解析中心地址(中心纬度.value, 中心经度.value)
+				return
+			}
+			中心纬度.value = 结果.latitude
+			中心经度.value = 结果.longitude
+			// 地图移动会触发 regionchange，这里主动解析一次保证首屏立刻有地址
+			void 解析中心地址(结果.latitude, 结果.longitude)
+		},
+		fail: () => {
+			地址文本.value = '未获取到定位，请拖动地图选择地址'
+			提示.value = '可在系统设置中允许应用访问位置'
+			void 解析中心地址(中心纬度.value, 中心经度.value)
+		},
+	})
+}
+
+/** 列表标题：说清当前是搜索结果还是周边地址，以及搜索范围与条数 */
+const 列表说明 = computed(() : string => {
+	if (正在解析.value || 正在搜索附近.value) {
+		return 当前关键词.value != '' ? `正在搜索「${当前关键词.value}」…` : '正在搜索附近地址…'
+	}
+	if (当前关键词.value != '') {
+		const 条数 = 候选列表.value.length
+		if (条数 == 0) return `没有找到与「${当前关键词.value}」相关的地址`
+		return `「${当前关键词.value}」搜索结果 ${条数} 个 · 由近到远`
+	}
+	if (候选列表.value.length <= 1) return '附近没有搜索到地点，可直接使用地图中心点'
+	return `附近 ${搜索半径.value} 米内 ${候选列表.value.length - 1} 个地点 · 由近到远`
+})
+
+/** 列表加载中：地址解析与附近搜索都会让列表变空，此时显示占位提示 */
+const 列表是否加载中 = computed(() : boolean => 正在解析.value || 正在搜索附近.value)
+
+/** 空列表时说什么：搜索无结果和解析失败是两件事 */
+const 空态文本 = computed(() : string => {
+	if (当前关键词.value != '') return `没有找到与「${当前关键词.value}」相关的地址，换个关键词试试`
+	if (提示.value != '') return 提示.value
+	return '附近没有搜索到地点'
+})
+
+function 确定() {
+	const 位置 = 当前地址.value
+	if (位置 == null) {
+		uni.showToast({ title: '请等待地址解析完成', icon: 'none' })
+		return
+	}
+	存储委托位置(位置)
+	uni.navigateBack()
+}
+
+onLoad(() => {
+	定位到当前位置()
+})
+
+onReady(() => {
+	准备地图上下文()
+})
 </script>
 
 <template>
-  <view class="ye_mian">
-    <view class="ye_mian_biao_ti"><text class="fu_biao_ti">委托位置</text><text class="biao_ti">选择委托地址</text></view>
-    <view class="ka_pian">
-      <text class="zheng_wen">使用系统地图搜索地点并选择位置。选择后会将地点名称和经纬度带回委托表单。</text>
-      <text v-if="错误" class="ti_shi_xin_xi cuo_wu">{{ 错误 }}</text>
-      <button class="zhu_yao_an_niu" :disabled="正在定位" @click="选择当前位置">{{ 正在定位 ? '正在打开地图…' : '打开地图选点' }}</button>
-      <button class="ci_yao_an_niu" @click="uni.navigateBack()">取消</button>
-    </view>
-  </view>
+	<view class="xuan_di_ye">
+		<!-- 地图独占上半屏，卡片在文档流里占位，避免遮住地图版权信息 -->
+		<view class="di_tu_qu">
+			<map
+				:id="地图编号"
+				class="xuan_di_di_tu"
+				:latitude="中心纬度"
+				:longitude="中心经度"
+				:scale="16"
+				:show-location="true"
+				@regionchange="地图区域变化"
+			></map>
+
+			<!-- 指针固定在可视地图区域中央，指尖正对地图中心点 -->
+			<image class="ding_wei_zhen" src="/static/map/pin-center.png" mode="aspectFit"></image>
+
+			<!-- 顶部地址搜索：输入即搜（去抖 500ms），回车/按钮立即搜 -->
+			<view class="sou_suo_kuang">
+				<input
+					v-model="搜索词"
+					class="sou_suo_shu_ru"
+					placeholder="搜索地址，如 腾讯大厦"
+					placeholder-class="sou_suo_zhan_wei"
+					confirm-type="search"
+					@input="触发搜索"
+					@confirm="立即搜索"
+				/>
+				<text v-if="搜索词 != ''" class="sou_suo_qing_kong" @click="清空搜索">清空</text>
+				<text class="sou_suo_an_niu" @click="立即搜索">搜索</text>
+			</view>
+		</view>
+
+		<view class="di_bu_ka">
+			<text class="di_zhi_wen_ben">{{ 地址文本 }}</text>
+			<text v-if="当前地址 != null" class="zuo_biao">经度 {{ 当前地址!.经度.toFixed(5) }} · 纬度 {{ 当前地址!.纬度.toFixed(5) }}</text>
+
+			<text class="lie_biao_ti_shi">{{ 列表说明 }}</text>
+			<!-- 高度固定 4 行（见 .di_zhi_lie_biao），请求中只切换内容，卡片不会塌陷 -->
+			<scroll-view class="di_zhi_lie_biao" :scroll-y="true">
+				<view v-if="列表是否加载中" class="lie_biao_zhan_wei">
+					<text class="zhan_wei_wen_ben">加载中…</text>
+				</view>
+				<view v-else class="lie_biao_nei_rong">
+					<di_zhi_hang
+						v-for="项 in 候选列表"
+						:key="项.键"
+						:编号="项.键"
+						:名称="项.名称"
+						:说明="项.说明"
+						:距离文本="项.键 === 中心点键 ? '中心' : 距离文本(项.距离)"
+						:选中="项.键 === 选中键"
+						@选中="选中地址编号"
+					/>
+					<view v-if="候选列表.length == 0" class="lie_biao_zhan_wei">
+						<text class="zhan_wei_wen_ben">{{ 空态文本 }}</text>
+					</view>
+				</view>
+			</scroll-view>
+
+			<text v-if="提示" class="ti_shi_xin_xi cuo_wu">{{ 提示 }}</text>
+			<view class="an_niu_hang">
+				<button class="ci_yao_an_niu" @click="uni.navigateBack()">取消</button>
+				<button class="zhu_yao_an_niu" :disabled="正在解析 || 当前地址 == null" @click="确定">{{ 正在解析 ? '正在解析地址…' : '确定' }}</button>
+			</view>
+		</view>
+	</view>
 </template>
+
+<style scoped>
+.xuan_di_ye {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	background-color: #f5f7fa;
+}
+
+.di_tu_qu {
+	position: relative;
+	flex: 1;
+	width: 100%;
+}
+
+.xuan_di_di_tu {
+	width: 100%;
+	height: 100%;
+}
+
+/* 指针尺寸与 static/map/pin-center.png 一致，让图钉尖端落在屏幕中心 */
+.ding_wei_zhen {
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	z-index: 2000;
+	width: 34px;
+	height: 42px;
+	margin-left: -17px;
+	margin-top: -42px;
+}
+
+/* 顶部搜索框：浮在地图上方，z-index 要压过地图内部图层才能点到 */
+.sou_suo_kuang {
+	position: absolute;
+	top: 10px;
+	left: 12px;
+	right: 12px;
+	z-index: 3000;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	height: 44px;
+	padding: 0 6px 0 14px;
+	border-radius: 22px;
+	background-color: #ffffff;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.14);
+}
+
+.sou_suo_shu_ru {
+	flex: 1;
+	height: 44px;
+	font-size: 14px;
+	color: #1a2332;
+}
+
+.sou_suo_zhan_wei {
+	font-size: 14px;
+	color: #9aa3af;
+}
+
+.sou_suo_qing_kong {
+	margin-left: 4px;
+	padding: 4px 6px;
+	font-size: 12px;
+	color: #9aa3af;
+}
+
+.sou_suo_an_niu {
+	margin-left: 2px;
+	padding: 0 14px;
+	height: 32px;
+	line-height: 32px;
+	border-radius: 16px;
+	font-size: 13px;
+	color: #ffffff;
+	background-color: #2f6bff;
+}
+
+.di_bu_ka {
+	width: 100%;
+	display: flex;
+	flex-direction: column;
+	padding: 14px 16px 18px;
+	border-top-left-radius: 16px;
+	border-top-right-radius: 16px;
+	background-color: #ffffff;
+	height:410px;
+}
+
+.di_zhi_wen_ben {
+	font-size: 15px;
+	font-weight: 600;
+	line-height: 21px;
+	color: #1a2332;
+}
+
+.zuo_biao {
+	margin-top: 4px;
+	font-size: 12px;
+	color: #6b7280;
+}
+
+.lie_biao_ti_shi {
+	margin-top: 10px;
+	font-size: 12px;
+	color: #9aa3af;
+}
+
+/* 高度固定 4 行（4 × 56px）：加载中与空态都占满，卡片和按钮不会跳动 */
+.di_zhi_lie_biao {
+	margin-top: 6px;
+	width: 100%;
+	height: 224px;
+}
+
+.lie_biao_nei_rong {
+	display: flex;
+	flex-direction: column;
+}
+
+.lie_biao_zhan_wei {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	height: 224px;
+}
+
+.zhan_wei_wen_ben {
+	font-size: 13px;
+	color: #9aa3af;
+	text-align: center;
+}
+
+.an_niu_hang {
+	display: flex;
+	flex-direction: row;
+	margin-top: 12px;
+}
+
+.an_niu_hang .ci_yao_an_niu,
+.an_niu_hang .zhu_yao_an_niu {
+	flex: 1;
+	margin: 0;
+}
+
+.an_niu_hang .ci_yao_an_niu {
+	margin-right: 10px;
+}
+</style>
