@@ -134,7 +134,7 @@ Get-Process -Id $owner
 |---|---|---|
 | POST | `/api/v1/auth/register` | 否 |
 | POST | `/api/v1/auth/login` | 否 |
-| GET | `/api/v1/tasks?status=待接单&limit=50` | 否 |
+| GET | `/api/v1/tasks?limit=50` | 否；委托广场列表，固定返回「投标中」的委托，不接受 status 参数 |
 | POST | `/api/v1/tasks` | 是 |
 | GET | `/api/v1/tasks/{id}` | 否 |
 | GET | `/api/v1/weituo/{id}` | 否；按委托 ID 查询详情（拼音路径） |

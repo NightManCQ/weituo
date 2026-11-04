@@ -138,6 +138,8 @@ pub(crate) struct 任务内容请求 {
     pub(crate) 位置: Option<任务位置>,
     #[serde(rename = "reward_points", default)]
     pub(crate) 报酬积分: Option<i64>,
+    #[serde(rename = "bidding_deadline", default)]
+    pub(crate) 投标截止时间: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -175,12 +177,36 @@ pub(crate) struct 任务视图 {
     pub(crate) 版本号: i32,
     pub(crate) 位置: Option<任务位置>,
     pub(crate) 报酬积分: Option<i64>,
+    pub(crate) 投标截止时间: Option<DateTime<Utc>>,
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+pub(crate) struct 任务投标请求 {
+    #[serde(rename = "bid_points", default)]
+    pub(crate) 报价积分: i64,
+    #[serde(rename = "message", default)]
+    pub(crate) 投标说明: String,
+    #[serde(rename = "expected_completion_time", default)]
+    pub(crate) 预计完成时间: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct 任务投标视图 {
+    pub(crate) 投标编号: Uuid,
+    pub(crate) 任务编号: Uuid,
+    pub(crate) 投标用户编号: Uuid,
+    pub(crate) 投标状态: String,
+    pub(crate) 报价积分: i64,
+    pub(crate) 投标说明: String,
+    pub(crate) 预计完成时间: Option<DateTime<Utc>>,
+    pub(crate) 创建时间: DateTime<Utc>,
+    pub(crate) 更新时间: DateTime<Utc>,
+}
+
+/// 委托广场列表的查询参数：状态由服务端固定为「投标中」，这里只保留可选的条数上限。
+/// 旧客户端仍可能带 status 参数，serde 默认忽略未知字段，不会报错。
 #[derive(Deserialize, Debug)]
 pub(crate) struct 任务列表查询 {
-    #[serde(rename = "status")]
-    pub(crate) 状态: Option<String>,
     #[serde(rename = "limit")]
     pub(crate) 数量上限: Option<i64>,
 }
@@ -306,6 +332,7 @@ mod 响应字段测试 {
             版本号: 1,
             位置: None,
             报酬积分: Some(100),
+            投标截止时间: None,
         })
         .expect("任务响应应可序列化");
         校验字段(
@@ -318,6 +345,7 @@ mod 响应字段测试 {
                 "描述",
                 "任务状态",
                 "截止时间",
+                "投标截止时间",
                 "创建时间",
                 "版本号",
                 "位置",

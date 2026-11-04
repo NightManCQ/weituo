@@ -2,7 +2,8 @@
 import { onShow } from '@dcloudio/uni-app'
 import { ref } from 'vue'
 import type { 任务, 用户 } from '../../common/leixing'
-import { 创建编号, 发送请求, 格式化时间, 读取当前用户 } from '../../common/wangluo'
+import { 发送请求, 读取当前用户 } from '../../common/wangluo'
+import { 格式化时间 } from '../xiaoxi/时间'
 
 const 当前用户 = ref<用户 | null>(null)
 const 委托列表 = ref<任务[]>([])
@@ -13,7 +14,8 @@ async function 刷新() {
   正在加载.value = true
   错误信息.value = ''
   try {
-    委托列表.value = await 发送请求<任务[]>('/tasks?status=' + encodeURIComponent('待接单'))
+    // 委托广场只要「投标中」的委托，状态由后端固定，这里不传任何筛选参数
+    委托列表.value = await 发送请求<任务[]>('/tasks')
   } catch (原因) {
     错误信息.value = 原因 instanceof Error ? 原因.message : '加载委托失败'
   } finally {
@@ -21,25 +23,17 @@ async function 刷新() {
   }
 }
 
-function 打开委托(编号: string) {
-  uni.navigateTo({ url: `/pages/weituo/weituo?id=${encodeURIComponent(编号)}` })
-}
+// 卡片整体点击进入委托详情。
+// 注意：web 端 v-for 里带参数的事件处理器会被缓存到渲染上下文，
+// 所有卡片可能共用第一次迭代的闭包（点哪张都开第一张）；需要时改成 data-id + dataset 取值。
+function 打开委托(委托: any) {
+  
+  console.log("______________",委托);
 
-async function 接取委托(委托: 任务) {
-  if (!当前用户.value) {
-    uni.switchTab({ url: '/pages/wode/wode' })
-    return
-  }
-  try {
-    await 发送请求(`/tasks/${encodeURIComponent(委托.任务编号)}/claim`, {
-      method: 'POST',
-      headers: { 'Idempotency-Key': 创建编号() },
-    })
-    uni.showToast({ title: '已接取委托', icon: 'success' })
-    await 刷新()
-  } catch (原因) {
-    uni.showToast({ title: 原因 instanceof Error ? 原因.message : '接取失败', icon: 'none' })
-  }
+  const 编号 = 委托.任务编号
+  
+  if (typeof 编号 != 'string' || 编号.length == 0) return
+  uni.navigateTo({ url: `/pages/weituo/weituo?id=${encodeURIComponent(编号)}` })
 }
 
 onShow(() => {
@@ -66,17 +60,16 @@ onShow(() => {
       <text>委托加载失败</text>
       <button class="ci_yao_an_niu" @click="刷新">重新加载</button>
     </view>
-    <view v-else-if="委托列表.length == 0" class="kong_zhuang_tai">暂时没有待接单委托</view>
-    <view v-for="委托 in 委托列表" :key="委托.任务编号" class="ka_pian">
+    <view v-else-if="委托列表.length == 0" class="kong_zhuang_tai">暂时没有投标中的委托</view>
+    <view v-for="委托 in 委托列表" :key="委托.任务编号" class="ka_pian"  @click="打开委托(委托)">
       <view class="liang_duan_dui_qi">
         <text class="biao_ji">{{ 委托.任务状态 }}</text>
         <text class="fu_zhu_wen_ben">{{ 格式化时间(委托.创建时间) }}</text>
       </view>
-      <text class="ka_pian_biao_ti" @click="打开委托(委托.任务编号)">{{ 委托.标题 }}</text>
+      <text class="ka_pian_biao_ti">{{ 委托.标题 }}</text>
       <text class="zheng_wen">{{ 委托.描述 || '暂无补充描述' }}</text>
       <view class="liang_duan_dui_qi ka_pian_di_bu">
         <text class="fu_zhu_wen_ben">{{ 委托.报酬积分 == null ? '无积分报酬' : `${委托.报酬积分} 积分报酬` }}</text>
-        <button class="xiao_hao zhu_yao_an_niu" @click="接取委托(委托)">查看 / 接单</button>
       </view>
     </view>
   </view>

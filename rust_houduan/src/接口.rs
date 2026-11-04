@@ -116,6 +116,18 @@ pub(crate) async fn 启动(状态: 应用状态, 配置: 运行配置) -> Result
         )
         .route("/api/v1/weituo/{id}", get(任务::查询委托))
         .route("/api/v1/tasks/{id}/claim", post(任务::接取任务))
+        .route(
+            "/api/v1/tasks/{task_id}/bids",
+            get(任务::查询任务投标).post(任务::提交任务投标),
+        )
+        .route(
+            "/api/v1/tasks/{task_id}/bids/{bid_id}/withdraw",
+            post(任务::撤回任务投标),
+        )
+        .route(
+            "/api/v1/tasks/{task_id}/bids/{bid_id}/select",
+            post(任务::选择任务投标),
+        )
         .route("/api/v1/tasks/{id}/start", post(任务::开始任务))
         .route("/api/v1/tasks/{id}/complete", post(任务::完成任务))
         .route(

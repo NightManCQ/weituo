@@ -2,7 +2,8 @@
 import { onShow } from '@dcloudio/uni-app'
 import { ref } from 'vue'
 import type { 任务, 用户 } from '../../common/leixing'
-import { 创建编号, 发送请求, 格式化时间, 读取当前用户 } from '../../common/wangluo'
+import { 创建编号, 发送请求, 读取当前用户 } from '../../common/wangluo'
+import { 格式化时间 } from '../xiaoxi/时间'
 
 const 当前用户 = ref<用户 | null>(null)
 const 任务列表 = ref<任务[]>([])

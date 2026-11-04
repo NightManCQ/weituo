@@ -10,6 +10,8 @@ const 标题 = ref('')
 const 描述 = ref('')
 const 截止日期 = ref('')
 const 截止时分 = ref('18:00')
+const 投标截止日期 = ref('')
+const 投标截止时分 = ref('18:00')
 const 报酬积分 = ref(0)
 const 位置 = ref<任务位置 | null>(null)
 const 积分 = ref<积分账户 | null>(null)
@@ -30,21 +32,36 @@ async function 提交() {
   const 清理标题 = 标题.value.trim()
   const 积分数 = Number(报酬积分.value)
   if (!清理标题 || 正在提交.value) return
+  if (!投标截止日期.value) {
+    uni.showToast({ title: '请选择投标截止时间', icon: 'none' })
+    return
+  }
+  const 截止时间 = 截止日期.value
+    ? `${截止日期.value}T${截止时分.value || '18:00'}:00`
+    : ''
+  const 投标截止时间 = `${投标截止日期.value}T${投标截止时分.value || '18:00'}:00`
+  if (new Date(投标截止时间).getTime() <= Date.now()) {
+    uni.showToast({ title: '投标截止时间必须晚于当前时间', icon: 'none' })
+    return
+  }
+  if (截止时间 && new Date(投标截止时间).getTime() >= new Date(截止时间).getTime()) {
+    uni.showToast({ title: '投标截止时间必须早于委托截止时间', icon: 'none' })
+    return
+  }
   if (!Number.isInteger(积分数) || 积分数 < 0 || 积分数 > 1000000000) {
     uni.showToast({ title: '积分必须是 0 到 10 亿之间的整数', icon: 'none' })
     return
   }
   正在提交.value = true
   try {
-    const 截止时间 = 截止日期.value
-      ? `${截止日期.value}T${截止时分.value || '18:00'}:00`
-      : ''
-    await 发布委托(清理标题, 描述.value.trim(), 截止时间, 积分数, 位置.value)
+    await 发布委托(清理标题, 描述.value.trim(), 截止时间, 投标截止时间, 积分数, 位置.value)
     uni.showToast({ title: '委托已发布', icon: 'success' })
     标题.value = ''
     描述.value = ''
     截止日期.value = ''
     截止时分.value = '18:00'
+    投标截止日期.value = ''
+    投标截止时分.value = '18:00'
     报酬积分.value = 0
     位置.value = null
     uni.navigateTo({ url: '/pages/zhuye/zhuye' })
@@ -65,6 +82,14 @@ function 设置截止日期(事件: { detail: { value: string } }) {
 
 function 设置截止时分(事件: { detail: { value: string } }) {
   截止时分.value = 事件.detail.value
+}
+
+function 设置投标截止日期(事件: { detail: { value: string } }) {
+  投标截止日期.value = 事件.detail.value
+}
+
+function 设置投标截止时分(事件: { detail: { value: string } }) {
+  投标截止时分.value = 事件.detail.value
 }
 
 onShow(() => {
@@ -102,6 +127,13 @@ onShow(() => {
         <view class="lie_biao_hang ke_dian_ji"><text class="zhan_kai">{{ 截止时分 }}</text><text class="jian_tou">›</text></view>
       </picker>
       <button v-if="截止日期" class="wen_ben_an_niu ju_zuo" @click="截止日期 = ''">清除截止时间</button>
+      <text class="biao_qian">投标截止时间</text>
+      <picker mode="date" :value="投标截止日期" @change="设置投标截止日期">
+        <view class="lie_biao_hang ke_dian_ji"><text class="zhan_kai">{{ 投标截止日期 || '选择投标截止日期' }}</text><text class="jian_tou">›</text></view>
+      </picker>
+      <picker mode="time" :value="投标截止时分" @change="设置投标截止时分">
+        <view class="lie_biao_hang ke_dian_ji"><text class="zhan_kai">{{ 投标截止时分 }}</text><text class="jian_tou">›</text></view>
+      </picker>
       <text class="biao_qian">委托报酬（积分）</text>
       <input v-model="报酬积分" class="shu_ru_kuang" type="number" placeholder="0 表示无积分报酬" />
       <text v-if="积分错误" class="ti_shi_xin_xi cuo_wu">{{ 积分错误 }}</text>
@@ -112,7 +144,7 @@ onShow(() => {
         <button class="ci_yao_an_niu" @click="选位置">{{ 位置 == null ? '选择地址' : '更改地址' }}</button>
         <button v-if="位置 != null" class="wen_ben_an_niu" @click="位置 = null">清除地址</button>
       </view>
-      <button class="zhu_yao_an_niu" :disabled="正在提交 || 标题.trim().length == 0 || !Number.isInteger(Number(报酬积分)) || Number(报酬积分) < 0 || Number(报酬积分) > 1000000000" @click="提交">{{ 正在提交 ? '正在发布…' : '发布委托' }}</button>
+      <button class="zhu_yao_an_niu" :disabled="正在提交 || 标题.trim().length == 0 || 投标截止日期.length == 0 || !Number.isInteger(Number(报酬积分)) || Number(报酬积分) < 0 || Number(报酬积分) > 1000000000" @click="提交">{{ 正在提交 ? '正在发布…' : '发布委托' }}</button>
     </view>
   </view>
 </template>

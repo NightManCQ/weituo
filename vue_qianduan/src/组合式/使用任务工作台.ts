@@ -11,6 +11,7 @@ type 任务表单 = {
   description: string
   deadline: string
   reward_points: number
+  bidding_deadline: string
   位置: 任务位置 | null
 }
 type 任务操作项 = { key: 任务操作; label: string }
@@ -91,12 +92,13 @@ export function 使用任务工作台() {
     description: '',
     deadline: '',
     reward_points: 0,
+    bidding_deadline: '',
     位置: null,
   })
   const 我的积分账户 = ref<积分账户 | null>(null)
   const 我的积分流水 = ref<积分流水[]>([])
   const 发布反馈状态 = ref<发布反馈>({ 状态: 'idle', 消息: '' })
-  const 状态筛选 = ref('待接单')
+  const 状态筛选 = ref('投标中')
   const 发布任务幂等键 = ref<string | null>(null)
   const 任务操作幂等键 = new Map<string, string>()
   let 委托详情请求序号 = 0
@@ -374,6 +376,7 @@ export function 使用任务工作台() {
           deadline: 任务表单数据.value.deadline
             ? new Date(任务表单数据.value.deadline).toISOString()
             : null,
+          bidding_deadline: new Date(任务表单数据.value.bidding_deadline).toISOString(),
           location: 任务表单数据.value.位置
             ? {
                 longitude: 任务表单数据.value.位置.经度,
@@ -395,6 +398,7 @@ export function 使用任务工作台() {
         description: '',
         deadline: '',
         reward_points: 0,
+        bidding_deadline: '',
         位置: null,
       }
       发布反馈状态.value = {
@@ -430,9 +434,15 @@ export function 使用任务工作台() {
     const 幂等键 = 任务操作幂等键.get(操作标识) || 生成唯一编号()
     任务操作幂等键.set(操作标识, 幂等键)
     try {
-      await 请求<任务>(`/tasks/${任务项.任务编号}/${操作}`, {
+      const 路径 = 操作 === 'bid'
+        ? `/tasks/${任务项.任务编号}/bids`
+        : `/tasks/${任务项.任务编号}/${操作}`
+      await 请求<任务 | unknown>(路径, {
         method: 'POST',
         headers: { 'Idempotency-Key': 幂等键 },
+        body: 操作 === 'bid'
+          ? JSON.stringify({ bid_points: 任务项.报酬积分 ?? 0, message: '' })
+          : undefined,
       })
       任务操作幂等键.delete(操作标识)
       提示信息.value = 操作 === 'accept-completion'
@@ -458,9 +468,9 @@ export function 使用任务工作台() {
     if (!当前用户.value) return []
     const 是发布者 = 任务项.发布者编号 === 当前用户.value.用户编号
     const 是接单者 = 任务项.接单者编号 === 当前用户.value.用户编号
-    if (任务项.任务状态 === '待接单') {
+    if (任务项.任务状态 === '投标中') {
       if (是发布者 || 任务项.报酬积分 === null) return []
-      return [{ key: 'claim', label: '接单' }]
+      return [{ key: 'bid', label: '投标' }]
     }
     if (任务项.任务状态 === '已接单') {
       if (是接单者) return [{ key: 'start', label: '开始' }, { key: 'release', label: '释放' }]

@@ -16,7 +16,7 @@ use crate::共享::*;
 use crate::领域::{任务状态错误, 计算任务状态};
 
 const 任务视图字段: &str = r#""任务编号", "发布者编号", "接单者编号", "标题", "描述",
-    "任务状态", "截止时间", "创建时间", "版本号", "经纬", "国", "省", "市", "县", "镇", "村", "地址", "报酬积分""#;
+    "任务状态", "截止时间", "投标截止时间", "创建时间", "版本号", "经纬", "国", "省", "市", "县", "镇", "村", "地址", "报酬积分""#;
 
 // Only fixed SQL templates and the constant column list are interpolated here.
 fn 任务记录查询(模板: &str) -> sqlx::AssertSqlSafe<String> {
@@ -51,6 +51,7 @@ async fn 为用户发布任务(
     let 标题 = 事件内容.标题.trim();
     let 描述 = 事件内容.描述.trim();
     校验任务内容(标题, 描述, 事件内容.截止时间)?;
+    校验投标截止时间(事件内容.截止时间, 事件内容.投标截止时间)?;
     let 报酬积分 = 校验新委托报酬(事件内容.报酬积分)?;
     let 位置 = 校验任务位置(事件内容.位置)?;
     let 编号 = Uuid::new_v4();
@@ -88,8 +89,8 @@ async fn 为用户发布任务(
     let 记录 = sqlx::query(任务记录查询(
         r#"INSERT INTO "任务"
            ("任务编号", "发布者编号", "标题", "描述", "任务状态", "截止时间",
-            "经纬", "国", "省", "市", "县", "镇", "村", "地址", "报酬积分")
-           VALUES ($1, $2, $3, $4, '待接单', $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+            "经纬", "国", "省", "市", "县", "镇", "村", "地址", "报酬积分", "投标截止时间", "接单模式")
+           VALUES ($1, $2, $3, $4, '投标中', $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, '竞标')
            RETURNING {任务视图字段}"#,
     ))
     .bind(编号)
@@ -106,6 +107,7 @@ async fn 为用户发布任务(
     .bind(位置.as_ref().and_then(|值| 值.村.clone()))
     .bind(位置.as_ref().and_then(|值| 值.地址.clone()))
     .bind(报酬积分)
+    .bind(事件内容.投标截止时间)
     .fetch_one(&mut *事务)
     .await?;
     super::群聊::创建委托群聊(&mut 事务, 编号, 用户.编号, 标题).await?;
@@ -133,7 +135,7 @@ async fn 为用户发布任务(
     sqlx::query(
         r#"INSERT INTO "任务事件"
                    ("事件编号", "任务编号", "操作者编号", "事件类型", "新状态", "请求幂等键")
-                   VALUES ($1, $2, $3, 'task.created', '待接单', $4)"#,
+                   VALUES ($1, $2, $3, 'task.created', '投标中', $4)"#,
     )
     .bind(事件编号)
     .bind(编号)
@@ -162,6 +164,26 @@ fn 校验任务内容(
     if 截止时间.is_some_and(|时间| 时间 <= Utc::now()) {
         return Err(应用错误::请求错误(
             "截止时间必须晚于当前时间".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn 校验投标截止时间(
+    任务截止时间: Option<chrono::DateTime<Utc>>,
+    投标截止时间: Option<chrono::DateTime<Utc>>,
+) -> Result<(), 应用错误> {
+    let 投标截止时间 = 投标截止时间
+        .ok_or_else(|| 应用错误::请求错误("竞标委托必须设置投标截止时间".into()))?;
+    if 投标截止时间 <= Utc::now() {
+        return Err(应用错误::请求错误(
+            "投标截止时间必须晚于当前时间".into(),
+        ));
+    }
+    if 任务截止时间.is_some_and(|任务截止时间| 投标截止时间 >= 任务截止时间)
+    {
+        return Err(应用错误::请求错误(
+            "投标截止时间必须早于委托截止时间".into(),
         ));
     }
     Ok(())
@@ -222,42 +244,25 @@ fn 清理位置文本(
     Ok(())
 }
 
+/// 委托广场列表：只返回仍在「投标中」的委托。
+/// 状态由服务端固定，不接收 status 参数，避免前端传了别的状态导致列表为空或报错；
+/// 只保留可选的 limit 用于限制返回条数。
 pub(super) async fn 查询任务列表(
     State(状态): State<应用状态>,
     Query(查询条件): Query<任务列表查询>,
-) -> Result<(StatusCode, Json<Vec<任务视图>>), 应用错误> {
-    println!("Hello {查询条件:?}");
-    if 查询条件.状态.as_ref().is_some_and(|状态值| {
-        ![
-            "待接单",
-            "已接单",
-            "进行中",
-            "待验收",
-            "已完成",
-            "已取消",
-            "已过期",
-        ]
-        .contains(&状态值.as_str())
-    }) {
-        return Err(应用错误::请求错误("任务状态无效".into()));
-    }
-
-    //
+) -> Result<Json<Vec<任务视图>>, 应用错误> {
     let 数量上限 = 查询条件.数量上限.unwrap_or(50).clamp(1, 100);
     let 记录集 = sqlx::query(任务记录查询(
         r#"SELECT {任务视图字段}
-           FROM "任务" WHERE ($1::text IS NULL OR "任务状态" = $1)
-           ORDER BY "创建时间" DESC, "任务编号" DESC LIMIT $2"#,
+           FROM "任务"
+           WHERE "任务状态" = '投标中'
+           ORDER BY "创建时间" DESC, "任务编号" DESC
+           LIMIT $1"#,
     ))
-    .bind(查询条件.状态)
     .bind(数量上限)
     .fetch_all(&状态.数据库)
     .await?;
-    // Ok(Json(记录集.iter().map(映射任务记录).collect()))
-    Ok((
-        StatusCode::OK,
-        Json(记录集.iter().map(映射任务记录).collect()),
-    ))
+    Ok(Json(记录集.iter().map(映射任务记录).collect()))
 }
 
 pub(super) async fn 查询我的已接任务(
@@ -431,6 +436,7 @@ fn 映射任务记录(记录: &sqlx::postgres::PgRow) -> 任务视图 {
         创建时间: 记录.get("创建时间"),
         版本号: 记录.get("版本号"),
         报酬积分: 记录.get("报酬积分"),
+        投标截止时间: 记录.get("投标截止时间"),
         位置: 经纬.map(|经纬| 任务位置 {
             经度: 经纬.x,
             纬度: 经纬.y,
@@ -906,6 +912,318 @@ pub(super) async fn 释放任务(
         .ok_or_else(|| 应用错误::未授权("请先登录".into()))?;
     let 键 = 提取幂等键(请求.headers())?;
     流转任务状态(&s, 用户, 编号, "release", 键).await
+}
+
+pub(super) async fn 提交任务投标(
+    State(状态): State<应用状态>,
+    Path(任务编号): Path<Uuid>,
+    请求: axum::http::Request<axum::body::Body>,
+) -> Result<(StatusCode, Json<任务投标视图>), 应用错误> {
+    let 用户 = 请求
+        .extensions()
+        .get::<当前用户>()
+        .cloned()
+        .ok_or_else(|| 应用错误::未授权("请先登录".into()))?;
+    let 内容: 任务投标请求 = serde_json::from_slice(
+        &axum::body::to_bytes(请求.into_body(), 1_000_000)
+            .await
+            .map_err(|错误| 应用错误::请求错误(错误.to_string()))?,
+    )
+    .map_err(|错误| 应用错误::请求错误(错误.to_string()))?;
+    if 内容.投标说明.chars().count() > 4000 {
+        return Err(应用错误::请求错误(
+            "投标说明最多 4000 个字符".into(),
+        ));
+    }
+    if 内容.报价积分 < 0 {
+        return Err(应用错误::请求错误("报价积分不能小于 0".into()));
+    }
+    let mut 事务 = 状态.数据库.begin().await?;
+    let 任务 = sqlx::query(
+        r#"SELECT "发布者编号", "任务状态", "投标截止时间", "截止时间"
+           FROM "任务" WHERE "任务编号" = $1 FOR UPDATE"#,
+    )
+    .bind(任务编号)
+    .fetch_optional(&mut *事务)
+    .await?
+    .ok_or_else(|| 应用错误::未找到("委托不存在".into()))?;
+    let 发布者: Uuid = 任务.get("发布者编号");
+    if 发布者 == 用户.编号 {
+        return Err(应用错误::禁止访问(
+            "发布者不能投标自己的委托".into(),
+        ));
+    }
+    if 任务.get::<String, _>("任务状态") != "投标中" {
+        return Err(应用错误::冲突("委托当前不在投标阶段".into()));
+    }
+    let 投标截止时间: Option<chrono::DateTime<Utc>> = 任务.get("投标截止时间");
+    if 投标截止时间.is_none_or(|时间| 时间 <= Utc::now()) {
+        return Err(应用错误::冲突("委托投标已截止".into()));
+    }
+    if let Some(预计完成时间) = 内容.预计完成时间 {
+        if let Some(委托截止时间) = 任务.get::<Option<chrono::DateTime<Utc>>, _>("截止时间")
+        {
+            if 预计完成时间 > 委托截止时间 {
+                return Err(应用错误::请求错误(
+                    "预计完成时间不能晚于委托截止时间".into(),
+                ));
+            }
+        }
+    }
+    let 投标编号 = Uuid::new_v4();
+    let 记录 = sqlx::query(
+        r#"INSERT INTO "任务_投标"
+           ("投标编号", "任务编号", "投标用户编号", "投标状态", "报价积分", "投标说明", "预计完成时间")
+           VALUES ($1, $2, $3, '投标中', $4, $5, $6)
+           ON CONFLICT ("任务编号", "投标用户编号") DO UPDATE SET
+               "投标状态" = CASE WHEN "任务_投标"."投标状态" = '已撤回' THEN '投标中' ELSE "任务_投标"."投标状态" END,
+               "报价积分" = EXCLUDED."报价积分",
+               "投标说明" = EXCLUDED."投标说明",
+               "预计完成时间" = EXCLUDED."预计完成时间",
+               "更新时间" = now(),
+               "版本号" = "任务_投标"."版本号" + 1
+           WHERE "任务_投标"."投标状态" IN ('投标中', '已撤回')
+           RETURNING "投标编号", "任务编号", "投标用户编号", "投标状态",
+                     "报价积分", "投标说明", "预计完成时间", "创建时间", "更新时间""#,
+    )
+    .bind(投标编号).bind(任务编号).bind(用户.编号)
+    .bind(内容.报价积分).bind(内容.投标说明.trim()).bind(内容.预计完成时间)
+    .fetch_optional(&mut *事务).await?
+    .ok_or_else(|| 应用错误::冲突("投标已中标或已落选，不能再次投标".into()))?;
+    let 投标编号: Uuid = 记录.get("投标编号");
+    sqlx::query(
+        r#"INSERT INTO "任务_投标事件"
+           ("事件编号", "任务编号", "投标编号", "操作者编号", "事件类型", "事件内容")
+           VALUES ($1, $2, $3, $4, 'task.bid.submitted', '{}'::jsonb)"#,
+    )
+    .bind(Uuid::new_v4())
+    .bind(任务编号)
+    .bind(投标编号)
+    .bind(用户.编号)
+    .execute(&mut *事务)
+    .await?;
+    事务.commit().await?;
+    Ok((StatusCode::CREATED, Json(映射投标记录(&记录))))
+}
+
+pub(super) async fn 查询任务投标(
+    State(状态): State<应用状态>,
+    Path(任务编号): Path<Uuid>,
+    请求: axum::http::Request<axum::body::Body>,
+) -> Result<Json<Vec<任务投标视图>>, 应用错误> {
+    let 用户 = 请求
+        .extensions()
+        .get::<当前用户>()
+        .cloned()
+        .ok_or_else(|| 应用错误::未授权("请先登录".into()))?;
+    let 发布者: Option<Uuid> =
+        sqlx::query_scalar(r#"SELECT "发布者编号" FROM "任务" WHERE "任务编号" = $1"#)
+            .bind(任务编号)
+            .fetch_optional(&状态.数据库)
+            .await?
+            .ok_or_else(|| 应用错误::未找到("委托不存在".into()))?;
+    let 记录集 = if 发布者 == Some(用户.编号) {
+        sqlx::query(
+            r#"SELECT "投标编号", "任务编号", "投标用户编号", "投标状态", "报价积分",
+                      "投标说明", "预计完成时间", "创建时间", "更新时间"
+               FROM "任务_投标" WHERE "任务编号" = $1
+               ORDER BY "创建时间" DESC"#,
+        )
+        .bind(任务编号)
+        .fetch_all(&状态.数据库)
+        .await?
+    } else {
+        sqlx::query(
+            r#"SELECT "投标编号", "任务编号", "投标用户编号", "投标状态", "报价积分",
+                      "投标说明", "预计完成时间", "创建时间", "更新时间"
+               FROM "任务_投标" WHERE "任务编号" = $1 AND "投标用户编号" = $2
+               ORDER BY "创建时间" DESC"#,
+        )
+        .bind(任务编号)
+        .bind(用户.编号)
+        .fetch_all(&状态.数据库)
+        .await?
+    };
+    Ok(Json(记录集.iter().map(映射投标记录).collect()))
+}
+
+pub(super) async fn 撤回任务投标(
+    State(状态): State<应用状态>,
+    Path((任务编号, 投标编号)): Path<(Uuid, Uuid)>,
+    请求: axum::http::Request<axum::body::Body>,
+) -> Result<Json<任务投标视图>, 应用错误> {
+    let 用户 = 请求
+        .extensions()
+        .get::<当前用户>()
+        .cloned()
+        .ok_or_else(|| 应用错误::未授权("请先登录".into()))?;
+    let mut 事务 = 状态.数据库.begin().await?;
+    let 记录 = sqlx::query(
+        r#"UPDATE "任务_投标" 投标 SET
+               "投标状态" = '已撤回', "撤回时间" = now(), "更新时间" = now(),
+               "版本号" = 投标."版本号" + 1
+           FROM "任务" 任务
+           WHERE 投标."投标编号" = $1 AND 投标."任务编号" = $2
+             AND 投标."投标用户编号" = $3 AND 投标."投标状态" = '投标中'
+             AND 任务."任务编号" = 投标."任务编号" AND 任务."任务状态" = '投标中'
+             AND 任务."投标截止时间" > now()
+           RETURNING 投标."投标编号", 投标."任务编号", 投标."投标用户编号",
+                     投标."投标状态", 投标."报价积分", 投标."投标说明",
+                     投标."预计完成时间", 投标."创建时间", 投标."更新时间""#,
+    )
+    .bind(投标编号)
+    .bind(任务编号)
+    .bind(用户.编号)
+    .fetch_optional(&mut *事务)
+    .await?
+    .ok_or_else(|| 应用错误::冲突("投标不存在、已结束或无权撤回".into()))?;
+    sqlx::query(
+        r#"INSERT INTO "任务_投标事件"
+           ("事件编号", "任务编号", "投标编号", "操作者编号", "事件类型")
+           VALUES ($1, $2, $3, $4, 'task.bid.withdrawn')"#,
+    )
+    .bind(Uuid::new_v4())
+    .bind(任务编号)
+    .bind(投标编号)
+    .bind(用户.编号)
+    .execute(&mut *事务)
+    .await?;
+    事务.commit().await?;
+    Ok(Json(映射投标记录(&记录)))
+}
+
+pub(super) async fn 选择任务投标(
+    State(状态): State<应用状态>,
+    Path((任务编号, 投标编号)): Path<(Uuid, Uuid)>,
+    请求: axum::http::Request<axum::body::Body>,
+) -> Result<Json<任务视图>, 应用错误> {
+    let 用户 = 请求
+        .extensions()
+        .get::<当前用户>()
+        .cloned()
+        .ok_or_else(|| 应用错误::未授权("请先登录".into()))?;
+    let 幂等键 = 提取幂等键(请求.headers())?;
+    let mut 事务 = 状态.数据库.begin().await?;
+    let 任务 = sqlx::query(
+        r#"SELECT "发布者编号", "任务状态", "投标截止时间"
+           FROM "任务" WHERE "任务编号" = $1 FOR UPDATE"#,
+    )
+    .bind(任务编号)
+    .fetch_optional(&mut *事务)
+    .await?
+    .ok_or_else(|| 应用错误::未找到("委托不存在".into()))?;
+    if 任务.get::<Uuid, _>("发布者编号") != 用户.编号 {
+        return Err(应用错误::禁止访问(
+            "只有委托发布者可以选择承接用户".into(),
+        ));
+    }
+    if 任务.get::<String, _>("任务状态") != "投标中" {
+        return Err(应用错误::冲突("委托投标已结束".into()));
+    }
+    let 投标用户: Option<Uuid> = sqlx::query_scalar(
+        r#"SELECT "投标用户编号" FROM "任务_投标"
+           WHERE "投标编号" = $1 AND "任务编号" = $2 AND "投标状态" = '投标中'
+           FOR UPDATE"#,
+    )
+    .bind(投标编号)
+    .bind(任务编号)
+    .fetch_optional(&mut *事务)
+    .await?;
+    let 投标用户 = 投标用户.ok_or_else(|| 应用错误::冲突("投标不存在或已失效".into()))?;
+    sqlx::query(
+        r#"UPDATE "任务_投标" SET "投标状态" = '已中标', "选定时间" = now(),
+                   "更新时间" = now(), "版本号" = "版本号" + 1
+           WHERE "投标编号" = $1"#,
+    )
+    .bind(投标编号)
+    .execute(&mut *事务)
+    .await?;
+    sqlx::query(
+        r#"UPDATE "任务_投标" SET "投标状态" = '已落选', "更新时间" = now(),
+                   "版本号" = "版本号" + 1
+           WHERE "任务编号" = $1 AND "投标编号" <> $2 AND "投标状态" = '投标中'"#,
+    )
+    .bind(任务编号)
+    .bind(投标编号)
+    .execute(&mut *事务)
+    .await?;
+    let 记录 = sqlx::query(任务记录查询(
+        r#"UPDATE "任务" SET "接单者编号" = $2, "任务状态" = '已接单',
+                   "接单时间" = now(), "中标投标编号" = $3,
+                   "版本号" = "版本号" + 1, "更新时间" = now()
+           WHERE "任务编号" = $1 AND "任务状态" = '投标中'
+           RETURNING {任务视图字段}"#,
+    ))
+    .bind(任务编号)
+    .bind(投标用户)
+    .bind(投标编号)
+    .fetch_optional(&mut *事务)
+    .await?
+    .ok_or_else(|| 应用错误::冲突("委托状态已变化，请刷新后重试".into()))?;
+    super::群聊::加入委托群聊(&mut 事务, 任务编号, 投标用户).await?;
+    let 发件箱事件编号 = Uuid::new_v4();
+    sqlx::query(
+        r#"INSERT INTO "任务_投标事件"
+           ("事件编号", "任务编号", "投标编号", "操作者编号", "事件类型", "事件内容")
+           VALUES ($1, $2, $3, $4, 'task.bid.selected', jsonb_build_object('请求幂等键', $5::text))"#,
+    ).bind(Uuid::new_v4()).bind(任务编号).bind(投标编号).bind(用户.编号).bind(&幂等键)
+    .execute(&mut *事务).await?;
+    sqlx::query(
+        r#"INSERT INTO "任务事件"
+           ("事件编号", "任务编号", "操作者编号", "事件类型", "原状态", "新状态", "请求幂等键")
+           VALUES ($1, $2, $3, 'task.bid.selected', '投标中', '已接单', $4)"#,
+    )
+    .bind(Uuid::new_v4())
+    .bind(任务编号)
+    .bind(用户.编号)
+    .bind(幂等键)
+    .execute(&mut *事务)
+    .await?;
+    let 标题: String = sqlx::query_scalar(r#"SELECT "标题" FROM "任务" WHERE "任务编号" = $1"#)
+        .bind(任务编号)
+        .fetch_one(&mut *事务)
+        .await?;
+    let 主题 = 查询任务事件主题(&mut 事务, 任务编号).await?;
+    let 事件 = json!({
+        "事件编号": 发件箱事件编号,
+        "事件类型": "task.bid.selected",
+        "结构版本": 2,
+        "发生时间": Utc::now(),
+        "任务编号": 任务编号,
+        "数据": {
+            "任务状态": "已接单",
+            "接单者编号": 投标用户,
+            "发布者编号": 用户.编号,
+            "标题": 标题,
+            "消息": format!("你的委托《{标题}》已被接受承接")
+        }
+    });
+    sqlx::query(
+        r#"INSERT INTO "事务发件箱" ("事件编号", "事件类型", "主题", "事件内容")
+           VALUES ($1, 'task.bid.selected', $2, $3)"#,
+    )
+    .bind(发件箱事件编号)
+    .bind(主题)
+    .bind(事件)
+    .execute(&mut *事务)
+    .await?;
+    事务.commit().await?;
+    crate::工作者::发布单个发件箱事件(&状态.数据库, &状态.消息代理, 发件箱事件编号).await?;
+    Ok(Json(映射任务记录(&记录)))
+}
+
+fn 映射投标记录(记录: &sqlx::postgres::PgRow) -> 任务投标视图 {
+    任务投标视图 {
+        投标编号: 记录.get("投标编号"),
+        任务编号: 记录.get("任务编号"),
+        投标用户编号: 记录.get("投标用户编号"),
+        投标状态: 记录.get("投标状态"),
+        报价积分: 记录.get("报价积分"),
+        投标说明: 记录.get("投标说明"),
+        预计完成时间: 记录.get("预计完成时间"),
+        创建时间: 记录.get("创建时间"),
+        更新时间: 记录.get("更新时间"),
+    }
 }
 
 #[cfg(test)]

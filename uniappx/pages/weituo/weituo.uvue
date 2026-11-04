@@ -1,25 +1,137 @@
 <script setup lang="ts">
-import { onLoad } from '@dcloudio/uni-app'
+import { onLoad, onShow } from '@dcloudio/uni-app'
 import { ref } from 'vue'
-import type { 任务, 用户 } from '../../common/leixing'
-import { 创建编号, 发送请求, 格式化时间, 读取当前用户 } from '../../common/wangluo'
+import type { 任务, 任务投标, 用户, 用户详细信息 } from '../../common/leixing'
+import { 创建编号, 发送请求, 读取当前用户 } from '../../common/wangluo'
+import { 格式化时间 } from '../xiaoxi/时间'
+import { 已投标, 投标已截止, 撤回委托投标, 提交委托投标, 查找我的投标, 选择委托投标 } from './委托'
 
 const 委托 = ref<任务 | null>(null)
 const 当前用户 = ref<用户 | null>(null)
 const 正在加载 = ref(true)
 const 错误 = ref('')
+const 投标列表 = ref<任务投标[]>([])
+const 投标列表错误 = ref('')
+const 我的投标 = ref<任务投标 | null>(null)
+const 正在投标 = ref(false)
+const 正在选择投标 = ref(false)
 let 委托编号 = ''
 
 async function 加载() {
   if (!委托编号) return
   正在加载.value = true
   错误.value = ''
+  投标列表错误.value = ''
+  投标列表.value = []
+  我的投标.value = null
   try {
     委托.value = await 发送请求<任务>(`/weituo/${encodeURIComponent(委托编号)}`)
   } catch (原因) {
     错误.value = 原因 instanceof Error ? 原因.message : '委托详情加载失败'
-  } finally {
     正在加载.value = false
+    return
+  }
+  正在加载.value = false
+
+  // 投标列表要登录才能查（后端 401），而且失败只影响投标区域，
+  // 不能让它把整张委托详情一起变成错误页
+  const 用户 = 当前用户.value
+  const 当前委托 = 委托.value
+  if (用户 == null || 当前委托 == null) return
+  try {
+    投标列表.value = await 加载投标列表(当前委托)
+    我的投标.value = 查找我的投标(投标列表.value, 用户.用户编号)
+  } catch (原因) {
+    投标列表错误.value = 原因 instanceof Error ? 原因.message : '投标信息加载失败'
+    // 401 时网络层会清掉登录信息，这里同步一下，页面直接切到「未登录」状态
+    当前用户.value = 读取当前用户()
+    我的投标.value = null
+  }
+}
+
+async function 加载投标列表(任务 : 任务) : Promise<任务投标[]> {
+  const 列表 = await 发送请求<任务投标[]>(`/tasks/${encodeURIComponent(任务.任务编号)}/bids`)
+  for (let i = 0; i < 列表.length; i++) {
+    if (任务.发布者编号 == 当前用户.value?.用户编号 || 列表[i].投标用户编号 == 当前用户.value?.用户编号) {
+      try {
+        const 用户信息 = await 发送请求<用户详细信息>(`/users/${encodeURIComponent(列表[i].投标用户编号)}`)
+        列表[i].投标用户昵称 = 用户信息.昵称
+      } catch {}
+    }
+  }
+  return 列表
+}
+
+// 投标：不填任何表单，点一下直接发起投标，请求逻辑在 ./委托.ts 里与委托广场共用
+async function 提交投标() {
+  if (委托.value == null) return
+  if (当前用户.value == null) {
+    uni.switchTab({ url: '/pages/wode/wode' })
+    return
+  }
+  if (正在投标.value) return
+  const 当前委托 = 委托.value
+  if (投标已截止(当前委托)) {
+    uni.showToast({ title: '委托投标已截止', icon: 'none' })
+    return
+  }
+  正在投标.value = true
+  try {
+    await 提交委托投标(当前委托)
+    uni.showToast({ title: '投标成功', icon: 'success' })
+    await 加载()
+  } catch (原因) {
+    uni.showToast({ title: 原因 instanceof Error ? 原因.message : '投标失败', icon: 'none' })
+  } finally {
+    正在投标.value = false
+  }
+}
+
+// 我的投标状态文案：放在函数里拼，避免模板对可空对象取属性
+function 我的投标说明() : string {
+  const 投标 = 我的投标.value
+  if (投标 == null) return ''
+  const 截止说明 = 投标.投标状态 == '投标中' && 投标已截止(委托.value!) ? ' · 投标已截止' : ''
+  const 补充 = 投标.投标说明.length > 0 ? ` · ${投标.投标说明}` : ''
+  return `我的投标：${投标.投标状态} · 报价 ${投标.报价积分} 积分${补充}${截止说明}`
+}
+
+// 投标列表是 v-for，按钮不能写 @click="撤回投标(投标.投标编号)"：
+// web 端会把这些带参数的处理器缓存成所有行共用的闭包，点哪一行都是第一行。
+// 统一在按钮上挂 data-bid，处理函数从 dataset 取投标编号。
+function 撤回投标(事件: { currentTarget: { dataset: Record<string, unknown> } }) {
+  const 投标编号 = 事件.currentTarget.dataset['bid']
+  if (typeof 投标编号 != 'string' || 委托.value == null) return
+  void 执行撤回(委托.value.任务编号, 投标编号)
+}
+
+async function 执行撤回(任务编号: string, 投标编号: string) {
+  try {
+    await 撤回委托投标(任务编号, 投标编号)
+    uni.showToast({ title: '投标已撤回', icon: 'success' })
+    await 加载()
+  } catch (原因) {
+    uni.showToast({ title: 原因 instanceof Error ? 原因.message : '撤回失败', icon: 'none' })
+  }
+}
+
+function 选择投标(事件: { currentTarget: { dataset: Record<string, unknown> } }) {
+  const 投标编号 = 事件.currentTarget.dataset['bid']
+  if (typeof 投标编号 != 'string' || 委托.value == null) return
+  void 执行选择(委托.value.任务编号, 投标编号)
+}
+
+async function 执行选择(任务编号: string, 投标编号: string) {
+  if (正在选择投标.value) return
+  正在选择投标.value = true
+  try {
+    await 选择委托投标(任务编号, 投标编号)
+    uni.showToast({ title: '承接用户已选择', icon: 'success' })
+    await 加载()
+  } catch (原因) {
+    uni.showToast({ title: 原因 instanceof Error ? 原因.message : '选择失败', icon: 'none' })
+  } finally {
+    正在选择投标.value = false
   }
 }
 
@@ -50,6 +162,14 @@ onLoad((参数) => {
   当前用户.value = 读取当前用户()
   void 加载()
 })
+
+// 从「我的」页去登录（或退出登录）再返回时，投标状态要跟着重新判断
+onShow(() => {
+  const 用户 = 读取当前用户()
+  const 原用户编号 = 当前用户.value?.用户编号 ?? ''
+  当前用户.value = 用户
+  if (委托编号.length > 0 && 原用户编号 != (用户?.用户编号 ?? '')) void 加载()
+})
 </script>
 
 <template>
@@ -66,9 +186,38 @@ onLoad((参数) => {
       <text class="zheng_wen">{{ 委托.报酬积分 == null ? '无积分报酬' : `${委托.报酬积分} 积分` }}</text>
       <text class="biao_qian">发布于</text><text class="zheng_wen">{{ 格式化时间(委托.创建时间) }}</text>
       <text class="biao_qian">截止时间</text><text class="zheng_wen">{{ 委托.截止时间 == null ? '未设置' : 格式化时间(委托.截止时间) }}</text>
+      <text class="biao_qian">投标截止时间</text><text class="zheng_wen">{{ 委托.投标截止时间 == null ? '未设置' : 格式化时间(委托.投标截止时间) }}</text>
       <text class="biao_qian">委托地址</text>
       <text class="zheng_wen">{{ 委托.位置 == null ? '未填写' : [委托.位置.省, 委托.位置.市, 委托.位置.县, 委托.位置.地址].filter(Boolean).join(' · ') }}</text>
-      <button v-if="当前用户 != null && 委托.任务状态 == '待接单' && 委托.发布者编号 != 当前用户.用户编号 && 委托.报酬积分 != null" class="zhu_yao_an_niu" @click="执行('claim')">接取委托</button>
+      <text class="biao_qian">投标状态</text>
+      <view v-if="当前用户 == null">
+        <text class="zheng_wen">当前未登录，登录后才能投标</text>
+        <button class="ci_yao_an_niu" @click="uni.switchTab({ url: '/pages/wode/wode' })">去登录</button>
+      </view>
+      <view v-else-if="委托.发布者编号 == 当前用户.用户编号">
+        <text class="zheng_wen">{{ 投标列表.length == 0 ? '这是你发布的委托，还没有人投标' : `这是你发布的委托，已有 ${投标列表.length} 人投标` }}</text>
+        <text class="fu_zhu_wen_ben">{{ 投标已截止(委托) ? '投标已截止，可以在投标人列表里选择承接者' : '投标截止后可以在投标人列表里选择承接者' }}</text>
+      </view>
+      <view v-else-if="我的投标 != null">
+        <text class="zheng_wen">{{ 我的投标说明() }}</text>
+      </view>
+      <view v-else>
+        <text class="zheng_wen">{{ 投标已截止(委托) ? '投标已截止，你没有参与投标' : '你还没有投标，点击下方按钮即可报名' }}</text>
+      </view>
+      <view v-if="投标列表错误" class="ti_shi_xin_xi cuo_wu">{{ 投标列表错误 }}</view>
+      <button v-if="当前用户 != null && 委托.发布者编号 != 当前用户.用户编号 && 委托.任务状态 == '投标中' && !投标已截止(委托) && !已投标(投标列表, 当前用户.用户编号)" class="zhu_yao_an_niu" :disabled="正在投标" @click="提交投标">投标</button>
+      <view v-if="投标列表.length > 0" class="tou_biao_lie_biao">
+        <text class="biao_qian">投标人列表（{{ 投标列表.length }}）</text>
+        <view v-for="投标 in 投标列表" :key="投标.投标编号" class="lie_biao_hang tou_biao_hang">
+          <view class="zhan_kai">
+            <text>{{ 投标.投标用户昵称 || 投标.投标用户编号 }}</text>
+            <text class="fu_zhu_wen_ben">{{ 投标.报价积分 }} 积分 · {{ 投标.投标状态 }}</text>
+            <text v-if="投标.投标说明" class="fu_zhu_wen_ben">{{ 投标.投标说明 }}</text>
+          </view>
+          <button v-if="委托.发布者编号 == 当前用户?.用户编号 && 委托.任务状态 == '投标中' && 投标.投标状态 == '投标中'" :data-bid="投标.投标编号" class="ci_yao_an_niu" :disabled="正在选择投标" @click="选择投标">接受</button>
+          <button v-if="投标.投标用户编号 == 当前用户?.用户编号 && 投标.投标状态 == '投标中' && !投标已截止(委托)" :data-bid="投标.投标编号" class="wen_ben_an_niu" @click="撤回投标">撤回</button>
+        </view>
+      </view>
       <button v-if="当前用户 != null && (委托.发布者编号 == 当前用户.用户编号 || 委托.接单者编号 == 当前用户.用户编号)" class="ci_yao_an_niu" @click="打开委托会话">打开委托会话</button>
     </view>
   </view>

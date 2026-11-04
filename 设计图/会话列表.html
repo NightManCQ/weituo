@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="zh-CN"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_tab" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&amp;family=Space+Grotesk:wght@600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { colors: { "background": "#0b1326", "surface": "#0b1326", "tertiary": "#ffb95f", "on-tertiary": "#472a00", "surface-container-lowest": "#060e20", "on-surface-variant": "#c7c4d7", "surface-container-low": "#131b2e", "on-secondary-container": "#00311f", "error-container": "#93000a", "secondary-container": "#00a572", "surface-container-highest": "#2d3449", "inverse-on-surface": "#283044", "on-primary": "#1000a9", "inverse-primary": "#494bd6", "secondary-fixed-dim": "#4edea3", "on-tertiary-fixed-variant": "#653e00", "on-error": "#690005", "inverse-surface": "#dae2fd", "primary-container": "#8083ff", "tertiary-container": "#ca8100", "surface-container": "#171f33", "outline": "#908fa0", "primary": "#c0c1ff", "on-secondary-fixed": "#002113", "surface-variant": "#2d3449", "on-primary-fixed-variant": "#2f2ebe", "on-tertiary-fixed": "#2a1700", "surface-tint": "#c0c1ff", "on-background": "#dae2fd", "primary-fixed-dim": "#c0c1ff", "on-secondary-fixed-variant": "#005236", "tertiary-fixed-dim": "#ffb95f", "tertiary-fixed": "#ffddb8", "on-surface": "#dae2fd", "secondary": "#4edea3", "on-primary-container": "#0d0096", "surface-bright": "#31394d", "error": "#ffb4ab", "on-secondary": "#003824", "on-error-container": "#ffdad6", "on-tertiary-container": "#3e2400", "primary-fixed": "#e1e0ff", "surface-dim": "#0b1326", "on-primary-fixed": "#07006c", "outline-variant": "#464554", "secondary-fixed": "#6ffbbe", "surface-container-high": "#222a3d" }, borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, spacing: { "space-xs": "0.25rem", "gutter": "1rem", "space-md": "1rem", "space-xl": "2rem", "gutter-desktop": "1.5rem", "space-lg": "1.5rem", "margin-desktop": "2.5rem", "space-sm": "0.5rem", "margin": "1rem" }, fontFamily: { "body-lg": ["Plus Jakarta Sans"], "label-sm": ["Space Grotesk"], "label-md": ["Space Grotesk"], "display-lg-mobile": ["Plus Jakarta Sans"], "label-lg": ["Space Grotesk"], "body-md": ["Plus Jakarta Sans"], "headline-sm": ["Plus Jakarta Sans"], "body-sm": ["Plus Jakarta Sans"], "headline-lg": ["Plus Jakarta Sans"], "headline-md": ["Plus Jakarta Sans"], "display-lg": ["Plus Jakarta Sans"] }, fontSize: { "body-lg": ["16px", { lineHeight: "24px", letterSpacing: "0", fontWeight: "400" }], "label-sm": ["10px", { lineHeight: "14px", letterSpacing: "0.05em", fontWeight: "700" }], "label-md": ["12px", { lineHeight: "16px", letterSpacing: "0.03em", fontWeight: "600" }], "display-lg-mobile": ["30px", { lineHeight: "36px", letterSpacing: "-0.025em", fontWeight: "800" }], "label-lg": ["14px", { lineHeight: "18px", letterSpacing: "0.02em", fontWeight: "600" }], "body-md": ["14px", { lineHeight: "20px", letterSpacing: "0", fontWeight: "400" }], "headline-sm": ["18px", { lineHeight: "24px", letterSpacing: "-0.01em", fontWeight: "600" }], "body-sm": ["12px", { lineHeight: "16px", letterSpacing: "0.01em", fontWeight: "400" }], "headline-lg": ["28px", { lineHeight: "36px", letterSpacing: "-0.02em", fontWeight: "700" }], "headline-md": ["22px", { lineHeight: "28px", letterSpacing: "-0.015em", fontWeight: "700" }], "display-lg": ["40px", { lineHeight: "48px", letterSpacing: "-0.03em", fontWeight: "800" }] } } } };</script><style>@layer base{html,body{width:100%;margin:0;padding:0;background-color:#0b1326;color:#dae2fd;}body{overscroll-behavior-y:none;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface font-body-md text-on-surface antialiased min-h-screen"><header class="fixed top-0 w-full z-50 pt-safe bg-surface/80 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-16 px-gutter flex items-center justify-between"><div class="flex items-center gap-space-sm"><img alt="LinkQuest Logo" class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDF3u_eND9sQ_QAF2ff0S5jITMlbJSuZv8liZKdxXwq12kHX9updGPHLUmK18lQkBIvnwFY-O_mvVfu_llRksmNpioij2cTeT_DpGhS9PK81kzl4CDw8Hk77GEXeMBkdTXMdCPuZlV9594s02tvznOVAJQ6LZB6HlYRGtX6LC06_d7DD45Rv2I_r6mjLw8hyTBOHYItOwBcr6_aOcxAZ7KlCxhSnj5495ecitWrfQGg"/><div class="flex flex-col"><span class="font-label-md text-label-md tracking-wider text-primary font-bold uppercase">LinkQuest</span><span class="font-headline-sm text-headline-sm text-on-surface leading-tight">Messages</span></div></div><div class="flex items-center gap-space-xs"><button aria-label="Add Friend or Quest Group" class="w-11 h-11 flex items-center justify-center rounded-full text-on-surface-variant hover:text-on-surface active:scale-95 transition-all" type="button"><span class="material-symbols-outlined text-[22px]">group_add</span></button><button aria-label="Search or Discover" class="w-11 h-11 flex items-center justify-center rounded-full text-on-surface-variant hover:text-on-surface active:scale-95 transition-all" type="button"><span class="material-symbols-outlined text-[22px]">search</span></button><div class="relative flex items-center justify-center ml-space-xs"><img alt="Profile" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC_UmEt4E5FWoPuAoQzVVHOIbmlpZ8fYelxyLXHuS3wP2WqlDkE0Ikzxd7AaIftv6_f0kmN1Bkacd5P-f0xoSe41QCTXitqg_beh-HzCahxt-xuZnVTeMacobC-GMDJI5HBcakfXIVflZ4gliqUKRc3-GOpxEUlk68LFaIRnVvTBh4Cq2PYdJUEXwGTSDxbrgVI4LHHy-R-bcX_aU9MGGcrYHXPTA1rRENh1t2W2v-6"/><span class="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-secondary"></span></div></div></div></header><main class="flex flex-col relative w-full pt-16 pb-24 bg-surface min-h-screen"><div class="flex flex-col w-full">
+<!-- Quick Action Action Bar with Frosted Glow Accents -->
+<section class="w-full px-gutter pt-space-xs pb-space-sm">
+<div class="flex items-center gap-space-sm overflow-x-auto no-scrollbar py-space-xs">
+<!-- Action 1: Add Friend -->
+<button class="group shrink-0 flex items-center gap-space-xs px-space-md py-space-xs rounded-full bg-surface-container-high hover:bg-surface-bright active:scale-95 transition-all shadow-sm" type="button">
+<span class="material-symbols-outlined text-[18px] text-primary transition-transform group-hover:scale-110">person_add</span>
+<span class="font-label-md text-label-md text-on-surface">添加好友</span>
+</button>
+<!-- Action 2: Create Group -->
+<button class="group shrink-0 flex items-center gap-space-xs px-space-md py-space-xs rounded-full bg-surface-container-high hover:bg-surface-bright active:scale-95 transition-all shadow-sm" type="button">
+<span class="material-symbols-outlined text-[18px] text-secondary transition-transform group-hover:scale-110">groups</span>
+<span class="font-label-md text-label-md text-on-surface">创建群聊</span>
+</button>
+<!-- Action 3: Quick Post Bounty -->
+<button class="group shrink-0 flex items-center gap-space-xs px-space-md py-space-xs rounded-full bg-surface-container-highest hover:bg-surface-bright active:scale-95 transition-all shadow-[0_4px_16px_rgba(128,131,255,0.18)]" type="button">
+<span class="material-symbols-outlined text-[18px] text-tertiary transition-transform group-hover:rotate-12" style="font-variation-settings: 'FILL' 1;">bolt</span>
+<span class="font-label-md text-label-md text-tertiary-fixed font-bold">快速发布委托</span>
+</button>
+</div>
+</section>
+<!-- Search & Discovery Bar -->
+<section class="w-full px-gutter mb-space-sm">
+<div class="relative flex items-center w-full bg-surface-container-low rounded-xl px-space-md py-space-sm focus-within:bg-surface-container transition-colors shadow-inner">
+<span class="material-symbols-outlined text-[20px] text-outline mr-space-sm">search</span>
+<input class="w-full bg-transparent font-body-sm text-body-sm text-on-surface placeholder:text-outline focus:outline-none" placeholder="搜索联系人、群聊或委托记录..." type="search"/>
+<button aria-label="Voice Search" class="ml-space-xs text-outline hover:text-primary transition-colors flex items-center" type="button">
+<span class="material-symbols-outlined text-[18px]">mic</span>
+</button>
+</div>
+</section>
+<!-- Pinned Active Quest Status HUD -->
+<section class="w-full px-gutter mb-space-md">
+<div class="relative overflow-hidden rounded-xl bg-surface-container-high p-space-md shadow-md">
+<div class="absolute -right-4 -top-6 w-24 h-24 rounded-full bg-primary-container/10 blur-xl pointer-events-none"></div>
+<div class="relative flex items-center justify-between gap-space-sm">
+<div class="flex items-center gap-space-sm min-w-0">
+<div class="relative shrink-0 flex items-center justify-center w-10 h-10 rounded-xl bg-surface-container-highest text-tertiary shadow-sm">
+<span class="material-symbols-outlined text-[24px]" style="font-variation-settings: 'FILL' 1;">snooze</span>
+<span class="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-tertiary animate-ping opacity-75"></span>
+<span class="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-tertiary"></span>
+</div>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-space-xs">
+<span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded bg-tertiary-container/30 text-tertiary font-bold tracking-wider uppercase">进行中委托</span>
+<span class="font-label-sm text-label-sm text-outline">剩余 2 小时</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface font-semibold truncate mt-0.5">帮学弟调试 Python 爬虫代码</p>
+</div>
+</div>
+<button class="shrink-0 flex items-center gap-0.5 px-space-sm py-1.5 rounded-lg bg-primary text-on-primary font-label-md text-label-md active:scale-95 transition-all shadow-sm" type="button">
+<span>查看</span>
+<span class="material-symbols-outlined text-[16px]">chevron_right</span>
+</button>
+</div>
+<!-- Mini Progress Tracker Bar -->
+<div class="w-full bg-surface-container-lowest h-1.5 rounded-full mt-space-sm overflow-hidden flex">
+<div class="bg-gradient-to-r from-primary to-secondary h-full rounded-full transition-all duration-500" style="width: 72%;"></div>
+</div>
+</div>
+</section>
+<!-- Session List Container -->
+<section class="w-full px-gutter flex flex-col gap-space-sm pb-space-lg">
+<div class="flex items-center justify-between px-space-xs mb-0.5">
+<span class="font-label-sm text-label-sm text-outline tracking-wider uppercase">会话列表 (5)</span>
+<button class="font-label-sm text-label-sm text-primary hover:underline flex items-center gap-0.5" type="button">
+<span class="material-symbols-outlined text-[14px]">done_all</span>
+<span>全部已读</span>
+</button>
+</div>
+<!-- Session 1: Private Chat with Bound Bounty (Zhou Min) -->
+<article class="group relative flex items-center gap-space-md p-space-md rounded-xl bg-surface-container hover:bg-surface-bright active:scale-[0.99] transition-all cursor-pointer shadow-sm">
+<div class="relative shrink-0 w-12 h-12">
+<img class="w-full h-full rounded-full object-cover shadow-inner" data-alt="Digital creative portrait of Zhou Min, professional female UI product designer with neon cyber hair highlight, soft atmospheric dark studio lighting, confident warm smile, high definition 3D aesthetic" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD-urgsRJ-I4uOI1Ydh2bx7nBJeADglfnWwu96TKnlTNUh4ob9PB0FcHOMo2QTdtV1F-UD5JYpBqxk8xmoKGIB_ze80_Y5ft7T2FWzXpWVs8k1ukmDGUs62E6FctBuKtZm-A09uC9OjxzCbOinll_iiftHw4PyNwKtDb-6QIkks8c8bKGv-KlQ6usY--RQk2osymfqn8wDaPQo_cQwbpurviTxYNmfDIvwUejd1sBWK"/>
+<span class="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-secondary ring-2 ring-surface-container"></span>
+</div>
+<div class="flex flex-col flex-1 min-w-0">
+<div class="flex items-center justify-between mb-0.5">
+<div class="flex items-center gap-space-xs min-w-0">
+<h2 class="font-headline-sm text-headline-sm text-on-surface truncate">周敏</h2>
+<span class="font-label-sm text-label-sm text-outline-variant px-1 rounded bg-surface-container-highest shrink-0">UI设计师</span>
+</div>
+<span class="font-label-sm text-label-sm text-outline shrink-0 ml-space-xs">14:22</span>
+</div>
+<div class="flex items-center justify-between gap-space-sm mt-0.5">
+<p class="font-body-sm text-body-sm text-on-surface-variant truncate">
+<span class="text-primary font-semibold">[进行中委托]</span> 3D插画渲染源文件已发送，请查收~
+          </p>
+<div class="flex items-center gap-space-xs shrink-0">
+<span class="font-label-sm text-label-sm px-2 py-0.5 rounded-full bg-secondary-container/20 text-secondary font-bold">
+              +500 积分
+            </span>
+<span class="flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-primary-container text-on-primary font-label-sm text-label-sm">
+              2
+            </span>
+</div>
+</div>
+</div>
+</article>
+<!-- Session 2: Group Bounty Discussion (Frontend Tech Exchange) -->
+<article class="group relative flex items-center gap-space-md p-space-md rounded-xl bg-surface-container hover:bg-surface-bright active:scale-[0.99] transition-all cursor-pointer shadow-sm">
+<div class="relative shrink-0 w-12 h-12 rounded-full bg-surface-container-highest flex items-center justify-center overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="Futuristic neon holographic community icon representing code and frontend developers with glowing terminal brackets and sleek geometric nodes, deep indigo backdrop" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBu3qfL4PNspVSEtRpaQCv09o0qweDnjD_q7AWOH_ORKiQkXgLov5vsPRoXmueOWe1kDzRKDNt6VgKAMG8bFeNRvLEZ25BA1FHLjDdlJouH4vBo06gHJWDNG9V4MVPVO82NHxfAsgTiXUgnJwX-R60PGNy-WUsdTspMJ1AvwH6K4X-pjM70_ptNtAnt3Z-rVgHnULgoGW5dwN4yWTFHieQQQGyhwwmdUnSbgF1YrGEW"/>
+</div>
+<div class="flex flex-col flex-1 min-w-0">
+<div class="flex items-center justify-between mb-0.5">
+<div class="flex items-center gap-space-xs min-w-0">
+<h2 class="font-headline-sm text-headline-sm text-on-surface truncate">前端技术互助 &amp; 悬赏讨论组</h2>
+<span class="font-label-sm text-label-sm text-outline shrink-0">(128)</span>
+</div>
+<span class="font-label-sm text-label-sm text-outline shrink-0 ml-space-xs">12:05</span>
+</div>
+<div class="flex items-center justify-between gap-space-sm mt-0.5">
+<p class="font-body-sm text-body-sm text-on-surface-variant truncate">
+<span class="text-on-surface font-medium">李浩:</span> 刚才广场发了个 Next.js 踩坑悬赏，求大佬秒接！
+          </p>
+<span class="w-2.5 h-2.5 rounded-full bg-secondary shrink-0"></span>
+</div>
+</div>
+</article>
+<!-- Session 3: System / Quest Assistant (Official Notification) -->
+<article class="group relative flex items-center gap-space-md p-space-md rounded-xl bg-surface-container-low hover:bg-surface-container active:scale-[0.99] transition-all cursor-pointer shadow-sm">
+<div class="relative shrink-0 flex items-center justify-center w-12 h-12 rounded-full bg-gradient-to-tr from-primary to-primary-container text-on-primary shadow-sm">
+<span class="material-symbols-outlined text-[26px]">smart_toy</span>
+</div>
+<div class="flex flex-col flex-1 min-w-0">
+<div class="flex items-center justify-between mb-0.5">
+<div class="flex items-center gap-space-xs min-w-0">
+<h2 class="font-headline-sm text-headline-sm text-on-surface truncate">委托助手</h2>
+<span class="font-label-sm text-label-sm px-1.5 py-0.2 rounded-full bg-primary/20 text-primary uppercase font-bold shrink-0">官方</span>
+</div>
+<span class="font-label-sm text-label-sm text-outline shrink-0 ml-space-xs">昨天</span>
+</div>
+<div class="flex items-center justify-between gap-space-sm mt-0.5">
+<p class="font-body-sm text-body-sm text-on-surface-variant truncate">
+            🎉 您发布的【寻找同城自习室搭子】已圆满完成，300积分已划转给张宇
+          </p>
+</div>
+</div>
+</article>
+<!-- Session 4: Casual Chat with Active Presence (Alex Chen) -->
+<article class="group relative flex items-center gap-space-md p-space-md rounded-xl bg-surface-container hover:bg-surface-bright active:scale-[0.99] transition-all cursor-pointer shadow-sm">
+<div class="relative shrink-0 w-12 h-12">
+<img class="w-full h-full rounded-full object-cover" data-alt="Modern close up avatar portrait of Alex Chen, young East Asian man wearing stylish sporty jacket in an evening moody city background, cinematic blue lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAicNglkR6Yo-qey5IQm8Pb93GwbW_qrwnLoZXO2wgirnbQ4IH6CrqXyKHV4Oy1eQplAyjtVRbHp8ETTDMR8et_n5gN3OcdEgYTnptobPCg4IZTAXz9sm2n_CnGSO0MHn4BBNDCz9Z8P_bp8IdpSp63Usi1N0QN9XX4zew6Z0qLM2hLlvVnrIZY21xXFZwDOSLmhqMo0AA9TDm_g1bppZ7PkwF_iD2BATKmgx_8ciHp"/>
+<span class="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-secondary ring-2 ring-surface-container"></span>
+</div>
+<div class="flex flex-col flex-1 min-w-0">
+<div class="flex items-center justify-between mb-0.5">
+<h2 class="font-headline-sm text-headline-sm text-on-surface truncate">Alex Chen</h2>
+<span class="font-label-sm text-label-sm text-outline shrink-0 ml-space-xs">前天</span>
+</div>
+<div class="flex items-center justify-between gap-space-sm mt-0.5">
+<p class="font-body-sm text-body-sm text-on-surface-variant truncate">
+            晚上要不要去打羽毛球？场地已经订好了！🏸
+          </p>
+</div>
+</div>
+</article>
+<!-- Session 5: Freelance / Resource Sharing Group -->
+<article class="group relative flex items-center gap-space-md p-space-md rounded-xl bg-surface-container hover:bg-surface-bright active:scale-[0.99] transition-all cursor-pointer shadow-sm">
+<div class="relative shrink-0 w-12 h-12 rounded-full bg-surface-container-highest flex items-center justify-center overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="Abstract 3D rendered graphic design portfolio cover with soft glossy spheres and isometric Figma frames, cool indigo and mint palette" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAqGB0n36FMmzFBne96gFlqswnaQjFHcJsWKr-u_pGTjj0Ey789p2ivjJCunLp6-ro4zZbYPNZQDBuBx7ImrVHN8L7-Ae4kBlCsqftMBfzknuIPxuHJkai6CzYMXrI2fjS8aap0rN9NghO94axMzR6Huk0DEbt74QSF0jJVJgyg0d_EZM8Y7ua8m3MsF7YjyFDVAwgQA_W96-fioiiANhVXKI-j0bFSeMDKlAJJjbAs"/>
+</div>
+<div class="flex flex-col flex-1 min-w-0">
+<div class="flex items-center justify-between mb-0.5">
+<h2 class="font-headline-sm text-headline-sm text-on-surface truncate">设计资源分享与接单兼职群</h2>
+<span class="font-label-sm text-label-sm text-outline shrink-0 ml-space-xs">周三</span>
+</div>
+<div class="flex items-center justify-between gap-space-sm mt-0.5">
+<p class="font-body-sm text-body-sm text-on-surface-variant truncate">
+<span class="text-tertiary">已共享【Figma 3D图标包】</span> 点击即可下载解压
+          </p>
+</div>
+</div>
+</article>
+</section>
+<!-- Subtle bottom swipe instruction hint -->
+<footer class="w-full flex items-center justify-center pb-space-sm opacity-50">
+<div class="flex items-center gap-space-xs font-label-sm text-label-sm text-outline">
+<span class="material-symbols-outlined text-[14px]">swipe_left</span>
+<span>左滑置顶或标记已读</span>
+</div>
+</footer>
+</div>
+<script>
+  // Simple micro-interaction for active cards feedback
+  document.querySelectorAll('article').forEach(card => {
+    card.addEventListener('click', () => {
+      card.classList.add('bg-surface-container-highest');
+      setTimeout(() => {
+        card.classList.remove('bg-surface-container-highest');
+      }, 180);
+    });
+  });
+</script></main><nav class="fixed bottom-0 w-full z-50 pb-safe bg-surface/80 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]" data-active-classes="text-primary font-bold"><div class="flex justify-around items-center h-20 px-space-sm"><a aria-current="page" class="flex flex-col items-center justify-center w-16 h-14 transition-colors relative text-primary font-bold" data-path="messages" href="#"><div class="relative flex items-center justify-center"><span class="material-symbols-outlined text-[24px]">chat_bubble</span><span class="absolute -top-1 -right-2 px-1.5 py-0.2 bg-secondary text-on-secondary rounded-full font-label-sm text-label-sm leading-none">3</span></div><span class="font-label-md text-label-md mt-1">消息</span></a><a class="flex flex-col items-center justify-center w-16 h-14 text-on-surface-variant hover:text-on-surface transition-colors" data-path="bounty-square" href="#"><span class="material-symbols-outlined text-[24px] text-tertiary">local_fire_department</span><span class="font-label-md text-label-md mt-1">委托广场</span></a><a class="flex flex-col items-center justify-center w-16 h-14 -mt-5 group" data-path="create-bounty" href="#"><div class="w-12 h-12 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center shadow-[0_12px_32px_-4px_rgba(99,102,241,0.35)] group-active:scale-95 transition-transform"><span class="material-symbols-outlined text-[28px]">add</span></div><span class="font-label-md text-label-md mt-1 text-on-surface-variant">发布</span></a><a class="flex flex-col items-center justify-center w-16 h-14 text-on-surface-variant hover:text-on-surface transition-colors" data-path="profile" href="#"><span class="material-symbols-outlined text-[24px]">person</span><span class="font-label-md text-label-md mt-1">我的</span></a></div></nav></body></html>

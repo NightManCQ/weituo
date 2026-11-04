@@ -324,7 +324,7 @@
 
 <template>
 	<view class="liao_tian_rong_qi">
-		<view class="liao_tian_ding_bu_zhan_wei"></view>
+		<view class="liao_tian_ding_bu_zhan_wei" :style="`margin-top:${使用全局变量.系统信息.窗口顶高}px`"></view>
 		<view class="liao_tian_ding_bu" :style="`padding-top:${使用全局变量.系统信息.窗口顶高}px`">
 			<button class="liao_tian_fan_hui" @click="返回">‹</button>
 			<view class="liao_tian_tou_xiang" @click="打开联系人详情">
@@ -513,7 +513,7 @@
 
 	.liao_tian_xiao_xi_lie_biao {
 		padding: 12px 12px 8px;
-		background-color: #efeae2;
+		// background-color: #efeae2;
 	}
 
 	.liao_tian_ri_qi_hang {

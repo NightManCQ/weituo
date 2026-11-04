@@ -28,6 +28,7 @@ export type 任务 = {
   版本号: number
   位置: 任务位置 | null
   报酬积分: number | null
+  投标截止时间: string | null
 }
 
 export type 积分账户 = {
@@ -119,4 +120,4 @@ export type 认证结果 = {
   消息地址: string
 }
 
-export type 任务操作 = 'claim' | 'start' | 'complete' | 'accept-completion' | 'cancel' | 'release'
+export type 任务操作 = 'claim' | 'bid' | 'start' | 'complete' | 'accept-completion' | 'cancel' | 'release'

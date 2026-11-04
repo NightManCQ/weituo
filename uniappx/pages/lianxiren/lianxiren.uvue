@@ -33,6 +33,11 @@ async function 刷新() {
   }
 }
 
+// 联系人行的唯一键：好友用用户编号，群聊用群组编号，前缀用来区分两种类型
+function 项目键(项目: 联系人项目): string {
+  return 项目.项目类型 == '好友' ? `好友:${项目.用户编号}` : `群聊:${项目.群组编号}`
+}
+
 // 进入聊天页：四个参数的结构与「消息」页打开会话时保持一致
 // hui_hua = 会话编号，ming_cheng = 会话名称，lei_xing = 会话类型，bian_hao = 业务编号
 // 名称必须传真实值并编码，传占位文字会让聊天页顶部一直显示「聊天」
@@ -46,7 +51,14 @@ function 进入聊天(会话编号: string, 会话名称: string, 会话类型: 
   })
 }
 
-function 打开联系人(项目: 联系人项目) {
+// 这里不能写成 @click="打开联系人(项目)"：web 端编译会把带参数的写法做成渲染上下文里的事件缓存，
+// 所有行共用第一次迭代创建的那个闭包，点哪一行都会打开第一行。
+// 与「消息」页保持一致：行上挂 data-key，处理函数不带参数，从 dataset 取键再回查列表。
+function 打开联系人(事件: { currentTarget: { dataset: Record<string, unknown> } }) {
+  const 键 = 事件.currentTarget.dataset['key']
+  if (typeof 键 != 'string') return
+  const 项目 = 联系人项目列表.value.find((候选) => 项目键(候选) == 键)
+  if (项目 == null) return
   // 好友：联系人列表只给到好友的用户编号，没有私聊会话编号。
   // 后端 /my/friends/{编号}/messages 两种编号都接受，传用户编号会按好友关系找到（或创建）私聊会话，
   // 所以这里 hui_hua 和 bian_hao 都填好友用户编号。
@@ -82,9 +94,10 @@ onShow(() => {
       <view v-if="错误" class="ti_shi_xin_xi cuo_wu">{{ 错误 }}</view>
       <view
         v-for="项目 in 联系人项目列表"
-        :key="项目.项目类型 == '好友' ? 项目.用户编号 : 项目.群组编号"
+        :key="项目键(项目)"
         class="lie_biao_hang ke_dian_ji"
-        @click="打开联系人(项目)"
+        :data-key="项目键(项目)"
+        @click="打开联系人"
       >
         <view class="zhan_kai">
           <text class="ka_pian_biao_ti">{{ 项目.项目类型 == '好友' ? 项目.昵称 : 项目.群组名称 }}</text>

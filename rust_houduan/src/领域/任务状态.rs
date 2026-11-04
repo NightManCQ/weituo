@@ -17,6 +17,9 @@ pub(crate) fn 计算任务状态(
     操作者: Uuid,
 ) -> Result<(&'static str, Option<Uuid>, &'static str), 任务状态错误> {
     match 操作 {
+        "claim" if 原状态 == "投标中" => Err(任务状态错误::禁止操作(
+            "竞标委托不能直接接单，请提交投标",
+        )),
         "claim" if 原状态 == "待接单" && 发布者 != 操作者 => {
             Ok(("已接单", Some(操作者), "task.claimed"))
         }

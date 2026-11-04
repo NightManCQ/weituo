@@ -6,6 +6,7 @@ type 任务表单 = {
   description: string
   deadline: string
   reward_points: number
+  bidding_deadline: string
   位置: 任务位置 | null
 }
 
@@ -53,6 +54,7 @@ function 地址摘要(位置: 任务位置) {
           <label class="wide-field">委托标题<input v-model.trim="任务表单数据.title" required maxlength="120" placeholder="例如：帮忙整理一份活动方案" /></label>
           <label class="wide-field">委托说明<textarea v-model.trim="任务表单数据.description" rows="5" maxlength="10000" placeholder="补充背景、交付内容或其他要求…"></textarea></label>
           <label>截止时间（可选）<input v-model="任务表单数据.deadline" type="datetime-local" /></label>
+          <label>投标截止时间<input v-model="任务表单数据.bidding_deadline" type="datetime-local" required /></label>
           <label>
             委托报酬（积分）
             <input
@@ -104,6 +106,7 @@ function 地址摘要(位置: 任务位置) {
           <button
             class="button button-primary"
             :disabled="正在处理 || !任务表单数据.title.trim() ||
+              !任务表单数据.bidding_deadline ||
               !Number.isInteger(Number(任务表单数据.reward_points)) ||
               Number(任务表单数据.reward_points) < 0 ||
               Number(任务表单数据.reward_points) > 1000000000"

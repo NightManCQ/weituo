@@ -92,10 +92,11 @@ async fn 处理过期任务(数据库: &PgPool) -> Result<()> {
         let mut 事务 = 数据库.begin().await?;
         let 记录集 = sqlx::query(
             r#"SELECT t."任务编号", t."发布者编号",
-                      (SELECT g."群组编号" FROM "群_群组" g
+                  t."任务状态",
+                  (SELECT g."群组编号" FROM "群_群组" g
                        WHERE g."关联任务编号" = t."任务编号") AS "群组编号"
                FROM "任务" t
-               WHERE t."任务状态" = '待接单' AND t."截止时间" <= now()
+               WHERE t."任务状态" IN ('待接单', '投标中') AND t."截止时间" <= now()
                ORDER BY t."截止时间"
                LIMIT 50
                FOR UPDATE OF t SKIP LOCKED"#,
@@ -111,13 +112,14 @@ async fn 处理过期任务(数据库: &PgPool) -> Result<()> {
             let 任务编号: Uuid = 记录.get("任务编号");
             let 发布者编号: Uuid = 记录.get("发布者编号");
             let 群组编号: Option<Uuid> = 记录.get("群组编号");
+            let 原任务状态: String = 记录.get("任务状态");
             let 主题 = 构造任务事件主题(群组编号, 发布者编号);
             crate::接口::积分::退款委托报酬(&mut 事务, 任务编号, None, None).await?;
             let 事件编号 = Uuid::new_v4();
             let 更新结果 = sqlx::query(
                 r#"UPDATE "任务"
                    SET "任务状态" = '已过期', "版本号" = "版本号" + 1, "更新时间" = now()
-                   WHERE "任务编号" = $1 AND "任务状态" = '待接单'"#,
+                   WHERE "任务编号" = $1 AND "任务状态" IN ('待接单', '投标中')"#,
             )
             .bind(任务编号)
             .execute(&mut *事务)
@@ -128,10 +130,12 @@ async fn 处理过期任务(数据库: &PgPool) -> Result<()> {
             sqlx::query(
                 r#"INSERT INTO "任务事件"
                    ("事件编号", "任务编号", "操作者编号", "事件类型", "原状态", "新状态")
-                   VALUES ($1, $2, NULL, 'task.expired', '待接单', '已过期')"#,
+                   VALUES ($1, $2, NULL, 'task.expired',
+                           $3, '已过期')"#,
             )
             .bind(事件编号)
             .bind(任务编号)
+            .bind(原任务状态)
             .execute(&mut *事务)
             .await?;
             let 事件 = json!({

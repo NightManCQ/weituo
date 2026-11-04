@@ -141,13 +141,6 @@ export function 发送请求<T>(路径 : string, 选项 : 请求选项 = {}) : P
 	return 请求
 }
 
-export function 格式化时间(值 : string) : string {
-	if (!值) return ''
-	const 日期 = new Date(值)
-	if (Number.isNaN(日期.getTime())) return 值
-	return 日期.toLocaleString('zh-CN', { dateStyle: 'medium', timeStyle: 'short' })
-}
-
 export function 创建编号() : string {
 	const 随机 = `${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`
 	return `${Date.now()}-${随机.slice(0, 20)}`
@@ -176,6 +169,7 @@ export async function 发布委托(
 	标题 : string,
 	描述 : string,
 	截止时间 : string,
+	投标截止时间 : string,
 	报酬积分 : number,
 	位置 : 任务位置 | null,
 ) : Promise<任务> {
@@ -187,6 +181,7 @@ export async function 发布委托(
 			title: 标题,
 			description: 描述,
 			deadline: 截止时间 ? new Date(截止时间).toISOString() : null,
+			bidding_deadline: new Date(投标截止时间).toISOString(),
 			reward_points: 报酬积分,
 			location: 位置 == null ? null : {
 				longitude: 位置.经度,

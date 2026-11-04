@@ -78,6 +78,20 @@ export type 任务 = {
   版本号: number
   位置: 任务位置 | null
   报酬积分: number | null
+  投标截止时间: string | null
+}
+
+export type 任务投标 = {
+  投标编号: string
+  任务编号: string
+  投标用户编号: string
+  投标状态: string
+  报价积分: number
+  投标说明: string
+  预计完成时间: string | null
+  创建时间: string
+  更新时间: string
+  投标用户昵称?: string
 }
 
 export type 消息会话 = {

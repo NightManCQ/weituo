@@ -5,6 +5,31 @@ export function 解析日期(值 : string) : Date | null {
 	return 日期
 }
 
+export function 补零(值 : number) : string {
+	return 值 < 10 ? `0${值}` : `${值}`
+}
+
+/**
+ * 完整日期时间：2026年11月5日 18:00
+ *
+ * 不能用 toLocaleString('zh-CN', { dateStyle, timeStyle })：
+ * 安卓运行时不支持这些选项，会退回默认格式（甚至原样返回 ISO 串），
+ * web 端支持，于是两端显示不一致。这里全部用 getXxx 手工拼，两端一致。
+ * 解析失败时原样返回，方便直接看出后端给了什么值。
+ */
+export function 格式化时间(值 : string) : string {
+	const 日期 = 解析日期(值)
+	if (日期 == null) return 值
+	return `${日期.getFullYear()}年${日期.getMonth() + 1}月${日期.getDate()}日 ${补零(日期.getHours())}:${补零(日期.getMinutes())}`
+}
+
+/** 只到日期：2026-11-05 */
+export function 格式化日期(值 : string) : string {
+	const 日期 = 解析日期(值)
+	if (日期 == null) return 值
+	return `${日期.getFullYear()}-${补零(日期.getMonth() + 1)}-${补零(日期.getDate())}`
+}
+
 export function 格式化消息时间(值 : string) : string {
 	const 日期 = 解析日期(值)
 	if (日期 == null) return ''
