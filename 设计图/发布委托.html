@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_stack" name="shell-type"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&amp;family=Space+Grotesk:wght@600;700&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{width:100vw;margin:0;padding:0;background-color:#0b1326;color:#dae2fd;}body{overscroll-behavior-y:none;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { colors: { "secondary-fixed-dim": "#4edea3", "surface-container-lowest": "#060e20", "primary": "#c0c1ff", "inverse-primary": "#494bd6", "on-primary-fixed": "#07006c", "on-tertiary-container": "#3e2400", "primary-container": "#8083ff", "on-secondary-fixed-variant": "#005236", "primary-fixed-dim": "#c0c1ff", "on-surface-variant": "#c7c4d7", "on-surface": "#dae2fd", "on-tertiary-fixed-variant": "#653e00", "inverse-on-surface": "#283044", "on-error-container": "#ffdad6", "surface-container": "#171f33", "error-container": "#93000a", "secondary": "#4edea3", "tertiary-fixed": "#ffddb8", "surface-variant": "#2d3449", "surface-tint": "#c0c1ff", "surface-container-highest": "#2d3449", "secondary-container": "#00a572", "background": "#0b1326", "tertiary-fixed-dim": "#ffb95f", "on-tertiary-fixed": "#2a1700", "primary-fixed": "#e1e0ff", "surface-container-high": "#222a3d", "on-primary-container": "#0d0096", "surface-container-low": "#131b2e", "outline-variant": "#464554", "on-primary-fixed-variant": "#2f2ebe", "inverse-surface": "#dae2fd", "tertiary": "#ffb95f", "on-error": "#690005", "secondary-fixed": "#6ffbbe", "outline": "#908fa0", "on-background": "#dae2fd", "on-tertiary": "#472a00", "surface-bright": "#31394d", "on-primary": "#1000a9", "tertiary-container": "#ca8100", "surface": "#0b1326", "on-secondary-container": "#00311f", "on-secondary-fixed": "#002113", "on-secondary": "#003824", "error": "#ffb4ab", "surface-dim": "#0b1326" }, borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, spacing: { "space-md": "1rem", "margin-desktop": "2.5rem", "space-sm": "0.5rem", "space-xs": "0.25rem", "space-xl": "2rem", "gutter-desktop": "1.5rem", "margin": "1rem", "gutter": "1rem", "space-lg": "1.5rem" }, fontFamily: { "headline-md": ["Plus Jakarta Sans"], "label-sm": ["Space Grotesk"], "headline-sm": ["Plus Jakarta Sans"], "label-md": ["Space Grotesk"], "display-lg-mobile": ["Plus Jakarta Sans"], "display-lg": ["Plus Jakarta Sans"], "body-lg": ["Plus Jakarta Sans"], "label-lg": ["Space Grotesk"], "body-md": ["Plus Jakarta Sans"], "body-sm": ["Plus Jakarta Sans"], "headline-lg": ["Plus Jakarta Sans"] }, fontSize: { "headline-md": ["22px", { "lineHeight": "28px", "letterSpacing": "-0.015em", "fontWeight": "700" }], "label-sm": ["10px", { "lineHeight": "14px", "letterSpacing": "0.05em", "fontWeight": "700" }], "headline-sm": ["18px", { "lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "600" }], "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.03em", "fontWeight": "600" }], "display-lg-mobile": ["30px", { "lineHeight": "36px", "letterSpacing": "-0.025em", "fontWeight": "800" }], "display-lg": ["40px", { "lineHeight": "48px", "letterSpacing": "-0.03em", "fontWeight": "800" }], "body-lg": ["16px", { "lineHeight": "24px", "letterSpacing": "0", "fontWeight": "400" }], "label-lg": ["14px", { "lineHeight": "18px", "letterSpacing": "0.02em", "fontWeight": "600" }], "body-md": ["14px", { "lineHeight": "20px", "letterSpacing": "0", "fontWeight": "400" }], "body-sm": ["12px", { "lineHeight": "16px", "letterSpacing": "0.01em", "fontWeight": "400" }], "headline-lg": ["28px", { "lineHeight": "36px", "letterSpacing": "-0.02em", "fontWeight": "700" }] } } } }</script><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface font-body-md text-on-surface flex flex-col min-h-screen antialiased selection:bg-primary-container selection:text-on-primary-container"><header class="fixed top-0 w-full z-50 pt-safe bg-surface/80 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-16 px-margin flex items-center justify-between gap-space-sm"><div class="flex items-center gap-space-xs"><button aria-label="Go back" class="min-w-[44px] min-h-[44px] -ml-2 rounded-full flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors" onclick="history.back()" type="button"><span class="material-symbols-outlined text-[24px]">arrow_back</span></button><img alt="App favicon icon for LinkQuest, an instant messaging and quest bounty mutual aid app. Clean minimalist vector-style symbol representing a glowing chat speech bubble interwoven with a quest compass star / lightning link emblem. Vibrant indigo (#6366f1) and neon emerald green (#10b981) glowing accents on a deep dark navy (#0b1326) edge-to-edge full-bleed gradient background. CRITICAL: Do NOT draw any rounded rectangle, border, frame, white outline, or squircle container. The entire square image is the icon with a continuous full-bleed dark navy background filling edge to edge. High contrast, iconic, sleek modern tech aesthetic." class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida/AEtjO1Wzs_KgLePVUIRbiSauQx7UWrIJkpm74ptpBxE_AJSjWKKtsy6745pK10UE7kqOoY9fs8e8unSDSCe1_mF9WsfZt_DH84arbSOID50mpHpssyDzVvoJIhHkurdHn4I4C9HceDAcZIkPMD-j8rYFPNQ2owlXTnpXy_eFamgX3zr-cZDxermgR4YX65gFfLFe1ruV-J71r2QvwnOPKqx5Xpf2rkWUMdkiSb_rf--qn5ZVnw"/><div class="flex flex-col ml-space-xs"><span class="font-headline-sm text-headline-sm text-on-surface truncate">Connect &amp; Create</span><span class="font-label-sm text-label-sm text-secondary tracking-widest uppercase">LinkQuest Net</span></div></div><div class="flex items-center gap-space-xs"><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center shrink-0"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="flex flex-col relative w-full pt-16 pb-safe bg-surface min-h-screen"><div class="flex flex-col w-full pb-28">
+<!-- Top Auxiliary Utility Bar (Sub-header Context) -->
+<div class="px-margin pt-space-sm pb-space-xs flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-label-sm font-label-sm bg-surface-container-highest text-secondary tracking-wider uppercase">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary mr-1 animate-pulse"></span>
+        草稿已同步 10:42
+      </span>
+</div>
+<div class="flex items-center gap-space-sm">
+<button class="text-on-surface-variant hover:text-on-surface text-label-md font-label-md flex items-center gap-1 transition-colors" type="button">
+<span class="material-symbols-outlined text-[16px]">save</span>
+<span>存草稿</span>
+</button>
+<button class="text-on-surface-variant hover:text-primary text-label-md font-label-md flex items-center gap-1 transition-colors" type="button">
+<span class="material-symbols-outlined text-[16px]">help_outline</span>
+<span>发单规则</span>
+</button>
+</div>
+</div>
+<!-- Wallet Assets Banner / Escrow Guarantee Notice -->
+<div class="px-margin mb-space-md">
+<div class="relative overflow-hidden rounded-xl bg-surface-container-low p-space-md shadow-md">
+<div class="absolute -right-8 -top-8 w-28 h-28 rounded-full bg-primary/10 blur-2xl pointer-events-none"></div>
+<div class="flex items-center justify-between relative z-10">
+<div class="flex items-center gap-space-sm">
+<div class="w-10 h-10 rounded-lg bg-surface-container-high flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-[22px]">account_balance_wallet</span>
+</div>
+<div>
+<div class="text-label-sm font-label-sm text-on-surface-variant">当前可用赏金池</div>
+<div class="text-headline-sm font-headline-sm text-on-surface flex items-baseline gap-1">
+<span>2,450</span>
+<span class="text-label-sm font-label-sm text-secondary">PTS 积分</span>
+</div>
+</div>
+</div>
+<div class="text-right">
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-secondary/10 text-secondary text-label-sm font-label-sm">
+<span class="material-symbols-outlined text-[14px]">verified_user</span>
+            智能托管保障中
+          </span>
+<p class="text-label-sm font-label-sm text-on-surface-variant mt-1">发单即冻结 · 验收后结算</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Module 1: Quest Allocation Mode Selector (Bidding vs Sniping) -->
+<section class="px-margin mb-space-lg">
+<div class="flex items-center justify-between mb-space-xs">
+<h2 class="text-headline-sm font-headline-sm text-on-surface">选择委托模式</h2>
+<span class="text-label-sm font-label-sm text-on-surface-variant">决定接单者与您的协作流转</span>
+</div>
+<!-- Mode Cards Grid -->
+<div class="grid grid-cols-2 gap-space-sm" id="mode-selector">
+<!-- Mode 1: Instant Claim / Sniping -->
+<button class="relative text-left p-space-md rounded-xl transition-all duration-200 bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high" id="mode-snatch" onclick="selectMode('snatch')" type="button">
+<div class="flex items-center justify-between mb-2">
+<div class="w-8 h-8 rounded-lg bg-tertiary-container/30 text-tertiary flex items-center justify-center">
+<span class="material-symbols-outlined text-[20px]">bolt</span>
+</div>
+<span class="badge-status hidden px-1.5 py-0.5 rounded text-label-sm font-label-sm bg-secondary text-on-secondary font-bold">已选</span>
+</div>
+<div class="text-headline-sm font-headline-sm text-on-surface mb-1">抢单模式</div>
+<p class="text-body-sm font-body-sm text-on-surface-variant leading-snug mb-2">先到先得，一人极速锁定任务，立竿见影。</p>
+<div class="flex items-center gap-1 text-label-sm font-label-sm text-tertiary">
+<span class="material-symbols-outlined text-[14px]">speed</span>
+<span>适合跑腿 / 紧急修Bug</span>
+</div>
+</button>
+<!-- Mode 2: Competitive Bidding (Default Selected) -->
+<button class="relative text-left p-space-md rounded-xl transition-all duration-200 bg-surface-container-high text-on-surface shadow-lg" id="mode-bidding" onclick="selectMode('bidding')" type="button">
+<div class="absolute top-2 right-2 flex items-center gap-1">
+<span class="badge-status px-2 py-0.5 rounded-full text-label-sm font-label-sm bg-secondary/20 text-secondary font-bold">推荐 · 方案优选</span>
+</div>
+<div class="flex items-center justify-between mb-2 mt-4">
+<div class="w-8 h-8 rounded-lg bg-primary-container/30 text-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-[20px]">military_tech</span>
+</div>
+</div>
+<div class="text-headline-sm font-headline-sm text-on-surface mb-1">竞标模式</div>
+<p class="text-body-sm font-body-sm text-on-surface-variant leading-snug mb-2">多方提交报价与样稿，截止前选定最优人选。</p>
+<div class="flex items-center gap-1 text-label-sm font-label-sm text-primary">
+<span class="material-symbols-outlined text-[14px]">auto_awesome</span>
+<span>适合设计 / 定制方案</span>
+</div>
+</button>
+</div>
+</section>
+<!-- Module 2: Category Selector -->
+<section class="px-margin mb-space-lg">
+<label class="block text-headline-sm font-headline-sm text-on-surface mb-space-xs">委托分类</label>
+<div class="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar -mx-margin px-margin">
+<button class="category-pill shrink-0 px-3.5 py-1.5 rounded-full text-label-md font-label-md bg-primary text-on-primary font-bold shadow-sm transition-transform active:scale-95 flex items-center gap-1" type="button">
+<span class="material-symbols-outlined text-[16px]">palette</span>
+        视觉设计
+      </button>
+<button class="category-pill shrink-0 px-3.5 py-1.5 rounded-full text-label-md font-label-md bg-surface-container text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors flex items-center gap-1" type="button">
+<span class="material-symbols-outlined text-[16px]">code</span>
+        技能开发
+      </button>
+<button class="category-pill shrink-0 px-3.5 py-1.5 rounded-full text-label-md font-label-md bg-surface-container text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors flex items-center gap-1" type="button">
+<span class="material-symbols-outlined text-[16px]">two_wheeler</span>
+        跑腿代办
+      </button>
+<button class="category-pill shrink-0 px-3.5 py-1.5 rounded-full text-label-md font-label-md bg-surface-container text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors flex items-center gap-1" type="button">
+<span class="material-symbols-outlined text-[16px]">school</span>
+        学业答疑
+      </button>
+<button class="category-pill shrink-0 px-3.5 py-1.5 rounded-full text-label-md font-label-md bg-surface-container text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors flex items-center gap-1" type="button">
+<span class="material-symbols-outlined text-[16px]">translate</span>
+        文案翻译
+      </button>
+<button class="category-pill shrink-0 px-3.5 py-1.5 rounded-full text-label-md font-label-md bg-surface-container text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors flex items-center gap-1" type="button">
+<span class="material-symbols-outlined text-[16px]">diversity_3</span>
+        线下搭子
+      </button>
+</div>
+</section>
+<!-- Module 3: Bounty Content & Core Specification -->
+<section class="px-margin mb-space-lg">
+<div class="rounded-xl bg-surface-container-low p-space-md shadow-md space-y-space-md">
+<!-- Title Input -->
+<div>
+<div class="flex items-center justify-between mb-1.5">
+<label class="text-label-md font-label-md text-on-surface flex items-center gap-1" for="bounty-title">
+<span>委托标题</span>
+<span class="text-secondary">*</span>
+</label>
+<span class="text-label-sm font-label-sm text-on-surface-variant">22/40 字</span>
+</div>
+<div class="relative">
+<input class="w-full bg-surface-container-high text-on-surface placeholder:text-outline text-body-md font-body-md rounded-lg px-space-md py-2.5 focus:outline-none focus:bg-surface-bright transition-colors" id="bounty-title" placeholder="清晰一句话阐述需求，如：协助调试Python脚本" type="text" value="设计一套赛博像素风的猫咪表情包 (6个静态表情)"/>
+</div>
+</div>
+<!-- Quick Template Injection Chips -->
+<div>
+<div class="flex items-center justify-between mb-1">
+<span class="text-label-sm font-label-sm text-on-surface-variant">快速导入需求模板：</span>
+</div>
+<div class="flex flex-wrap gap-1.5">
+<button class="px-2.5 py-1 rounded bg-surface-container-high text-label-sm font-label-sm text-primary hover:bg-surface-bright transition-colors" onclick="insertTemplate('design')" type="button">
+            + 视觉创作标准
+          </button>
+<button class="px-2.5 py-1 rounded bg-surface-container-high text-label-sm font-label-sm text-secondary hover:bg-surface-bright transition-colors" onclick="insertTemplate('code')" type="button">
+            + 源码联调规范
+          </button>
+<button class="px-2.5 py-1 rounded bg-surface-container-high text-label-sm font-label-sm text-tertiary hover:bg-surface-bright transition-colors" onclick="insertTemplate('errand')" type="button">
+            + 跑腿代送清单
+          </button>
+</div>
+</div>
+<!-- Detail Requirements Description -->
+<div>
+<div class="flex items-center justify-between mb-1.5">
+<label class="text-label-md font-label-md text-on-surface flex items-center gap-1" for="bounty-desc">
+<span>详细需求描述与验收标准</span>
+<span class="text-secondary">*</span>
+</label>
+<span class="text-label-sm font-label-sm text-on-surface-variant">建议说明格式与尺寸</span>
+</div>
+<textarea class="w-full bg-surface-container-high text-on-surface placeholder:text-outline text-body-md font-body-md rounded-lg p-space-md focus:outline-none focus:bg-surface-bright transition-colors leading-relaxed" id="bounty-desc" placeholder="1. 交付标准：尺寸 512x512 PNG，透明底色。
+2. 风格参考：复古像素/霓虹渐变。
+3. 沟通流程：草稿选拔确认后 3 天内产出终稿。" rows="4">1. 交付标准：PNG透明底 512x512 像素，需包含源工程文件 (Aseprite 或 PSD/Figma)。
+2. 角色：机械猫耳朵、荧光绿瞳孔，表情涵盖【摸鱼打瞌睡】、【电量告急】、【收到干杯】等。
+3. 验收节点：竞标阶段请提供 1 个粗略草图概念即可，选定后再细化剩余 5 个。</textarea>
+</div>
+<!-- File & Attachment Upload Area -->
+<div>
+<div class="flex items-center justify-between mb-1.5">
+<span class="text-label-md font-label-md text-on-surface">参考示例与附件</span>
+<span class="text-label-sm font-label-sm text-on-surface-variant">支持 PNG / ZIP / Figma (≤50MB)</span>
+</div>
+<div class="grid grid-cols-3 gap-2">
+<!-- Uploaded Preview Item 1 -->
+<div class="relative group rounded-lg overflow-hidden bg-surface-container-high aspect-square">
+<img class="w-full h-full object-cover" data-alt="A futuristic cyberpunk neon robotic cat digital pixel art sticker illustration, vibrant emerald green glow on metallic slate blue armor, high contrast crisp rendering in game asset aesthetic" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB1jUKEyoJPV3mspHHdvFBbzrEjBLC4UYtRUwmiWYtbNZ0xdj5bCVmwhYqT1jhfGQgxJEimDN6bsgeutntpzMPuEpkUZXVM3UXcrmCtYgO0t4UhWC8Cf3yJ3sHJxEJLVRnz6Eru0wMKGtRYS6ZC2UNU_4y46FWzpmwl1qwWpI_C2c9iabTO0PKkrKXRxalKJq1z2W_g9huDPSu3FT4oePwFxYmhqq-FZrh5fovSypno"/>
+<div class="absolute inset-0 bg-surface-container-lowest/60 flex flex-col justify-between p-1.5 opacity-90">
+<span class="text-label-sm font-label-sm text-secondary bg-surface-container-lowest/80 px-1 py-0.5 rounded self-start">参考图.png</span>
+<button class="w-5 h-5 rounded-full bg-error-container text-on-error-container flex items-center justify-center self-end hover:scale-110 transition-transform" type="button">
+<span class="material-symbols-outlined text-[14px]">close</span>
+</button>
+</div>
+</div>
+<!-- Uploaded Item 2 (Spec Doc) -->
+<div class="relative rounded-lg overflow-hidden bg-surface-container-high aspect-square p-2 flex flex-col justify-between">
+<div class="w-8 h-8 rounded bg-primary/20 text-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px]">attachment</span>
+</div>
+<div>
+<div class="text-label-sm font-label-sm text-on-surface truncate">色板规范.zip</div>
+<div class="text-label-sm font-label-sm text-on-surface-variant">2.4 MB</div>
+</div>
+<button class="absolute top-1 right-1 w-5 h-5 rounded-full bg-surface-bright text-on-surface-variant flex items-center justify-center hover:text-error" type="button">
+<span class="material-symbols-outlined text-[14px]">close</span>
+</button>
+</div>
+<!-- Upload Trigger Button -->
+<label class="cursor-pointer rounded-lg bg-surface-container hover:bg-surface-container-high transition-colors aspect-square flex flex-col items-center justify-center text-center p-2">
+<span class="material-symbols-outlined text-primary text-[24px] mb-1">add_photo_alternate</span>
+<span class="text-label-sm font-label-sm text-on-surface">添加附件</span>
+<span class="text-label-sm font-label-sm text-on-surface-variant">或草稿样例</span>
+<input accept="image/*,.zip,.fig" class="hidden" multiple="" type="file"/>
+</label>
+</div>
+</div>
+</div>
+</section>
+<!-- Module 4: Timeline & Schedule Gantt Planning -->
+<section class="px-margin mb-space-lg">
+<div class="flex items-center justify-between mb-space-xs">
+<h2 class="text-headline-sm font-headline-sm text-on-surface">时间与排期规划</h2>
+<span class="text-label-sm font-label-sm text-secondary font-label-lg">自动触发节点守护</span>
+</div>
+<div class="rounded-xl bg-surface-container-low p-space-md shadow-md space-y-space-md">
+<!-- Mini Visual Timeline Bar -->
+<div class="bg-surface-container rounded-lg p-3">
+<div class="flex items-center justify-between text-label-sm font-label-sm text-on-surface-variant mb-2">
+<span class="flex items-center gap-1 text-secondary">
+<span class="w-2 h-2 rounded-full bg-secondary"></span> 05-18 即刻发布
+          </span>
+<span class="flex items-center gap-1 text-primary">
+<span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span> 05-20 截标选人
+          </span>
+<span class="flex items-center gap-1 text-tertiary">
+<span class="w-2 h-2 rounded-full bg-tertiary"></span> 05-25 成果验收
+          </span>
+</div>
+<!-- Progress track visually showing stages -->
+<div class="w-full h-1.5 bg-surface-container-highest rounded-full overflow-hidden flex">
+<div class="w-1/3 bg-secondary"></div>
+<div class="w-1/3 bg-primary"></div>
+<div class="w-1/3 bg-tertiary"></div>
+</div>
+</div>
+<!-- Schedule Fields Grid -->
+<div class="space-y-space-sm">
+<!-- 1. Start Time -->
+<div class="flex items-center justify-between p-space-sm bg-surface-container-high rounded-lg">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-[18px]">play_circle</span>
+</div>
+<div>
+<div class="text-label-md font-label-md text-on-surface">开始生效时间</div>
+<div class="text-label-sm font-label-sm text-on-surface-variant">发单审核通过后立即展示</div>
+</div>
+</div>
+<button class="px-2.5 py-1.5 rounded-lg bg-surface-container text-on-surface text-label-md font-label-md flex items-center gap-1 hover:bg-surface-bright" type="button">
+<span>今天 (05-18) 10:00 即刻</span>
+<span class="material-symbols-outlined text-[16px]">edit_calendar</span>
+</button>
+</div>
+<!-- 2. Bidding End Time (Dynamic Visibility depending on mode) -->
+<div class="flex items-center justify-between p-space-sm bg-primary/10 rounded-lg" id="bidding-schedule-row">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-lg bg-primary-container/30 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[18px]">how_to_reg</span>
+</div>
+<div>
+<div class="text-label-md font-label-md text-primary flex items-center gap-1">
+<span>投标截止时间</span>
+<span class="px-1.5 py-0.2 rounded text-label-sm font-label-sm bg-primary text-on-primary">竞标专有</span>
+</div>
+<div class="text-label-sm font-label-sm text-on-surface-variant">截止后停止投标并启动24h选人</div>
+</div>
+</div>
+<button class="px-2.5 py-1.5 rounded-lg bg-surface-container-high text-primary font-bold text-label-md font-label-md flex items-center gap-1 hover:bg-surface-bright" type="button">
+<span>2025-05-20 18:00</span>
+<span class="material-symbols-outlined text-[16px]">schedule</span>
+</button>
+</div>
+<!-- 3. Final Deadline -->
+<div class="flex items-center justify-between p-space-sm bg-surface-container-high rounded-lg">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-tertiary">
+<span class="material-symbols-outlined text-[18px]">flag</span>
+</div>
+<div>
+<div class="text-label-md font-label-md text-on-surface">最终交付截至时间</div>
+<div class="text-label-sm font-label-sm text-on-surface-variant">逾期将自动启动超时维权仲裁</div>
+</div>
+</div>
+<button class="px-2.5 py-1.5 rounded-lg bg-surface-container text-on-surface text-label-md font-label-md flex items-center gap-1 hover:bg-surface-bright" type="button">
+<span>2025-05-25 22:00</span>
+<span class="material-symbols-outlined text-[16px]">event_busy</span>
+</button>
+</div>
+</div>
+</div>
+</section>
+<!-- Module 5: Fulfillment Location Settings -->
+<section class="px-margin mb-space-lg">
+<div class="flex items-center justify-between mb-space-xs">
+<h2 class="text-headline-sm font-headline-sm text-on-surface">履约地点设置</h2>
+<span class="text-label-sm font-label-sm text-on-surface-variant">保障协作沟通空间</span>
+</div>
+<div class="rounded-xl bg-surface-container-low p-space-md shadow-md space-y-space-md">
+<!-- Toggle Segment: Remote vs On-site -->
+<div class="flex p-1 bg-surface-container rounded-lg">
+<button class="flex-1 py-1.5 rounded-md text-label-md font-label-md bg-secondary text-on-secondary font-bold shadow-sm transition-all flex items-center justify-center gap-1" id="loc-btn-online" onclick="setLocationType('online')" type="button">
+<span class="material-symbols-outlined text-[18px]">devices</span>
+          线上协作 (无空间限制)
+        </button>
+<button class="flex-1 py-1.5 rounded-md text-label-md font-label-md text-on-surface-variant hover:text-on-surface transition-all flex items-center justify-center gap-1" id="loc-btn-offline" onclick="setLocationType('offline')" type="button">
+<span class="material-symbols-outlined text-[18px]">near_me</span>
+          线下到场 · 同城面对面
+        </button>
+</div>
+<!-- Location Input Box (Online Mode Details) -->
+<div id="loc-input-container">
+<div class="flex items-center gap-2 p-space-sm bg-surface-container-high rounded-lg text-body-md font-body-md text-on-surface">
+<span class="material-symbols-outlined text-secondary text-[20px]">cloud_done</span>
+<input class="bg-transparent text-on-surface flex-1 focus:outline-none text-body-md font-body-md" readonly="" type="text" value="云端在线协作 / 平台加密即时通讯交付"/>
+<span class="text-label-sm font-label-sm text-on-surface-variant">支持音视频/白板</span>
+</div>
+</div>
+<!-- Offline Location Selector & Static Map Preview (Hidden by default, shown via toggle) -->
+<div class="hidden space-y-space-sm" id="loc-map-container">
+<div class="flex items-center gap-2 p-space-sm bg-surface-container-high rounded-lg text-body-md font-body-md text-on-surface">
+<span class="material-symbols-outlined text-tertiary text-[20px]">location_on</span>
+<input class="bg-transparent text-on-surface flex-1 focus:outline-none text-body-md font-body-md" placeholder="输入具体面交 / 协作地址 (如中区图书馆B1创意舱)" type="text" value="高新软件园·创智中心 3号楼咖啡吧"/>
+<button class="text-label-sm font-label-sm text-secondary flex items-center gap-0.5" type="button">
+<span class="material-symbols-outlined text-[14px]">my_location</span>
+            重新定位
+          </button>
+</div>
+<!-- Google Static Map preview container -->
+<div class="w-full h-32 bg-cover bg-center rounded-lg relative overflow-hidden" data-location="Shenzhen Software Park, High-tech Industrial Park, Nanshan" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuAIIuGEYJ0TGGMer3FkKaAWJ1mC8BXoW8TuxfD8385T0QqBx25Q_FLlptTxzm9nMZD3loxwC-Ki-9H6sr7YM8ZC2L3ZLCj3l-4F7LBSpa9hrLdBaIHx7Mkg808XCwMrGb0VmXWVKYXT8r-1DrnN1uj06W3sQjbUUjmrOWiG2OreDhm3zyGbyJGLOP8qE8HbL2GDUEFst8JGRmltRFDImsLU2LD39olA7lWzTFcvOmA-')">
+<div class="absolute inset-0 bg-surface-container-lowest/30 flex items-end p-2">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface/90 text-label-sm font-label-sm text-on-surface">
+<span class="material-symbols-outlined text-tertiary text-[14px]">near_me</span>
+              同城辐射半径: 5km
+            </span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Module 6: Bounty Budget, Smart Escrow & Qualification Gate -->
+<section class="px-margin mb-space-lg">
+<div class="flex items-center justify-between mb-space-xs">
+<h2 class="text-headline-sm font-headline-sm text-on-surface">悬赏金额与门槛</h2>
+<span class="text-label-sm font-label-sm text-on-surface-variant">零抽成 · 100% 履约直达</span>
+</div>
+<div class="rounded-xl bg-surface-container-low p-space-md shadow-md space-y-space-md">
+<!-- PTS Reward Counter Input -->
+<div>
+<label class="block text-label-md font-label-md text-on-surface mb-1.5">悬赏总赏金 (PTS 积分)</label>
+<div class="flex items-center justify-between bg-surface-container-high rounded-lg px-space-md py-2.5">
+<div class="flex items-center gap-2 flex-1">
+<div class="w-7 h-7 rounded-full bg-secondary-container/40 text-secondary flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px]">monetization_on</span>
+</div>
+<input class="w-32 bg-transparent text-headline-lg font-headline-lg text-secondary font-bold focus:outline-none" id="bounty-reward-val" oninput="updateBountyAmount(this.value)" type="number" value="850"/>
+<span class="text-body-sm font-body-sm text-on-surface-variant">PTS 积分</span>
+</div>
+<div class="text-right">
+<span class="text-label-sm font-label-sm text-on-surface-variant">估值 ≈ ¥85.00</span>
+</div>
+</div>
+<!-- Quick Increment Chips -->
+<div class="flex items-center gap-2 mt-2">
+<span class="text-label-sm font-label-sm text-on-surface-variant">快捷充能:</span>
+<button class="px-2 py-0.5 rounded-full bg-surface-container-high hover:bg-surface-bright text-label-sm font-label-sm text-on-surface transition-colors" onclick="adjustAmount(100)" type="button">+100</button>
+<button class="px-2 py-0.5 rounded-full bg-surface-container-high hover:bg-surface-bright text-label-sm font-label-sm text-on-surface transition-colors" onclick="adjustAmount(200)" type="button">+200</button>
+<button class="px-2 py-0.5 rounded-full bg-surface-container-high hover:bg-surface-bright text-label-sm font-label-sm text-on-surface transition-colors" onclick="adjustAmount(500)" type="button">+500</button>
+<button class="px-2 py-0.5 rounded-full bg-surface-container-high hover:bg-surface-bright text-label-sm font-label-sm text-on-surface transition-colors" onclick="adjustAmount(1000)" type="button">+1000</button>
+</div>
+</div>
+<!-- Trust & Credibility Threshold Toggles -->
+<div class="pt-space-xs space-y-3">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[20px]">shield</span>
+<div>
+<div class="text-label-md font-label-md text-on-surface">仅限信用分 ≥ 700 参与</div>
+<div class="text-label-sm font-label-sm text-on-surface-variant">过滤低活跃或有超时纠纷记录者</div>
+</div>
+</div>
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-11 h-6 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-secondary"></div>
+</label>
+</div>
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary text-[20px]">badge</span>
+<div>
+<div class="text-label-md font-label-md text-on-surface">开启实名认证要求</div>
+<div class="text-label-sm font-label-sm text-on-surface-variant">仅允许通过学籍/机构实名登记的探索者接单</div>
+</div>
+</div>
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-11 h-6 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-secondary"></div>
+</label>
+</div>
+</div>
+<!-- Smart Escrow Notice Callout -->
+<div class="p-space-sm rounded-lg bg-surface-container flex items-start gap-2">
+<span class="material-symbols-outlined text-secondary text-[18px] shrink-0 mt-0.5">lock_clock</span>
+<p class="text-label-sm font-label-sm text-on-surface-variant leading-relaxed">
+          发布确认后，系统将自动从可用资产冻结 <span class="text-secondary font-bold" id="escrow-display-text">850 PTS</span> 至专属智能托管合约。在您确认满意并验收之前，任何一方均无法提前支取，确保履约无忧。
+        </p>
+</div>
+</div>
+</section>
+<!-- Sticky Bottom Confirmation Dock -->
+<aside class="fixed bottom-0 left-0 right-0 z-40 bg-surface/90 backdrop-blur-xl px-margin py-3 shadow-[0_-4px_24px_rgba(0,0,0,0.5)]">
+<div class="max-w-md mx-auto flex items-center justify-between gap-space-md">
+<!-- Escrow Balance Counter summary -->
+<div class="flex flex-col shrink-0">
+<span class="text-label-sm font-label-sm text-on-surface-variant">预估冻结托管</span>
+<div class="flex items-baseline gap-1">
+<span class="text-headline-md font-headline-md text-secondary" id="footer-bounty-val">850</span>
+<span class="text-label-sm font-label-sm text-secondary">PTS</span>
+</div>
+</div>
+<!-- Primary Action CTA -->
+<button class="flex-1 min-h-[48px] px-space-md py-3 rounded-xl bg-primary text-on-primary font-headline-sm text-headline-sm font-bold shadow-lg hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-2" onclick="handlePublishSubmit()" type="button">
+<span class="material-symbols-outlined text-[20px]">rocket_launch</span>
+<span>确认托管并发布委托</span>
+</button>
+</div>
+</aside>
+<!-- Interactive Feedback Dialog (Hidden by Default) -->
+<div class="fixed inset-0 z-50 bg-surface-dim/80 backdrop-blur-sm flex items-center justify-center p-margin hidden" id="publish-modal">
+<div class="w-full max-w-sm rounded-xl bg-surface-container-high p-space-lg text-center shadow-2xl relative">
+<div class="w-16 h-16 rounded-full bg-secondary/20 text-secondary mx-auto flex items-center justify-center mb-space-sm animate-bounce">
+<span class="material-symbols-outlined text-[36px]">check_circle</span>
+</div>
+<h3 class="text-headline-md font-headline-md text-on-surface mb-1">委托发布成功！</h3>
+<p class="text-body-sm font-body-sm text-on-surface-variant mb-space-md">
+        已成功冻结 850 PTS 积分至托管池，当前竞标模式已广播至全网探索者网络。
+      </p>
+<div class="space-y-2">
+<button class="w-full py-2.5 rounded-lg bg-primary text-on-primary font-headline-sm text-headline-sm" onclick="closeModal()" type="button">
+          进入委托管理频道
+        </button>
+<button class="w-full py-2 rounded-lg bg-surface-container text-on-surface-variant font-label-md text-label-md" onclick="closeModal()" type="button">
+          返回主看板
+        </button>
+</div>
+</div>
+</div>
+</div>
+<script>
+  // Mode selection interaction
+  function selectMode(mode) {
+    const snatchBtn = document.getElementById('mode-snatch');
+    const biddingBtn = document.getElementById('mode-bidding');
+    const biddingRow = document.getElementById('bidding-schedule-row');
+
+    if (mode === 'snatch') {
+      snatchBtn.className = "relative text-left p-space-md rounded-xl transition-all duration-200 bg-surface-container-high text-on-surface shadow-lg";
+      snatchBtn.querySelector('.badge-status').classList.remove('hidden');
+      
+      biddingBtn.className = "relative text-left p-space-md rounded-xl transition-all duration-200 bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high";
+      biddingBtn.querySelector('.badge-status').classList.add('hidden');
+      
+      if (biddingRow) biddingRow.classList.add('opacity-40', 'pointer-events-none');
+    } else {
+      biddingBtn.className = "relative text-left p-space-md rounded-xl transition-all duration-200 bg-surface-container-high text-on-surface shadow-lg";
+      biddingBtn.querySelector('.badge-status').classList.remove('hidden');
+
+      snatchBtn.className = "relative text-left p-space-md rounded-xl transition-all duration-200 bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high";
+      snatchBtn.querySelector('.badge-status').classList.add('hidden');
+
+      if (biddingRow) biddingRow.classList.remove('opacity-40', 'pointer-events-none');
+    }
+  }
+
+  // Location Toggle
+  function setLocationType(type) {
+    const onlineBtn = document.getElementById('loc-btn-online');
+    const offlineBtn = document.getElementById('loc-btn-offline');
+    const onlineContainer = document.getElementById('loc-input-container');
+    const offlineContainer = document.getElementById('loc-map-container');
+
+    if (type === 'online') {
+      onlineBtn.className = "flex-1 py-1.5 rounded-md text-label-md font-label-md bg-secondary text-on-secondary font-bold shadow-sm transition-all flex items-center justify-center gap-1";
+      offlineBtn.className = "flex-1 py-1.5 rounded-md text-label-md font-label-md text-on-surface-variant hover:text-on-surface transition-all flex items-center justify-center gap-1";
+      onlineContainer.classList.remove('hidden');
+      offlineContainer.classList.add('hidden');
+    } else {
+      offlineBtn.className = "flex-1 py-1.5 rounded-md text-label-md font-label-md bg-secondary text-on-secondary font-bold shadow-sm transition-all flex items-center justify-center gap-1";
+      onlineBtn.className = "flex-1 py-1.5 rounded-md text-label-md font-label-md text-on-surface-variant hover:text-on-surface transition-all flex items-center justify-center gap-1";
+      onlineContainer.classList.add('hidden');
+      offlineContainer.classList.remove('hidden');
+    }
+  }
+
+  // Quick Amount Handlers
+  function updateBountyAmount(val) {
+    const num = Math.max(10, parseInt(val) || 0);
+    document.getElementById('footer-bounty-val').textContent = num;
+    document.getElementById('escrow-display-text').textContent = num + " PTS";
+  }
+
+  function adjustAmount(delta) {
+    const input = document.getElementById('bounty-reward-val');
+    const current = parseInt(input.value) || 0;
+    input.value = current + delta;
+    updateBountyAmount(input.value);
+  }
+
+  // Template Quick Insert
+  function insertTemplate(type) {
+    const descArea = document.getElementById('bounty-desc');
+    if (type === 'design') {
+      descArea.value = "【视觉交付标准】\n1. 规格尺寸：PNG透明底 1024x1024 / 支持矢量源文件。\n2. 配色基调：深冷霓虹高反差，赛博风。\n3. 阶段节点：提交草稿选拔 -> 确认方向 -> 终稿完工。";
+    } else if (type === 'code') {
+      descArea.value = "【开发协作规范】\n1. 技术栈：Vue3 / TypeScript / Tailwind CSS。\n2. 验收指标：完整复现Bug修复、附带单测与GitHub PR。\n3. 交付期限：48小时内给出解决原型方案。";
+    } else if (type === 'errand') {
+      descArea.value = "【跑腿代送清单】\n1. 取件点：软件园3号楼前台。\n2. 送达点：中区图书馆B座203研修室。\n3. 物品类型：书籍资料与密封信封，请轻拿轻放。";
+    }
+  }
+
+  // Publish Dialog
+  function handlePublishSubmit() {
+    const modal = document.getElementById('publish-modal');
+    modal.classList.remove('hidden');
+  }
+
+  function closeModal() {
+    const modal = document.getElementById('publish-modal');
+    modal.classList.add('hidden');
+  }
+
+  // Category pill switcher
+  document.querySelectorAll('.category-pill').forEach(pill => {
+    pill.addEventListener('click', function() {
+      document.querySelectorAll('.category-pill').forEach(p => {
+        p.className = "category-pill shrink-0 px-3.5 py-1.5 rounded-full text-label-md font-label-md bg-surface-container text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors flex items-center gap-1";
+      });
+      this.className = "category-pill shrink-0 px-3.5 py-1.5 rounded-full text-label-md font-label-md bg-primary text-on-primary font-bold shadow-sm transition-transform active:scale-95 flex items-center gap-1";
+    });
+  });
+</script></main></body></html>

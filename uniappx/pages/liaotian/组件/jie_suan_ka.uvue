@@ -1,0 +1,235 @@
+<script setup lang="ts">
+/**
+ * 聊天里的「委托状态 / 结算卡」。
+ * 对应设计稿 对话.html 中 class="bg-surface-container-high rounded-xl p-space-md shadow-xl relative overflow-hidden" 那一块：
+ * 右上角绿色环境光晕 + 验收标题 + 赏金条 + 「验收结算 / 提出修改意见」两个按钮。
+ */
+const 属性 = defineProps({
+	标题: { type: String, default: '成果物验收与托管释放' },
+	副标题: { type: String, default: '请核实源文件无误后确认放行赏金' },
+	金额说明: { type: String, default: '本次结算赏金' },
+	金额: { type: String, default: '500' },
+	单位: { type: String, default: '积分' },
+	验收文字: { type: String, default: '验收委托成果并结算' },
+	修改文字: { type: String, default: '提出修改意见' },
+})
+
+const 发出 = defineEmits(['验收', '修改'])
+</script>
+
+<template>
+	<view class="jsk_wai">
+		<view class="jsk">
+			<!-- 右上角光晕：设计稿用 blur-2xl，这里用预烘焙的径向渐隐 PNG（边缘 alpha 为 0） -->
+			<image class="jsk_guang" src="/static/guang/qing_40.png" mode="scaleToFill"></image>
+
+			<view class="jsk_tou_hang">
+				<view class="jsk_tou_kuang">
+					<image class="jsk_tou_tu" src="/static/liaotian/icons/task_alt.svg" mode="aspectFit"></image>
+				</view>
+				<view class="jsk_tou_wen">
+					<text class="jsk_biao_ti">{{ 属性.标题 }}</text>
+					<text class="jsk_fu_biao_ti">{{ 属性.副标题 }}</text>
+				</view>
+			</view>
+
+			<view class="jsk_jin_e_hang">
+				<text class="jsk_jin_e_biao">{{ 属性.金额说明 }}</text>
+				<view class="jsk_jin_e_you">
+					<image class="jsk_qian" src="/static/liaotian/icons/monetization_on.svg" mode="aspectFit"></image>
+					<text class="jsk_jin_e_shu">{{ 属性.金额 }}</text>
+					<text class="jsk_jin_e_dan">{{ 属性.单位 }}</text>
+				</view>
+			</view>
+
+			<view class="jsk_an_niu_hang">
+				<view class="jsk_an_niu_zhu" @click="发出('验收')">
+					<image class="jsk_an_niu_tu" src="/static/liaotian/icons/verified.svg" mode="aspectFit"></image>
+					<text class="jsk_an_niu_zi_zhu">{{ 属性.验收文字 }}</text>
+				</view>
+				<view class="jsk_an_niu_hui" @click="发出('修改')">
+					<image class="jsk_an_niu_tu" src="/static/liaotian/icons/edit_note.svg" mode="aspectFit"></image>
+					<text class="jsk_an_niu_zi_hui">{{ 属性.修改文字 }}</text>
+				</view>
+			</view>
+		</view>
+	</view>
+</template>
+
+<style>
+/* 组件内也有 text，uni-app x 不继承父 view 字体，字体得在组件内再注册一次 */
+@font-face { font-family: 'PJS400'; src: url('/static/hui_hua/fonts/PlusJakartaSans-400.ttf'); }
+@font-face { font-family: 'PJS500'; src: url('/static/hui_hua/fonts/PlusJakartaSans-500.ttf'); }
+@font-face { font-family: 'PJS600'; src: url('/static/hui_hua/fonts/PlusJakartaSans-600.ttf'); }
+@font-face { font-family: 'PJS700'; src: url('/static/hui_hua/fonts/PlusJakartaSans-700.ttf'); }
+@font-face { font-family: 'SG600'; src: url('/static/hui_hua/fonts/SpaceGrotesk-600.ttf'); }
+@font-face { font-family: 'SG700'; src: url('/static/hui_hua/fonts/SpaceGrotesk-700.ttf'); }
+
+/* ---------- 外层定位：mx-auto w-full max-w-sm my-space-sm ---------- */
+.jsk_wai {
+	width: 100%;
+	max-width: 384px;
+	align-self: center;
+	margin-top: 8px;
+	margin-bottom: 8px;
+}
+
+/* ---------- 卡片：bg-surface-container-high rounded-xl p-space-md shadow-xl ---------- */
+.jsk {
+	position: relative;
+	width: 100%;
+	padding: 16px;
+	border-radius: 12px;
+	overflow: hidden;
+	background-color: #222a3d;
+	box-shadow: 0 20px 25px rgba(0, 0, 0, 0.28);
+}
+
+.jsk_guang {
+	position: absolute;
+	top: -40px;
+	right: -40px;
+	width: 112px;
+	height: 112px;
+}
+
+/* ---------- 卡片头 ---------- */
+.jsk_tou_hang {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	margin-bottom: 8px;
+}
+.jsk_tou_kuang {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 40px;
+	height: 40px;
+	flex-shrink: 0;
+	border-radius: 20px;
+	background-color: #00a572;
+	box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+}
+.jsk_tou_tu { width: 24px; height: 24px; }
+
+.jsk_tou_wen {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-width: 0;
+	margin-left: 8px;
+}
+.jsk_biao_ti {
+	font-family: 'PJS400';
+	font-size: 18px;
+	line-height: 24px;
+	font-weight: 600;
+	letter-spacing: -0.18px;
+	color: #dae2fd;
+}
+.jsk_fu_biao_ti {
+	font-family: 'PJS400';
+	font-size: 12px;
+	line-height: 16px;
+	letter-spacing: 0.12px;
+	color: #c7c4d7;
+}
+
+/* ---------- 赏金条 ---------- */
+.jsk_jin_e_hang {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 16px;
+	padding: 8px;
+	border-radius: 8px;
+	background-color: #060e20;
+}
+.jsk_jin_e_biao {
+	font-family: 'PJS400';
+	font-size: 12px;
+	line-height: 16px;
+	letter-spacing: 0.12px;
+	color: #c7c4d7;
+}
+.jsk_jin_e_you {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+}
+.jsk_qian { width: 18px; height: 18px; }
+.jsk_jin_e_shu {
+	margin-left: 4px;
+	font-family: 'PJS400';
+	font-size: 22px;
+	line-height: 28px;
+	font-weight: 700;
+	letter-spacing: -0.33px;
+	color: #4edea3;
+}
+.jsk_jin_e_dan {
+	margin-left: 4px;
+	font-family: 'SG600';
+	font-size: 10px;
+	line-height: 14px;
+	font-weight: 700;
+	letter-spacing: 0.5px;
+	color: #908fa0;
+}
+
+/* ---------- 两个操作按钮 ---------- */
+.jsk_an_niu_hang {
+	display: flex;
+	flex-direction: column;
+}
+.jsk_an_niu_zhu {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+	width: 100%;
+	padding-top: 12px;
+	padding-bottom: 12px;
+	border-radius: 8px;
+	background-color: #4edea3;
+	box-shadow: 0 10px 15px rgba(78, 222, 163, 0.2);
+}
+.jsk_an_niu_hui {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+	width: 100%;
+	margin-top: 8px;
+	padding-top: 10px;
+	padding-bottom: 10px;
+	border-radius: 8px;
+	background-color: #171f33;
+}
+.jsk_an_niu_tu { width: 18px; height: 18px; }
+.jsk_an_niu_zi_zhu {
+	margin-left: 8px;
+	font-family: 'SG600';
+	font-size: 14px;
+	line-height: 18px;
+	font-weight: 600;
+	letter-spacing: 0.28px;
+	color: #003824;
+}
+.jsk_an_niu_zi_hui {
+	margin-left: 6px;
+	font-family: 'SG600';
+	font-size: 12px;
+	line-height: 16px;
+	font-weight: 600;
+	letter-spacing: 0.36px;
+	color: #c7c4d7;
+}
+
+	/* 按字重指向对应 ttf：uni-app x 的自定义字体规则不支持字重属性，Android 单字重字体也不响应数值字重 */
+	.jsk_biao_ti { font-family: 'PJS600'; }
+	.jsk_jin_e_shu { font-family: 'PJS700'; }
+	.jsk_jin_e_dan { font-family: 'SG700'; }
+</style>

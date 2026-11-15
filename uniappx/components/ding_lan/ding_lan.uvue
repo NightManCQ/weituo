@@ -1,0 +1,203 @@
+<script setup lang="ts">
+import { computed } from 'vue'
+
+/**
+ * 设计稿页面的固定顶栏合并组件：
+ *   外观='会话列表' → LINKQUEST / Messages（原 .hh_ding_lan，标题可用 标题 覆盖，如"我的"页的 Profile）
+ *   外观='委托详情' → Connect & Create / LINKQUEST NET（原 .wt_ding_lan）
+ *   外观='我的委托' → 单行大标题 My Delegations（设计图/我的委托.html 的顶栏，无 logo / 副标题）
+ * 右侧图标按钮区（原 .hh_tu_an_niu 那一组）交给默认插槽，页面自己排内容。
+ * 返回按钮由 显示返回 用 v-if 控制；直接打开页面时没有上一页，退回会话列表。
+ */
+const 属性 = defineProps({
+	外观: { type: String, default: '会话列表' },
+	标题: { type: String, default: '' },
+	显示返回: { type: Boolean, default: false },
+	// 页面要用 64 + 状态栏高 做内容占位，所以两边共用同一个值；不传时组件自己取
+	状态栏高: { type: Number, default: -1 },
+})
+
+// 必须是 computed：页面在 onLoad 里才拿到 statusBarHeight，prop 会晚一拍更新，
+// 用 ref 只在 setup 取一次会让安卓端顶栏拿不到状态栏留白。
+const 顶栏状态栏高 = computed(() =>
+	属性.状态栏高 >= 0 ? 属性.状态栏高 : (uni.getSystemInfoSync().statusBarHeight ?? 0)
+)
+
+/** 有上一页就退回；页面栈只剩自己（直接打开/分享进入）时回会话列表。
+ *  会话列表是 tabBar 页，必须用 switchTab；navigateBack 的 fail 再做一次兜底。 */
+function 返回() {
+	const 栈 = getCurrentPages()
+	if (栈.length > 1) {
+		uni.navigateBack({ fail: () => uni.switchTab({ url: '/pages/xiaoxi/xiaoxi' }) })
+	} else {
+		uni.switchTab({ url: '/pages/xiaoxi/xiaoxi' })
+	}
+}
+</script>
+
+<template>
+	<view
+		class="dl_ding_lan"
+		:class="属性.外观 == '委托详情' ? 'dl_ding_lan_wei' : (属性.外观 == '我的委托' ? 'dl_ding_lan_wd' : 'dl_ding_lan_hui')"
+		:style="{ paddingTop: 顶栏状态栏高 + 'px' }"
+	>
+		<view class="dl_ding_nei">
+			<view class="dl_ding_zuo">
+				<view v-if="属性.显示返回" class="dl_fan_hui" @click="返回">
+					<image class="dl_fan_hui_tu" src="/static/wei_tuo/icons/arrow_back.svg" mode="aspectFit"></image>
+				</view>
+
+				<image
+					v-if="属性.外观 == '会话列表'"
+					class="dl_logo"
+					:class="属性.显示返回 ? 'dl_logo_wei' : ''"
+					src="/static/hui_hua/logo.jpg"
+					mode="aspectFit"
+				></image>
+				<image
+					v-if="属性.外观 == '委托详情'"
+					class="dl_logo dl_logo_wei"
+					src="/static/wei_tuo/logo.jpg"
+					mode="aspectFit"
+				></image>
+
+				<view v-if="属性.外观 == '会话列表'" class="dl_logo_wen">
+					<text class="dl_pin_pai">LINKQUEST</text>
+					<text class="dl_ye_biao_ti">{{ 属性.标题 != '' ? 属性.标题 : 'Messages' }}</text>
+				</view>
+				<view v-if="属性.外观 == '委托详情'" class="dl_pin_pai_lan">
+					<text class="dl_pin_pai_zhu">Connect &amp; Create</text>
+					<text class="dl_pin_pai_fu">LINKQUEST NET</text>
+				</view>
+				<view v-if="属性.外观 == '我的委托'" class="dl_wd_biao_ti_lan">
+					<text class="dl_wd_biao_ti">{{ 属性.标题 != '' ? 属性.标题 : 'My Delegations' }}</text>
+				</view>
+			</view>
+
+			<!-- 右侧图标按钮：原 .hh_tu_an_niu 区域，由使用方通过插槽注入 -->
+			<view class="dl_ding_you">
+				<slot></slot>
+			</view>
+		</view>
+	</view>
+</template>
+
+<style>
+/* 组件里也有 text，uni-app x 不继承父 view 字体，字体得在组件内再注册一次 */
+@font-face { font-family: 'PJS400'; src: url('/static/hui_hua/fonts/PlusJakartaSans-400.ttf'); }
+@font-face { font-family: 'PJS600'; src: url('/static/hui_hua/fonts/PlusJakartaSans-600.ttf'); }
+@font-face { font-family: 'PJS700'; src: url('/static/hui_hua/fonts/PlusJakartaSans-700.ttf'); }
+@font-face { font-family: 'PJS800'; src: url('/static/hui_hua/fonts/PlusJakartaSans-800.ttf'); }
+@font-face { font-family: 'SG600'; src: url('/static/hui_hua/fonts/SpaceGrotesk-600.ttf'); }
+@font-face { font-family: 'SG700'; src: url('/static/hui_hua/fonts/SpaceGrotesk-700.ttf'); }
+
+.dl_ye_biao_ti, .dl_pin_pai_zhu { font-family: 'PJS400'; }
+.dl_pin_pai, .dl_pin_pai_fu { font-family: 'SG600'; }
+
+.dl_ding_lan {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	z-index: 50;
+	box-shadow: 0 1px 8px rgba(0, 0, 0, 0.04);
+}
+/* 会话列表沿用设计稿的半透明底；委托详情 App 端不支持 backdrop-blur，用不透明底 */
+.dl_ding_lan_hui { background-color: rgba(11, 19, 38, 0.86); }
+.dl_ding_lan_wei { background-color: #0b1326; }
+/* 我的委托设计稿顶栏：bg-surface/80 + backdrop-blur-xl + 阴影，App 端无模糊用不透明底 */
+.dl_ding_lan_wd { background-color: #0b1326; box-shadow: 0 1px 8px rgba(0, 0, 0, 0.15); }
+.dl_wd_biao_ti_lan { display: flex; flex-direction: row; align-items: center; }
+.dl_wd_biao_ti {
+	color: #dae2fd;
+	font-size: 18px;
+	line-height: 24px;
+	font-weight: 700;
+	letter-spacing: -0.45px;
+	font-family: 'PJS700';
+}
+.dl_ding_nei {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	height: 64px;
+	padding-left: 16px;
+	padding-right: 16px;
+}
+.dl_ding_zuo {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+}
+.dl_ding_you {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+}
+
+.dl_fan_hui {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 44px;
+	height: 44px;
+	margin-left: -8px;
+}
+.dl_fan_hui_tu { width: 24px; height: 24px; }
+
+.dl_logo { width: 32px; height: 32px; }
+.dl_logo_wei { margin-left: 4px; }
+.dl_logo_wen {
+	display: flex;
+	flex-direction: column;
+	margin-left: 8px;
+}
+.dl_pin_pai {
+	color: #c0c1ff;
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: 1px;
+}
+.dl_ye_biao_ti {
+	color: #dae2fd;
+	font-size: 18px;
+	font-weight: 600;
+	line-height: 22px;
+}
+.dl_pin_pai_lan {
+	display: flex;
+	flex-direction: column;
+	margin-left: 4px;
+}
+.dl_pin_pai_zhu {
+	font-size: 18px;
+	line-height: 24px;
+	font-weight: 600;
+	color: #dae2fd;
+}
+.dl_pin_pai_fu {
+	font-size: 10px;
+	line-height: 14px;
+	font-weight: 700;
+	letter-spacing: 1px;
+	color: #4edea3;
+}
+
+/* 插槽内图标按钮的通用样式，等价于原 .hh_tu_an_niu / .hh_tu_22 */
+.dl_tu_an_niu {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 44px;
+	height: 44px;
+	margin-right: 4px;
+}
+.dl_tu_22 { width: 22px; height: 22px; }
+
+	/* 按字重指向对应 ttf：uni-app x 的自定义字体规则不支持字重属性，Android 单字重字体也不响应数值字重 */
+	.dl_ye_biao_ti { font-family: 'PJS600'; }
+	.dl_pin_pai_zhu { font-family: 'PJS600'; }
+	.dl_pin_pai { font-family: 'SG700'; }
+	.dl_pin_pai_fu { font-family: 'SG700'; }
+</style>

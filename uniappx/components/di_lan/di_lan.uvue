@@ -1,0 +1,253 @@
+<script setup lang="ts">
+import { computed, ref } from 'vue'
+import { 使用全局变量 } from '../../状态/全局.ts'
+
+/**
+ * 设计稿页面的固定底栏合并组件（原 .hh_di_lan / .yh_di_lan）。
+ *
+ *   外观='会话列表' → 半透明底 + hui_hua 图标 + 会话列表页的文字/角标细节
+ *   外观='我的'     → 不透明底 + yong_hu 图标 + 我的页的文字/角标细节
+ *   当前页          → '消息' | '联系人' | '世界' | '我的'，决定哪项高亮
+ *   未读数          → 「消息」右上角标；0 隐藏，>99 显示 99+
+ *   窗口底高        → 对应 App.uvue 里 uni.getSystemInfo 的「窗口底高」，底栏抬到它上面。
+ * 本组件只由首页 pages/shou_ye/shou_ye 渲染一份：点击导航项抛 change-tab
+ * 交给首页切标签，组件本身不做任何页面跳转（子页面都已不再自带底栏）。
+ *
+ * 底栏固定 4 项：消息 / 联系人 / 世界 / 我的。
+ * 原「委托广场」「发布」两个入口已按需求移除：这两页现在是 pages.json 注册的
+ * 独立页面，由世界页内部入口（快捷探索矩阵、委托广场精选、右下悬浮按钮）
+ * 用 uni.navigateTo 页面级跳转打开，不再在首页内切标签。
+ * 「世界」用设计稿的 public 图标，激活紫色、非激活灰色。
+ *
+ * 底栏固定 58px：未选中的导航项正常排在栏内，当前页对应的项升高凸出底栏上沿，
+ * 用 transition 做入场/切换动画。
+ *
+ * 注意：设计稿里「消息」「我的」图标本身就是带色的，激活项用紫色版、非激活项用灰色版，
+ * 所以这两个图标要按 当前页 切换资源，不能只改文字颜色。
+ */
+const 属性 = defineProps({
+	外观: { type: String, default: '会话列表' },
+	当前页: { type: String, default: '世界' },
+	未读数: { type: Number, default: 0 },
+	窗口底高: { type: Number, default: -1 },
+})
+
+/** 向首页抛出目标标签名：'消息' | '联系人' | '世界' | '我的' */
+const 事件 = defineEmits(['change-tab'])
+
+const 外观是我 = computed(() => 属性.外观 == '我的')
+const 栏类 = computed(() => 外观是我.value ? 'dl_di_lan_wo' : 'dl_di_lan_hui')
+// 两页设计稿的文字/角标细节略有差别（我的页多一行高与字距），用修饰类原样保留
+const 文字修饰 = computed(() => 外观是我.value ? 'dl_zi_wo' : '')
+const 角标修饰 = computed(() => 外观是我.value ? 'dl_jiao_wo' : 'dl_jiao_hui')
+
+/**
+ * windowBottom 是「窗口底部到屏幕底部」的距离。有原生 tabBar 时页面视口已经扣掉它，
+ * 但 uni-app x 自定义导航 + 页面级滚动下，fixed 元素仍要显式抬到这个值之上，
+ * 否则底栏会压在系统栏上（或被系统栏盖住）。
+ * 取值优先级：页面显式传入 > App.uvue 缓存的全局「窗口底高」 > 现场同步取一次。
+ */
+const 底部偏移 = computed(() => {
+	if (属性.窗口底高 >= 0) return 属性.窗口底高
+	const 缓存值 = (使用全局变量 as any).系统信息?.窗口底高
+	if (typeof 缓存值 == 'number' && 缓存值 > 0) return 缓存值
+	const 结果 : any = uni.getSystemInfoSync()
+	return 结果.windowBottom ?? 0
+})
+const 底栏样式 = computed(() => ({ bottom: 底部偏移.value + 'px' }))
+
+/* 首次渲染先让所有项落在栏内，下一帧再把当前页项升起来，这样进场就有动画 */
+const 已激活 = ref(false)
+setTimeout(() => { 已激活.value = true }, 100)
+
+function 选中类(名称 : string) {
+	return 已激活.value && 属性.当前页 == 名称 ? 'dl_xiang_ji' : ''
+}
+function 光晕类(名称 : string) {
+	return 已激活.value && 属性.当前页 == 名称 ? 'dl_guang_ji' : ''
+}
+
+const 消息图标 = computed(() => 属性.当前页 == '消息'
+	? '/static/hui_hua/icons/i_chat_bubble.svg'
+	: '/static/yong_hu/icons/chat_bubble.svg')
+// 设计稿联系人页底栏的 contacts 图标：选中紫色、未选中灰色
+const 联系人图标 = computed(() => 属性.当前页 == '联系人'
+	? '/static/lianxiren/icons/contacts_active.svg'
+	: '/static/lianxiren/icons/contacts.svg')
+// 世界页 public 图标：选中紫色、未选中灰色
+const 世界图标 = computed(() => 属性.当前页 == '世界'
+	? '/static/shijie/icons/public_active.svg'
+	: '/static/shijie/icons/public.svg')
+const 我的图标 = computed(() => 属性.当前页 == '我的'
+	? '/static/yong_hu/icons/person.svg'
+	: '/static/hui_hua/icons/i_person.svg')
+
+const 角标文字 = computed(() => 属性.未读数 > 99 ? '99+' : String(属性.未读数))
+
+const 消息文字类 = computed(() => (属性.当前页 == '消息' ? 'dl_zi_ji ' : '') + 文字修饰.value)
+const 联系人文字类 = computed(() => (属性.当前页 == '联系人' ? 'dl_zi_ji ' : '') + 文字修饰.value)
+const 世界文字类 = computed(() => (属性.当前页 == '世界' ? 'dl_zi_ji ' : '') + 文字修饰.value)
+const 我的文字类 = computed(() => (属性.当前页 == '我的' ? 'dl_zi_ji ' : '') + 文字修饰.value)
+
+function 去消息() {
+	事件('change-tab', '消息')
+}
+function 去联系人() {
+	事件('change-tab', '联系人')
+}
+function 去世界() {
+	事件('change-tab', '世界')
+}
+function 去我的() {
+	事件('change-tab', '我的')
+}
+</script>
+
+<template>
+	<view class="dl_di_lan" :class="栏类" :style="底栏样式">
+		<view class="dl_di_nei">
+			<view class="dl_xiang" :class="选中类('消息')" @click="去消息">
+				<view class="dl_tu_kuang">
+					<view class="dl_guang" :class="光晕类('消息')"></view>
+					<image class="dl_tu" :src="消息图标" mode="aspectFit"></image>
+					<text v-if="属性.未读数 > 0" class="dl_jiao" :class="角标修饰">{{ 角标文字 }}</text>
+				</view>
+				<text class="dl_zi" :class="消息文字类">消息</text>
+			</view>
+
+			<view class="dl_xiang" :class="选中类('联系人')" @click="去联系人">
+				<view class="dl_tu_kuang">
+					<view class="dl_guang" :class="光晕类('联系人')"></view>
+					<image class="dl_tu" :src="联系人图标" mode="aspectFit"></image>
+				</view>
+				<text class="dl_zi" :class="联系人文字类">联系人</text>
+			</view>
+
+			<view class="dl_xiang" :class="选中类('世界')" @click="去世界">
+				<view class="dl_tu_kuang">
+					<view class="dl_guang" :class="光晕类('世界')"></view>
+					<image class="dl_tu" :src="世界图标" mode="aspectFit"></image>
+				</view>
+				<text class="dl_zi" :class="世界文字类">世界</text>
+			</view>
+
+			<view class="dl_xiang" :class="选中类('我的')" @click="去我的">
+				<view class="dl_tu_kuang">
+					<view class="dl_guang" :class="光晕类('我的')"></view>
+					<image class="dl_tu" :src="我的图标" mode="aspectFit"></image>
+				</view>
+				<text class="dl_zi" :class="我的文字类">我的</text>
+			</view>
+		</view>
+	</view>
+</template>
+
+<style>
+/* 组件里的 text 不继承页面字体，Space Grotesk 要在组件内再注册一次 */
+@font-face { font-family: 'SG600'; src: url('/static/hui_hua/fonts/SpaceGrotesk-600.ttf'); }
+@font-face { font-family: 'SG700'; src: url('/static/hui_hua/fonts/SpaceGrotesk-700.ttf'); }
+
+.dl_zi, .dl_jiao { font-family: 'SG600'; }
+
+.dl_di_lan {
+	position: fixed;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 50;
+	/* 固定 58px；bottom 由 :style 覆盖成 windowBottom */
+	height: 58px;
+	/* uvue 的 view 默认 overflow:hidden，不放开会把升高凸出的选中项裁掉 */
+	overflow: visible;
+	box-shadow: 0 -1px 8px rgba(0, 0, 0, 0.04);
+}
+/* 会话列表沿用设计稿半透明底；我的页 App 端不支持 backdrop-blur，用不透明底 */
+.dl_di_lan_hui { background-color: rgba(11, 19, 38, 0.86); }
+.dl_di_lan_wo { background-color: #0b1326; }
+
+.dl_di_nei {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-around;
+	height: 58px;
+	padding-left: 8px;
+	padding-right: 8px;
+	overflow: visible;
+}
+.dl_xiang {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	width: 64px;
+	height: 56px;
+	/* uvue 的 view 默认 overflow:hidden。选中项里的圆形高亮(top:-10, 36×36)和未读角标
+	   都会探出这个 64×56 的框，尤其 translateY(-14px) 抬升后顶部会被切平，必须放开。 */
+	overflow: visible;
+	transform: translateY(0px);
+	transition-property: transform;
+	transition-duration: 280ms;
+	transition-timing-function: ease-out;
+}
+/* 当前页项升高，图标部分凸出底栏上沿 */
+.dl_xiang_ji { transform: translateY(-14px); }
+
+.dl_tu_kuang {
+	position: relative;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	/* 角标、圆形高亮都要探出这个框 */
+	overflow: visible;
+}
+/* 选中项的圆形高亮底：常驻但透明，靠 opacity 过渡淡入 */
+.dl_guang {
+	position: absolute;
+	left: -6px;
+	top: -10px;
+	width: 36px;
+	height: 36px;
+	border-radius: 18px;
+	background-color: rgba(128, 131, 255, 0.22);
+	box-shadow: 0 8px 18px rgba(99, 102, 241, 0.35);
+	opacity: 0;
+	transition-property: opacity;
+	transition-duration: 280ms;
+	transition-timing-function: ease-out;
+}
+.dl_guang_ji { opacity: 1; }
+.dl_tu { position: relative; z-index: 1; width: 24px; height: 24px; }
+
+.dl_jiao {
+	position: absolute;
+	z-index: 2;
+	top: -4px;
+	right: -8px;
+	border-radius: 9999px;
+	background-color: #4edea3;
+	color: #003824;
+	font-size: 10px;
+	overflow: visible;
+}
+.dl_jiao_hui { padding: 1px 6px; line-height: 12px; }
+.dl_jiao_wo {
+	padding-left: 6px;
+	padding-right: 6px;
+	line-height: 10px;
+	font-weight: 700;
+	letter-spacing: 0.5px;
+	text-align: center;
+}
+
+.dl_zi {
+	margin-top: 4px;
+	color: #c7c4d7;
+	font-size: 12px;
+	font-weight: 600;
+}
+.dl_zi_ji { color: #c0c1ff; font-weight: 700; }
+.dl_zi_wo { line-height: 16px; letter-spacing: 0.36px; }
+</style>

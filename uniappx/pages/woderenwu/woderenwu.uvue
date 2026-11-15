@@ -1,137 +1,1286 @@
 <script setup lang="ts">
-import { onShow } from '@dcloudio/uni-app'
-import { ref } from 'vue'
-import type { 任务, 用户 } from '../../common/leixing'
-import { 创建编号, 发送请求, 读取当前用户 } from '../../common/wangluo'
-import { 格式化时间 } from '../xiaoxi/时间'
+import { onLoad } from '@dcloudio/uni-app'
+import { computed, ref } from 'vue'
 
-const 当前用户 = ref<用户 | null>(null)
-const 任务列表 = ref<任务[]>([])
-const 委托总数 = ref(0)
-const 归属 = ref<'published' | 'claimed'>('published')
-const 分类 = ref('all')
-const 正在加载 = ref(false)
-const 错误信息 = ref('')
-const 每页数量 = 10
+/**
+ * 设计图/我的委托.html 的 1:1 迁移版（My Delegations）。
+ *
+ * 顶栏：共用 components/ding_lan/ding_lan.uvue 的「我的委托」外观
+ *       （单行 My Delegations 标题 + 右侧通知铃 / 头像插槽），fixed 定位。
+ * 底栏：按需求不渲染 —— 设计稿的 <nav> 五项底栏在本页完全不画。
+ * 页面级滚动：根容器不锁高度，内容自然撑开；只有状态标签行用横向 scroll-view。
+ *
+ * 交互按设计稿内联 JS 全量迁移：
+ *   · 角色切换（我发布的 / 我接到的）→ 统计卡文案、数值、按钮、胶囊角标配色
+ *   · 状态胶囊计数按角色实时统计、状态筛选
+ *   · 搜索（标题 / 描述 / 协作方 / 分类 / 标签）、空态、重置筛选
+ *   · 排序切换：最新更新（时间序升序）/ 悬赏金额（赏金降序）
+ *   · 卡片按钮点击给轻提示（设计稿未绑定业务）
+ */
 
-async function 刷新() {
-  if (当前用户.value == null) {
-    任务列表.value = []
-    return
-  }
-  正在加载.value = true
-  错误信息.value = ''
-  try {
-    const 路径 = 归属.value == 'published' ? '/my/published-tasks' : '/my/claimed-tasks'
-    const 参数 = `?status=${分类.value}&limit=${每页数量}&offset=0`
-    const 结果 = await 发送请求<{ 任务列表: 任务[]; 总数: number }>(路径 + 参数)
-    任务列表.value = 结果.任务列表
-    委托总数.value = 结果.总数
-  } catch (原因) {
-    错误信息.value = 原因 instanceof Error ? 原因.message : '加载我的委托失败'
-  } finally {
-    正在加载.value = false
-  }
-}
-
-async function 加载更多() {
-  if (正在加载.value || 任务列表.value.length >= 委托总数.value) return
-  正在加载.value = true
-  try {
-    const 路径 = 归属.value == 'published' ? '/my/published-tasks' : '/my/claimed-tasks'
-    const 参数 = `?status=${分类.value}&limit=${每页数量}&offset=${任务列表.value.length}`
-    const 结果 = await 发送请求<{ 任务列表: 任务[]; 总数: number }>(路径 + 参数)
-    任务列表.value = [...任务列表.value, ...结果.任务列表]
-    委托总数.value = 结果.总数
-  } catch (原因) {
-    错误信息.value = 原因 instanceof Error ? 原因.message : '加载更多委托失败'
-  } finally {
-    正在加载.value = false
-  }
-}
-
-async function 操作(委托: 任务, 行为: string) {
-  if (['cancel', 'release', 'accept-completion'].includes(行为)) {
-    const 提示 = 行为 == 'accept-completion'
-      ? `确认验收“${委托.标题}”并向接单方发放 ${委托.报酬积分 ?? 0} 积分？`
-      : 行为 == 'release' ? `确定释放“${委托.标题}”吗？` : `确定取消“${委托.标题}”吗？`
-    const 确认 = await new Promise<boolean>((resolve) => uni.showModal({
-      title: '请确认',
-      content: 提示,
-      success: (结果) => resolve(结果.confirm),
-      fail: () => resolve(false),
-    }))
-    if (!确认) return
-  }
-  try {
-    await 发送请求(`/tasks/${encodeURIComponent(委托.任务编号)}/${行为}`, {
-      method: 'POST',
-      headers: { 'Idempotency-Key': 创建编号() },
-    })
-    uni.showToast({ title: '操作成功', icon: 'success' })
-    await 刷新()
-  } catch (原因) {
-    uni.showToast({ title: 原因 instanceof Error ? 原因.message : '操作失败', icon: 'none' })
-  }
-}
-
-async function 打开委托会话(委托: 任务) {
-  const 结果 = await 发送请求<{ 群组编号: string }>(`/tasks/${encodeURIComponent(委托.任务编号)}/group-chat`)
-  uni.navigateTo({
-    url: `/pages/liaotian/liaotian?hui_hua=${encodeURIComponent(结果.群组编号)}&ming_cheng=${encodeURIComponent(委托.标题)}&lei_xing=委托&bian_hao=${encodeURIComponent(委托.任务编号)}`,
-  })
-}
-
-onShow(() => {
-  当前用户.value = 读取当前用户()
-  void 刷新()
+const 系统信息 : any = uni.getSystemInfoSync()
+const 状态栏高 = ref(系统信息.statusBarHeight ?? 0)
+onLoad(() => {
+	const 信息 : any = uni.getSystemInfoSync()
+	状态栏高.value = 信息.statusBarHeight ?? 0
 })
+const 顶部占位 = computed(() : number => 64 + 状态栏高.value)
+
+const 图 = '/static/woderenwu/icons/'
+const 头像目录 = '/static/wei_tuo/'
+const 握手工亮 = 图 + 'handshake_light.svg'
+const 握手工灰 = 图 + 'handshake_muted.svg'
+
+type 按钮项 = { 文字 : string; 样式 : string; 图标 : string }
+type 状态项 = { 键 : string; 文字 : string }
+type 委托卡片 = {
+	键 : string
+	角色 : string
+	状态 : string
+	赏金 : number
+	时间 : number
+	标签文字 : string
+	标签图标 : string
+	标签样式 : string
+	附加文字 : string
+	分类 : string
+	赏金文字 : string
+	赏金单位 : string
+	赏金底色 : string
+	赏金暗 : boolean
+	标题 : string
+	描述 : string
+	标题淡 : boolean
+	片段 : string
+	里程碑 : boolean
+	头像 : string
+	头像2 : string
+	头像3 : string
+	名称 : string
+	信用 : string
+	副文 : string
+	余时 : string
+	右文 : string
+	按钮 : 按钮项[]
+	搜索文本 : string
+}
+
+const 状态项 : 状态项[] = [
+	{ 键: 'all', 文字: '全部' },
+	{ 键: 'pending', 文字: '待接单' },
+	{ 键: 'progress', 文字: '进行中' },
+	{ 键: 'completed', 文字: '已完成' },
+]
+
+/** 设计稿 8 张卡片：5 张 published、3 张 accepted */
+const 全部卡片 : 委托卡片[] = [
+	{
+		键: 'c1', 角色: 'published', 状态: 'progress', 赏金: 850, 时间: 1,
+		标签文字: '履约中', 标签图标: '', 标签样式: 'purple', 附加文字: '', 分类: '视觉设计',
+		赏金文字: '+850', 赏金单位: 'PTS', 赏金底色: '', 赏金暗: false,
+		标题: '设计一套赛博像素风的猫咪表情包 (6个静态表情)',
+		描述: '需输出 256x256 透明PNG与源工程。风格参考蒸汽波与赛博霓虹配色。',
+		标题淡: false, 片段: 'partner', 里程碑: true,
+		头像: 头像目录 + 'avatar_maya.jpg', 头像2: '', 头像3: '',
+		名称: '林栖·Maya', 信用: '信用 99.8', 副文: '接单者 · 方案绘制中', 余时: '余 1天 14时', 右文: '',
+		按钮: [
+			{ 文字: '任务沟通', 样式: '', 图标: 图 + 'chat_primary.svg' },
+			{ 文字: '查看进度', 样式: '', 图标: '' },
+			{ 文字: '验收交付', 样式: 'zhu', 图标: '' },
+		],
+		搜索文本: '设计 赛博 像素 猫咪 表情包 视觉设计 履约中 林栖 Maya 850',
+	},
+	{
+		键: 'c2', 角色: 'published', 状态: 'pending', 赏金: 1200, 时间: 2,
+		标签文字: '竞标中 · 倒计6h', 标签图标: 图 + 'gavel_amber.svg', 标签样式: 'amber', 附加文字: '急需', 分类: '',
+		赏金文字: '+1,200', 赏金单位: 'PTS', 赏金底色: '', 赏金暗: false,
+		标题: 'FastAPI 高并发微服务 WebSocket 掉线重连优化',
+		描述: '偶发心跳丢失导致连接池雪崩，需要有高并发生产环境经验的后端同学排查压测。',
+		标题淡: false, 片段: 'candidate', 里程碑: false,
+		头像: 头像目录 + 'avatar_alex.jpg', 头像2: 头像目录 + 'avatar_momo.jpg', 头像3: '',
+		名称: '已有 3 位专家竞标方案', 信用: '', 副文: '', 余时: '', 右文: '查看方案 >',
+		按钮: [
+			{ 文字: '关闭悬赏', 样式: 'hong', 图标: '' },
+			{ 文字: '修改需求', 样式: '', 图标: '' },
+			{ 文字: '评选并签约', 样式: 'liang', 图标: '' },
+		],
+		搜索文本: 'FastAPI 高并发 微服务 WebSocket 掉线重连 竞标中 急需 1200',
+	},
+	{
+		键: 'c3', 角色: 'published', 状态: 'pending', 赏金: 650, 时间: 3,
+		标签文字: '极速抢单中', 标签图标: 图 + 'bolt_green.svg', 标签样式: 'green', 附加文字: '', 分类: '3D建模',
+		赏金文字: '+650', 赏金单位: 'PTS', 赏金底色: '', 赏金暗: false,
+		标题: 'Blender 3D 产品级机械手低模绑骨与渲染',
+		描述: '模型已有高模拓扑，需配合IK骨骼绑定及3套动态Pose展示渲染图。',
+		标题淡: false, 片段: 'verify', 里程碑: false,
+		头像: '', 头像2: '', 头像3: '', 名称: '', 信用: '', 副文: '',
+		余时: '平台自动校验资格先到先得', 右文: '浏览 48 次',
+		按钮: [
+			{ 文字: '提升曝光', 样式: '', 图标: '' },
+			{ 文字: '编辑详情', 样式: '', 图标: '' },
+		],
+		搜索文本: 'Blender 3D 机械手 低模 绑骨 渲染 极速抢单 3D建模 650',
+	},
+	{
+		键: 'c4', 角色: 'published', 状态: 'progress', 赏金: 300, 时间: 4,
+		标签文字: '待你确认验收', 标签图标: 图 + 'assignment_turned_in_amber.svg', 标签样式: 'amber', 附加文字: '', 分类: '线下协助',
+		赏金文字: '+300', 赏金单位: 'PTS', 赏金底色: '', 赏金暗: false,
+		标题: '同城急送 · 静安寺商圈活动现场物料分发',
+		描述: '包含3箱宣讲手册及易拉宝物料，已准时送达并拍照上传签收单据。',
+		标题淡: false, 片段: 'deliver', 里程碑: false,
+		头像: '', 头像2: '', 头像3: '', 名称: '', 信用: '', 副文: '',
+		余时: '已交付现场回执 (4张)', 右文: '剩余自动释放时间: 21小时',
+		按钮: [
+			{ 文字: '申请微调', 样式: '', 图标: '' },
+			{ 文字: '立即验收打款', 样式: 'lv', 图标: 图 + 'check_circle_darkgreen.svg' },
+		],
+		搜索文本: '同城急送 静安寺 活动 物料分发 线下协助 待确认验收 300',
+	},
+	{
+		键: 'c5', 角色: 'published', 状态: 'completed', 赏金: 420, 时间: 5,
+		标签文字: '已结算完成', 标签图标: 图 + 'check_green.svg', 标签样式: 'gray', 附加文字: '', 分类: '文档协作',
+		赏金文字: '420', 赏金单位: 'PTS', 赏金底色: 'an', 赏金暗: true,
+		标题: '中/英/日 技术白皮书实时协作校对',
+		描述: '全面修订跨链协议段落术语，并补全日文语法本地化标注。',
+		标题淡: true, 片段: 'rating', 里程碑: false,
+		头像: '', 头像2: '', 头像3: '', 名称: '', 信用: '', 副文: '',
+		余时: '5.0 满分履约', 右文: '双向信用加成 +0.2',
+		按钮: [
+			{ 文字: '查看评价账单', 样式: '', 图标: '' },
+			{ 文字: '再次发起委托', 样式: 'zise', 图标: '' },
+		],
+		搜索文本: '中 英 日 技术白皮书 协作校对 文档协作 已结算完成 420',
+	},
+	{
+		键: 'c6', 角色: 'accepted', 状态: 'progress', 赏金: 1500, 时间: 1,
+		标签文字: '我正在执行', 标签图标: '', 标签样式: 'green', 附加文字: '', 分类: '前端开发',
+		赏金文字: '+1,500', 赏金单位: 'PTS 待入账', 赏金底色: '', 赏金暗: false,
+		标题: 'Tailwind CSS 移动端金融看板图表重构',
+		描述: '已完成SVG折线与响应式网格适配，目前正在进行高帧率平滑动画调优。',
+		标题淡: false, 片段: 'issuer', 里程碑: false,
+		头像: '', 头像2: '', 头像3: '', 名称: '发单人: @NovaLabs', 信用: '', 副文: '托管资金已全额入锁',
+		余时: '余 2天 8小时', 右文: '',
+		按钮: [
+			{ 文字: '联系发单人', 样式: '', 图标: 图 + 'chat_primary.svg' },
+			{ 文字: '提交阶段成果', 样式: 'liang', 图标: 图 + 'upload_file_deep.svg' },
+		],
+		搜索文本: 'Tailwind CSS 移动端 金融看板 图表重构 前端开发 NovaLabs 1500',
+	},
+	{
+		键: 'c7', 角色: 'accepted', 状态: 'pending', 赏金: 900, 时间: 2,
+		标签文字: '方案竞标评估中', 标签图标: 图 + 'hourglass_top_amber.svg', 标签样式: 'amber', 附加文字: '', 分类: '游戏UI',
+		赏金文字: '+900', 赏金单位: 'PTS', 赏金底色: '', 赏金暗: false,
+		标题: '二次元卡牌战斗界面 HUD 与技能动效切片',
+		描述: '你的接单提案已于昨天提交，发单方已查阅作品集，预计今日公布签约。',
+		标题淡: false, 片段: 'none', 里程碑: false,
+		头像: '', 头像2: '', 头像3: '', 名称: '', 信用: '', 副文: '', 余时: '', 右文: '',
+		按钮: [
+			{ 文字: '修改提案补充说明', 样式: '', 图标: '' },
+			{ 文字: '撤回竞标', 样式: 'hong', 图标: '' },
+		],
+		搜索文本: '二次元 卡牌 战斗界面 HUD 技能动效切片 游戏UI 竞标评估 900',
+	},
+	{
+		键: 'c8', 角色: 'accepted', 状态: 'completed', 赏金: 2400, 时间: 3,
+		标签文字: '赏金已入账', 标签图标: 图 + 'payments_green.svg', 标签样式: 'green', 附加文字: '', 分类: '智能合约',
+		赏金文字: '+2,400', 赏金单位: 'PTS 钱包到账', 赏金底色: 'shen', 赏金暗: false,
+		标题: 'Solidity 权益分发合约编写与 Foundry 自动化测试套件',
+		描述: '测试覆盖率达到 98.7%，发单方给予全五星评价与额外鼓励金。',
+		标题淡: false, 片段: 'none', 里程碑: false,
+		头像: '', 头像2: '', 头像3: '', 名称: '', 信用: '', 副文: '', 余时: '', 右文: '',
+		按钮: [
+			{ 文字: '查看入账流水', 样式: '', 图标: '' },
+		],
+		搜索文本: 'Solidity 权益分发合约 Foundry 自动化测试 智能合约 赏金已入账 2400',
+	},
+]
+
+const 当前角色 = ref('published')
+const 当前状态 = ref('all')
+const 排序按金额 = ref(false)
+const 搜索词 = ref('')
+
+const 是发布 = computed(() : boolean => 当前角色.value == 'published')
+const 主标签 = computed(() : string => 是发布.value ? '平台托管中赏金' : '待结算到账积分')
+const 主数值 = computed(() : string => 是发布.value ? '1,850' : '2,400')
+const 子一标签 = computed(() : string => 是发布.value ? '正在履约中' : '接单执行中')
+const 子一数值 = computed(() : string => 是发布.value ? '2' : '1')
+const 子一单位 = computed(() : string => '单')
+const 子二标签 = computed(() : string => 是发布.value ? '历史履约完成' : '累计交付赚取')
+const 子二数值 = computed(() : string => 是发布.value ? '14' : '18,920')
+const 子二单位 = computed(() : string => 是发布.value ? '单' : 'PTS')
+const 动作文字 = computed(() : string => 是发布.value ? '发布新委托' : '去广场接单')
+const 动作图标 = computed(() : string => 是发布.value ? 图 + 'add_deep2.svg' : 图 + 'explore_deep2.svg')
+const 排序文字 = computed(() : string => 排序按金额.value ? '悬赏金额' : '最新更新')
+
+/** 设计稿 updatePillCounters：按当前角色统计 4 个状态数量 */
+function 取计数(状态 : string) : number {
+	let 合计 = 0
+	for (let i = 0; i < 全部卡片.length; i++) {
+		const 卡 = 全部卡片[i]
+		if (卡.角色 != 当前角色.value) continue
+		if (状态 != 'all' && 卡.状态 != 状态) continue
+		合计++
+	}
+	return 合计
+}
+
+/** 设计稿 filterCards：角色 + 状态 + 搜索文本；排序按设计稿 toggleSort 规则 */
+const 可见卡片 = computed<委托卡片[]>(() : 委托卡片[] => {
+	const 词 = 搜索词.value.toLowerCase()
+	const 结果 : 委托卡片[] = []
+	for (let i = 0; i < 全部卡片.length; i++) {
+		const 卡 = 全部卡片[i]
+		if (卡.角色 != 当前角色.value) continue
+		if (当前状态.value != 'all' && 卡.状态 != 当前状态.value) continue
+		if (词 != '' && 卡.搜索文本.toLowerCase().indexOf(词) < 0) continue
+		结果.push(卡)
+	}
+	结果.sort((左 : 委托卡片, 右 : 委托卡片) : number => {
+		if (排序按金额.value) return 右.赏金 - 左.赏金
+		return 左.时间 - 右.时间
+	})
+	return 结果
+})
+
+function 切换角色(事件 : { currentTarget : { dataset : Record<string, unknown> } }) {
+	当前角色.value = String(事件.currentTarget.dataset['role'] ?? 'published')
+}
+function 设置状态(事件 : { currentTarget : { dataset : Record<string, unknown> } }) {
+	当前状态.value = String(事件.currentTarget.dataset['status'] ?? 'all')
+}
+function 切换排序() {
+	排序按金额.value = !排序按金额.value
+}
+function 重置筛选() {
+	搜索词.value = ''
+	当前状态.value = 'all'
+}
+function 点卡片按钮(事件 : { currentTarget : { dataset : Record<string, unknown> } }) {
+	const 文字 = String(事件.currentTarget.dataset['text'] ?? '')
+	uni.showToast({ title: 文字, icon: 'none' })
+}
+function 点主按钮() {
+	uni.showToast({ title: 动作文字.value, icon: 'none' })
+}
+function 点通知() {
+	uni.showToast({ title: '暂无新通知', icon: 'none' })
+}
+function 点头像() {
+	uni.navigateTo({ url: '/pages/wode/yong_hu' })
+}
+
+function 标签底色(样式 : string) : string {
+	if (样式 == 'purple') return 'wd_biao_purple'
+	if (样式 == 'amber') return 'wd_biao_amber'
+	if (样式 == 'green') return 'wd_biao_green'
+	return 'wd_biao_gray'
+}
+function 按钮底色(样式 : string) : string {
+	if (样式 == 'zhu') return 'wd_an_zhu'
+	if (样式 == 'liang') return 'wd_an_liang'
+	if (样式 == 'lv') return 'wd_an_lv'
+	if (样式 == 'zise') return 'wd_an_zise'
+	return ''
+}
+function 按钮字色(样式 : string) : string {
+	if (样式 == 'hong') return 'wd_an_zi_hong'
+	if (样式 == 'zhu') return 'wd_an_zi_zhu'
+	if (样式 == 'liang') return 'wd_an_zi_liang'
+	if (样式 == 'lv') return 'wd_an_zi_lv'
+	if (样式 == 'zise') return 'wd_an_zi_zise'
+	return ''
+}
+function 标签字色(样式 : string) : string {
+	if (样式 == 'purple') return 'wd_biao_zi_purple'
+	if (样式 == 'amber') return 'wd_biao_zi_amber'
+	if (样式 == 'green') return 'wd_biao_zi_green'
+	return 'wd_biao_zi_gray'
+}
+function 赏金底色(值 : string) : string {
+	if (值 == 'an') return 'wd_shang_an'
+	if (值 == 'shen') return 'wd_shang_shen'
+	return ''
+}
+function 按钮键(卡键 : string, 序 : number) : string {
+	return 卡键 + '_' + String(序)
+}
 </script>
 
 <template>
-  <view class="ye_mian">
-    <view class="ye_mian_biao_ti">
-      <text class="fu_biao_ti">委托管理</text>
-      <text class="biao_ti">我的委托</text>
-      <text class="fu_zhu_wen_ben">{{ 归属 == 'published' ? '查看你发布的委托及处理进度。' : '查看你接单的委托及处理进度。' }}</text>
-    </view>
-    <view v-if="当前用户 == null" class="kong_zhuang_tai">
-      <text>登录后查看我的委托</text>
-      <button class="zhu_yao_an_niu" @click="uni.switchTab({ url: '/pages/wode/wode' })">前往登录</button>
-    </view>
-    <view v-else>
-    <view class="cao_zuo_zu">
-      <button class="ci_yao_an_niu" @click="归属 = 归属 == 'published' ? 'claimed' : 'published'; 刷新()">{{ 归属 == 'published' ? '切换到接单委托' : '切换到发布委托' }}</button>
-      <button class="ci_yao_an_niu" @click="刷新">刷新</button>
-    </view>
-    <view class="shaixuan_lan">
-      <button class="fen_lei_biao_qian" @click="分类 = 'all'; 刷新()">全部</button>
-      <button class="fen_lei_biao_qian" @click="分类 = 'ongoing'; 刷新()">进行中</button>
-      <button class="fen_lei_biao_qian" @click="分类 = 'completed'; 刷新()">已完成</button>
-    </view>
-    <view v-if="错误信息" class="ti_shi_xin_xi cuo_wu">{{ 错误信息 }}</view>
-    <view v-if="正在加载 && 任务列表.length == 0" class="kong_zhuang_tai">正在加载委托…</view>
-    <view v-else-if="错误信息 && 任务列表.length == 0" class="kong_zhuang_tai">
-      <text>委托加载失败</text>
-      <button class="ci_yao_an_niu" @click="刷新">重新加载</button>
-    </view>
-    <view v-else-if="任务列表.length == 0" class="kong_zhuang_tai">此分类下暂无委托</view>
-    <view v-for="委托 in 任务列表" :key="委托.任务编号" class="ka_pian">
-      <view class="liang_duan_dui_qi"><text class="biao_ji">{{ 委托.任务状态 }}</text><text class="fu_zhu_wen_ben">{{ 格式化时间(委托.创建时间) }}</text></view>
-      <text class="ka_pian_biao_ti" @click="uni.navigateTo({ url: `/pages/weituo/weituo?id=${encodeURIComponent(委托.任务编号)}` })">{{ 委托.标题 }}</text>
-      <text class="zheng_wen">{{ 委托.描述 }}</text>
-      <view class="cao_zuo_zu">
-        <button v-if="归属 == 'claimed' && 委托.任务状态 == '已接单'" class="xiao_hao zhu_yao_an_niu" @click="操作(委托, 'start')">开始任务</button>
-        <button v-if="归属 == 'claimed' && 委托.任务状态 == '已接单'" class="xiao_hao ci_yao_an_niu" @click="操作(委托, 'release')">释放委托</button>
-        <button v-if="归属 == 'claimed' && 委托.任务状态 == '进行中'" class="xiao_hao zhu_yao_an_niu" @click="操作(委托, 'complete')">提交完成</button>
-        <button v-if="归属 == 'published' && 委托.任务状态 == '待验收'" class="xiao_hao zhu_yao_an_niu" @click="操作(委托, 'accept-completion')">确认验收</button>
-        <button v-if="归属 == 'published' && ['待接单', '已接单'].includes(委托.任务状态)" class="xiao_hao ci_yao_an_niu" @click="操作(委托, 'cancel')">取消委托</button>
-        <button v-if="委托.接单者编号 != null" class="xiao_hao ci_yao_an_niu" @click="打开委托会话(委托)">查看消息</button>
-      </view>
-    </view>
-    <button v-if="任务列表.length > 0 && 任务列表.length < 委托总数" class="ci_yao_an_niu" :disabled="正在加载" @click="加载更多">
-      {{ 正在加载 ? '加载中…' : `加载更多（${任务列表.length}/${委托总数}）` }}
-    </button>
-    </view>
-  </view>
+	<view class="wd_ye">
+		<!-- 固定顶栏：共用 components/ding_lan，外观「我的委托」= My Delegations 单行标题 -->
+		<ding_lan 外观="我的委托" 标题="My Delegations" :状态栏高="状态栏高">
+			<view class="wd_ding_ling" @click="点通知">
+				<image class="wd_ding_ling_tu" :src="图 + 'notifications_muted.svg'" mode="aspectFit"></image>
+			</view>
+			<view class="wd_ding_tou" @click="点头像">
+				<image class="wd_ding_tou_tu" :src="图 + 'person_deep.svg'" mode="aspectFit"></image>
+			</view>
+		</ding_lan>
+
+		<!-- 页面级滚动：根容器不锁高，顶栏 fixed，内容首块用 64 + 状态栏高 占位 -->
+		<view class="wd_nei" :style="{ 'padding-top': `${顶部占位}px` }">
+
+			<!-- ① 角色胶囊 + 统计卡 + 搜索/排序 + 状态标签 -->
+			<view class="wd_tou">
+				<view class="wd_jue_se">
+					<view class="wd_jue_an" :class="当前角色 == 'published' ? 'wd_jue_an_xuan' : ''" :data-role="'published'" @click="切换角色">
+						<image class="wd_jue_tu" :src="图 + 'campaign_primary.svg'" mode="aspectFit"></image>
+						<text class="wd_jue_zi" :class="当前角色 == 'published' ? 'wd_jue_zi_xuan' : ''">我发布的委托</text>
+						<text class="wd_jue_biao" :class="当前角色 == 'published' ? 'wd_jue_biao_pub' : ''">5</text>
+					</view>
+					<view class="wd_jue_an" :class="当前角色 == 'accepted' ? 'wd_jue_an_xuan' : ''" :data-role="'accepted'" @click="切换角色">
+						<image class="wd_jue_tu" :src="当前角色 == 'accepted' ? 握手工亮 : 握手工灰" mode="aspectFit"></image>
+						<text class="wd_jue_zi" :class="当前角色 == 'accepted' ? 'wd_jue_zi_xuan' : ''">我接到的委托</text>
+						<text class="wd_jue_biao" :class="当前角色 == 'accepted' ? 'wd_jue_biao_acc' : ''">8</text>
+					</view>
+				</view>
+
+				<!-- 统计卡 -->
+				<view class="wd_tong_ji">
+					<image class="wd_tj_guang_zi" src="/static/guang/zi_08.png" mode="scaleToFill"></image>
+					<image class="wd_tj_guang_lv" src="/static/guang/lv_06.png" mode="scaleToFill"></image>
+					<view class="wd_tj_shang">
+						<view class="wd_tj_zuo">
+							<view class="wd_tj_tu_kuang">
+								<image class="wd_tj_tu" :src="图 + 'token_green.svg'" mode="aspectFit"></image>
+							</view>
+							<text class="wd_tj_biao">{{ 主标签 }}</text>
+						</view>
+						<view class="wd_tj_an" @click="点主按钮">
+							<image class="wd_tj_an_tu" :src="动作图标" mode="aspectFit"></image>
+							<text class="wd_tj_an_zi">{{ 动作文字 }}</text>
+						</view>
+					</view>
+					<view class="wd_tj_zhi_hang">
+						<text class="wd_tj_zhi">{{ 主数值 }}</text>
+						<text class="wd_tj_dan">PTS</text>
+					</view>
+					<view class="wd_tj_ge">
+						<view class="wd_tj_lie">
+							<text class="wd_tj_lie_biao">{{ 子一标签 }}</text>
+							<view class="wd_tj_lie_hang">
+								<text class="wd_tj_lie_zhi wd_tj_lie_zhi_zi">{{ 子一数值 }}</text>
+								<text class="wd_tj_lie_dan">{{ 子一单位 }}</text>
+							</view>
+						</view>
+						<view class="wd_tj_lie">
+							<text class="wd_tj_lie_biao">{{ 子二标签 }}</text>
+							<view class="wd_tj_lie_hang">
+								<text class="wd_tj_lie_zhi wd_tj_lie_zhi_bai">{{ 子二数值 }}</text>
+								<text class="wd_tj_lie_dan">{{ 子二单位 }}</text>
+							</view>
+						</view>
+					</view>
+				</view>
+
+				<!-- 搜索 + 排序 -->
+				<view class="wd_sou_hang">
+					<view class="wd_sou_kuang">
+						<image class="wd_sou_tu" :src="图 + 'search_muted.svg'" mode="aspectFit"></image>
+						<input v-model="搜索词" class="wd_sou_shu" placeholder="搜索委托标题、协作方名称..." placeholder-class="wd_sou_zhan" />
+					</view>
+					<view class="wd_pai_an" @click="切换排序">
+						<image class="wd_pai_tu" :src="图 + 'swap_vert_muted.svg'" mode="aspectFit"></image>
+						<text class="wd_pai_zi">{{ 排序文字 }}</text>
+					</view>
+				</view>
+
+				<!-- 状态胶囊：仅此处用横向 scroll-view -->
+				<scroll-view class="wd_zhuang_tai" direction="horizontal" :show-scrollbar="false">
+					<view class="wd_zt_hang">
+						<view
+							v-for="项 in 状态项"
+							:key="项.键"
+							class="wd_zt_pill"
+							:class="当前状态 == 项.键 ? 'wd_zt_pill_xuan' : ''"
+							:data-status="项.键"
+							@click="设置状态"
+						>
+							<text class="wd_zt_zi" :class="当前状态 == 项.键 ? 'wd_zt_zi_xuan' : ''">{{ 项.文字 }}</text>
+							<text class="wd_zt_zi" :class="当前状态 == 项.键 ? 'wd_zt_zi_xuan' : ''">{{ 取计数(项.键) }}</text>
+						</view>
+					</view>
+				</scroll-view>
+			</view>
+
+			<!-- ② 委托卡片列表 -->
+			<view class="wd_ka_lie">
+				<view v-for="卡 in 可见卡片" :key="卡.键" class="wd_ka">
+					<!-- 卡片头：状态标签 + 分类 + 赏金 -->
+					<view class="wd_ka_tou">
+						<view class="wd_biao_zu">
+							<view class="wd_biao" :class="标签底色(卡.标签样式)">
+								<image v-if="卡.标签图标 != ''" class="wd_biao_tu" :src="卡.标签图标" mode="aspectFit"></image>
+								<view v-else class="wd_biao_dian" :class="卡.标签样式 == 'green' ? 'wd_biao_dian_lv' : ''"></view>
+								<text class="wd_biao_zi" :class="标签字色(卡.标签样式)">{{ 卡.标签文字 }}</text>
+							</view>
+							<view v-if="卡.附加文字 != ''" class="wd_biao wd_biao_red">
+								<text class="wd_biao_zi wd_biao_zi_red">{{ 卡.附加文字 }}</text>
+							</view>
+							<view v-if="卡.分类 != ''" class="wd_biao wd_biao_gray">
+								<text class="wd_biao_zi wd_biao_zi_gray">{{ 卡.分类 }}</text>
+							</view>
+						</view>
+						<view class="wd_shang" :class="赏金底色(卡.赏金底色)">
+							<text class="wd_shang_shu" :class="卡.赏金暗 ? 'wd_shang_an_zi' : ''">{{ 卡.赏金文字 }}</text>
+							<text class="wd_shang_dan" :class="卡.赏金暗 ? 'wd_shang_an_zi' : ''">{{ 卡.赏金单位 }}</text>
+						</view>
+					</view>
+
+					<!-- 标题 + 描述 -->
+					<view class="wd_ka_wen">
+						<text class="wd_ka_biao" :class="卡.标题淡 ? 'wd_ka_biao_dan' : ''">{{ 卡.标题 }}</text>
+						<text class="wd_ka_miao">{{ 卡.描述 }}</text>
+					</view>
+
+					<!-- 片段 A：协作方 -->
+					<view v-if="卡.片段 == 'partner'" class="wd_huo_ban">
+						<view class="wd_hb_zuo">
+							<image class="wd_hb_tou" :src="卡.头像" mode="aspectFill"></image>
+							<view class="wd_hb_wen">
+								<view class="wd_hb_hang">
+									<text class="wd_hb_ming">{{ 卡.名称 }}</text>
+									<text class="wd_hb_xin">{{ 卡.信用 }}</text>
+								</view>
+								<text class="wd_hb_fu">{{ 卡.副文 }}</text>
+							</view>
+						</view>
+						<view class="wd_hb_you">
+							<image class="wd_hb_shi_tu" :src="图 + 'timer_amber.svg'" mode="aspectFit"></image>
+							<text class="wd_hb_shi">{{ 卡.余时 }}</text>
+						</view>
+					</view>
+
+					<!-- 里程碑进度 -->
+					<view v-if="卡.里程碑" class="wd_li_cheng">
+						<view class="wd_lc_nei">
+							<view class="wd_lc_di"><view class="wd_lc_tiao"></view></view>
+							<view class="wd_lc_hang">
+								<text class="wd_lc_zi">托管锁定</text>
+								<text class="wd_lc_zi wd_lc_zi_ji">线稿与试色 (进行中)</text>
+								<text class="wd_lc_zi">成品验收</text>
+							</view>
+						</view>
+					</view>
+
+					<!-- 片段 B：竞标者堆叠 -->
+					<view v-if="卡.片段 == 'candidate'" class="wd_jing_biao">
+						<view class="wd_jb_zuo">
+							<view class="wd_jb_tou_zu">
+								<image class="wd_jb_tou" :src="卡.头像" mode="aspectFill"></image>
+								<image class="wd_jb_tou wd_jb_tou_die" :src="卡.头像2" mode="aspectFill"></image>
+								<view class="wd_jb_shu"><text class="wd_jb_shu_zi">3</text></view>
+							</view>
+							<text class="wd_jb_zi">{{ 卡.名称 }}</text>
+						</view>
+						<text class="wd_jb_cha">{{ 卡.右文 }}</text>
+					</view>
+
+					<!-- 片段 C：平台自动校验 -->
+					<view v-if="卡.片段 == 'verify'" class="wd_yan_zheng">
+						<view class="wd_yz_zuo">
+							<image class="wd_yz_tu" :src="图 + 'verified_user_green.svg'" mode="aspectFit"></image>
+							<text class="wd_yz_zi">{{ 卡.余时 }}</text>
+						</view>
+						<text class="wd_yz_you">{{ 卡.右文 }}</text>
+					</view>
+
+					<!-- 片段 D：交付横幅 -->
+					<view v-if="卡.片段 == 'deliver'" class="wd_jiao_fu">
+						<view class="wd_jf_zuo">
+							<view class="wd_jf_tu_kuang">
+								<image class="wd_jf_tu" :src="图 + 'image_green.svg'" mode="aspectFit"></image>
+							</view>
+							<view class="wd_jf_wen">
+								<text class="wd_jf_zhu">{{ 卡.余时 }}</text>
+								<text class="wd_jf_fu">{{ 卡.右文 }}</text>
+							</view>
+						</view>
+						<text class="wd_jf_an">查看附件</text>
+					</view>
+
+					<!-- 片段 E：评分结果 -->
+					<view v-if="卡.片段 == 'rating'" class="wd_ping_fen">
+						<view class="wd_pf_zuo">
+							<image class="wd_pf_xing" :src="图 + 'star_amber.svg'" mode="aspectFit"></image>
+							<image class="wd_pf_xing" :src="图 + 'star_amber.svg'" mode="aspectFit"></image>
+							<image class="wd_pf_xing" :src="图 + 'star_amber.svg'" mode="aspectFit"></image>
+							<image class="wd_pf_xing" :src="图 + 'star_amber.svg'" mode="aspectFit"></image>
+							<image class="wd_pf_xing" :src="图 + 'star_amber.svg'" mode="aspectFit"></image>
+							<text class="wd_pf_zi">{{ 卡.余时 }}</text>
+						</view>
+						<text class="wd_pf_you">{{ 卡.右文 }}</text>
+					</view>
+
+					<!-- 片段 F：发单人 -->
+					<view v-if="卡.片段 == 'issuer'" class="wd_fa_dan">
+						<view class="wd_fd_zuo">
+							<view class="wd_fd_tou"><text class="wd_fd_tou_zi">发</text></view>
+							<view class="wd_fd_wen">
+								<text class="wd_fd_zhu">{{ 卡.名称 }}</text>
+								<text class="wd_fd_fu">{{ 卡.副文 }}</text>
+							</view>
+						</view>
+						<text class="wd_fd_shi">{{ 卡.余时 }}</text>
+					</view>
+
+					<!-- 卡片操作按钮 -->
+					<view class="wd_an_hang">
+						<view
+							v-for="(按, 序) in 卡.按钮"
+							:key="按钮键(卡.键, 序)"
+							class="wd_an"
+							:class="按钮底色(按.样式) + (按.图标 != '' ? ' wd_an_you_tu' : '')"
+							:data-text="按.文字"
+							@click="点卡片按钮"
+						>
+							<image v-if="按.图标 != ''" class="wd_an_tu" :src="按.图标" mode="aspectFit"></image>
+							<text class="wd_an_zi" :class="按钮字色(按.样式)">{{ 按.文字 }}</text>
+						</view>
+					</view>
+				</view>
+
+				<!-- 空态 -->
+				<view v-if="可见卡片.length == 0" class="wd_kong">
+					<view class="wd_kong_yuan">
+						<image class="wd_kong_tu" :src="图 + 'inbox_primary.svg'" mode="aspectFit"></image>
+					</view>
+					<text class="wd_kong_biao">没有找到相关的委托</text>
+					<text class="wd_kong_shuo">当前筛选状态下暂无数据，尝试调整过滤标签或发布一份属于你的新任务吧！</text>
+					<view class="wd_kong_an" @click="重置筛选">
+						<text class="wd_kong_an_zi">重置筛选条件</text>
+					</view>
+				</view>
+			</view>
+		</view>
+	</view>
 </template>
+
+<style>
+@font-face { font-family: 'PJS400'; src: url('/static/hui_hua/fonts/PlusJakartaSans-400.ttf'); }
+@font-face { font-family: 'PJS600'; src: url('/static/hui_hua/fonts/PlusJakartaSans-600.ttf'); }
+@font-face { font-family: 'PJS700'; src: url('/static/hui_hua/fonts/PlusJakartaSans-700.ttf'); }
+@font-face { font-family: 'PJS800'; src: url('/static/hui_hua/fonts/PlusJakartaSans-800.ttf'); }
+@font-face { font-family: 'SG600'; src: url('/static/hui_hua/fonts/SpaceGrotesk-600.ttf'); }
+@font-face { font-family: 'SG700'; src: url('/static/hui_hua/fonts/SpaceGrotesk-700.ttf'); }
+
+.wd_ye {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	background-color: #0b1326;
+}
+.wd_nei {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	padding-bottom: 40px;
+}
+
+/* ---------- 顶栏右侧插槽（顶栏本体在 components/ding_lan） ---------- */
+.wd_ding_ling {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 44px;
+	height: 44px;
+	border-radius: 22px;
+}
+.wd_ding_ling_tu { width: 22px; height: 22px; }
+.wd_ding_tou {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	margin-left: 8px;
+	border-radius: 16px;
+	background-color: #c0c1ff;
+}
+.wd_ding_tou_tu { width: 18px; height: 18px; }
+
+/* ---------- ① 顶部区块 ---------- */
+.wd_tou {
+	display: flex;
+	flex-direction: column;
+padding: 16px 16px 8px;
+}
+
+/* 角色胶囊 */
+.wd_jue_se {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	padding: 4px;
+	border-radius: 9999px;
+	background-color: #131b2e;
+}
+.wd_jue_an {
+	display: flex;
+	flex: 1;
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+height: 34px;
+	padding-left: 6px;
+	padding-right: 6px;
+	border-radius: 9999px;
+}
+.wd_jue_an_xuan { background-color: #31394d; }
+.wd_jue_tu { width: 18px; height: 18px; }
+.wd_jue_zi {
+	font-family: 'SG600';
+	color: #c7c4d7;
+	font-size: 12px;
+	line-height: 16px;
+	font-weight: 600;
+	letter-spacing: 0.3px;
+	white-space: nowrap;
+		margin-left: 4px;
+	}
+.wd_jue_zi_xuan { color: #dae2fd; }
+.wd_jue_biao {
+	font-family: 'SG700';
+	padding-left: 6px;
+	padding-right: 6px;
+	border-radius: 9999px;
+	background-color: #2d3449;
+	color: #c7c4d7;
+	font-size: 10px;
+	line-height: 14px;
+	font-weight: 700;
+		margin-left: 4px;
+	}
+.wd_jue_biao_pub { background-color: rgba(128, 131, 255, 0.25); color: #c0c1ff; }
+.wd_jue_biao_acc { background-color: rgba(78, 222, 163, 0.25); color: #4edea3; }
+
+/* 统计卡 */
+.wd_tong_ji {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	height: 176px;
+	padding: 16px;
+	border-radius: 12px;
+	background-color: #171f33;
+		margin-top: 16px;
+	}
+.wd_tj_guang_zi {
+	position: absolute;
+	top: -32px;
+	right: -32px;
+	width: 128px;
+	height: 128px;
+}
+.wd_tj_guang_lv {
+	position: absolute;
+	bottom: -32px;
+	left: -32px;
+	width: 112px;
+	height: 112px;
+}
+.wd_tj_shang {
+	position: relative;
+	z-index: 2;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	height: 28px;
+	margin-bottom: 8px;
+}
+.wd_tj_zuo { display: flex; flex-direction: row; align-items: center;}
+.wd_tj_tu_kuang {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	border-radius: 8px;
+	background-color: #222a3d;
+}
+.wd_tj_tu { width: 16px; height: 16px; }
+.wd_tj_biao {
+	font-family: 'SG600';
+	color: #c7c4d7;
+	font-size: 12px;
+	line-height: 16px;
+	font-weight: 600;
+	letter-spacing: 0.36px;
+		margin-left: 8px;
+	}
+.wd_tj_an {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+height: 28px;
+	padding-left: 12px;
+	padding-right: 12px;
+	border-radius: 9999px;
+	background-color: #8083ff;
+}
+.wd_tj_an_tu { width: 16px; height: 16px; }
+.wd_tj_an_zi {
+	font-family: 'SG700';
+	color: #0d0096;
+	font-size: 10px;
+	line-height: 14px;
+	font-weight: 700;
+	white-space: nowrap;
+		margin-left: 4px;
+	}
+.wd_tj_zhi_hang {
+	position: relative;
+	z-index: 2;
+	display: flex;
+	flex-direction: row;
+	align-items: flex-end;
+height: 36px;
+}
+.wd_tj_zhi {
+	font-family: 'PJS800';
+	color: #dae2fd;
+	font-size: 30px;
+	line-height: 36px;
+	font-weight: 800;
+	letter-spacing: -0.75px;
+}
+.wd_tj_dan {
+	font-family: 'SG700';
+	color: #4edea3;
+	font-size: 12px;
+	line-height: 16px;
+	font-weight: 700;
+	letter-spacing: 0.36px;
+	margin-bottom: 4px;
+		margin-left: 8px;
+	}
+.wd_tj_ge {
+	position: relative;
+	z-index: 2;
+	display: flex;
+	flex-direction: row;
+margin-top: 16px;
+	padding: 9px 10px 9px 2px;
+	border-radius: 8px;
+	background-color: rgba(19, 27, 46, 0.7);
+}
+.wd_tj_lie { display: flex; flex: 1; flex-direction: column;
+		margin-left: 8px;
+	}
+.wd_tj_lie_biao {
+	font-family: 'SG700';
+	color: #c7c4d7;
+	font-size: 10px;
+	line-height: 14px;
+	font-weight: 700;
+	letter-spacing: 0.5px;
+}
+.wd_tj_lie_hang { display: flex; flex-direction: row; align-items: flex-end;}
+.wd_tj_lie_zhi {
+	font-family: 'PJS700';
+	font-size: 18px;
+	line-height: 24px;
+	font-weight: 700;
+	letter-spacing: -0.18px;
+}
+.wd_tj_lie_zhi_zi { color: #c0c1ff; }
+.wd_tj_lie_zhi_bai { color: #dae2fd; }
+.wd_tj_lie_dan {
+	font-family: 'PJS400';
+	color: #c7c4d7;
+	font-size: 12px;
+	line-height: 16px;
+		margin-left: 4px;
+	}
+
+/* 搜索 + 排序 */
+.wd_sou_hang { display: flex; flex-direction: row; align-items: center;
+		margin-top: 16px;
+	}
+.wd_sou_kuang {
+	display: flex;
+	flex: 1;
+	flex-direction: row;
+	align-items: center;
+height: 34px;
+	padding-left: 12px;
+	padding-right: 12px;
+	border-radius: 12px;
+	background-color: #222a3d;
+}
+.wd_sou_tu { width: 18px; height: 18px; }
+.wd_sou_shu {
+	flex: 1;
+	padding: 0;
+	border-width: 0;
+	background-color: transparent;
+font-family: 'PJS400';
+	color: #dae2fd;
+	font-size: 12px;
+	line-height: 16px;
+		margin-left: 8px;
+	}
+.wd_sou_zhan { color: rgba(199, 196, 215, 0.6); }
+.wd_pai_an {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+height: 34px;
+	padding-left: 12px;
+	padding-right: 12px;
+	border-radius: 12px;
+	background-color: #222a3d;
+		margin-left: 8px;
+	}
+.wd_pai_tu { width: 16px; height: 16px; }
+.wd_pai_zi {
+	font-family: 'SG700';
+	color: #c7c4d7;
+	font-size: 10px;
+	line-height: 14px;
+	font-weight: 700;
+	white-space: nowrap;
+		margin-left: 4px;
+	}
+
+/* 状态胶囊 */
+.wd_zhuang_tai {
+	display: flex;
+	flex-direction: row;
+	padding-top: 4px;
+	padding-bottom: 4px;
+	white-space: nowrap;
+		margin-top: 16px;
+	}
+.wd_zt_hang {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+/* .wd_tou 已有 16px 左右内边距，横滑行不再叠加，避免整行右移 16px */
+	padding-left: 0;
+	padding-right: 16px;
+}
+.wd_zt_pill {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+height: 26px;
+	padding-left: 12px;
+	padding-right: 6px;
+	border-radius: 9999px;
+	background-color: #222a3d;
+		margin-right: 8px;
+	}
+.wd_zt_pill_xuan { background-color: #c0c1ff; }
+.wd_zt_zi {
+	font-family: 'SG700';
+	color: #c7c4d7;
+	font-size: 10px;
+	line-height: 14px;
+	font-weight: 700;
+	letter-spacing: 0.5px;
+	white-space: nowrap;
+		margin-right: 6px;
+	}
+.wd_zt_zi_xuan { color: #1000a9; }
+
+/* ---------- ② 卡片列表 ---------- */
+.wd_ka_lie {
+	display: flex;
+	flex-direction: column;
+margin-top: 4px;
+	padding-left: 16px;
+	padding-right: 16px;
+}
+.wd_ka {
+	display: flex;
+	flex-direction: column;
+padding: 16px;
+	border-radius: 12px;
+	background-color: #171f33;
+		margin-bottom: 16px;
+	}
+.wd_ka_tou { display: flex; flex-direction: row; align-items: flex-start; justify-content: space-between;}
+.wd_biao_zu { display: flex; flex: 1; flex-direction: row; align-items: center;}
+.wd_biao {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+height: 18px;
+	padding-left: 8px;
+	padding-right: 8px;
+	border-radius: 9999px;
+		margin-right: 6px;
+	}
+.wd_biao_tu { width: 13px; height: 13px; }
+.wd_biao_dian { width: 6px; height: 6px; border-radius: 3px; background-color: #c0c1ff; }
+.wd_biao_dian_lv { background-color: #4edea3; }
+.wd_biao_zi {
+	font-family: 'SG700';
+	font-size: 10px;
+	line-height: 14px;
+	font-weight: 600;
+	letter-spacing: 0.5px;
+	white-space: nowrap;
+}
+.wd_biao_purple { background-color: rgba(128, 131, 255, 0.2); }
+.wd_biao_amber { background-color: rgba(202, 129, 0, 0.3); }
+.wd_biao_green { background-color: rgba(78, 222, 163, 0.15); }
+.wd_biao_gray { background-color: #222a3d; }
+.wd_biao_red { background-color: rgba(255, 180, 171, 0.15); }
+.wd_biao_zi_purple { color: #c0c1ff; }
+.wd_biao_zi_amber { color: #ffb95f; }
+.wd_biao_zi_green { color: #4edea3; }
+.wd_biao_zi_gray { color: #c7c4d7; }
+.wd_biao_zi_red { color: #ffb4ab; }
+.wd_shang {
+	display: flex;
+	flex-direction: row;
+	align-items: flex-end;
+height: 18px;
+	padding-left: 10px;
+	padding-right: 10px;
+	border-radius: 9999px;
+	background-color: rgba(78, 222, 163, 0.1);
+		margin-left: 8px;
+	}
+.wd_shang_an { background-color: #222a3d; }
+.wd_shang_shen { background-color: rgba(0, 165, 114, 0.2); }
+.wd_shang_shu {
+	font-family: 'SG700';
+	color: #4edea3;
+	font-size: 10px;
+	line-height: 14px;
+	font-weight: 700;
+	letter-spacing: 0.5px;
+	white-space: nowrap;
+}
+.wd_shang_dan {
+	font-family: 'SG700';
+	color: #4edea3;
+	font-size: 10px;
+	line-height: 14px;
+	letter-spacing: 0.5px;
+	white-space: nowrap;
+		margin-left: 4px;
+	}
+.wd_shang_an_zi { color: #c7c4d7; }
+
+.wd_ka_wen { display: flex; flex-direction: column;
+		margin-top: 12px;
+	}
+.wd_ka_biao {
+	font-family: 'PJS700';
+	color: #dae2fd;
+	font-size: 18px;
+	line-height: 24px;
+	font-weight: 700;
+	letter-spacing: -0.45px;
+}
+.wd_ka_biao_dan { color: rgba(218, 226, 253, 0.9); }
+.wd_ka_miao {
+	font-family: 'PJS400';
+	color: #c7c4d7;
+	font-size: 12px;
+	line-height: 16px;
+	letter-spacing: 0.12px;
+		margin-top: 4px;
+	}
+
+/* 片段 A：协作方 */
+.wd_huo_ban {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	padding: 8px;
+	border-radius: 8px;
+	background-color: #131b2e;
+		margin-top: 12px;
+	}
+.wd_hb_zuo { display: flex; flex: 1; flex-direction: row; align-items: center;}
+.wd_hb_tou { width: 32px; height: 32px; border-radius: 16px; background-color: #31394d; }
+.wd_hb_wen { display: flex; flex: 1; flex-direction: column;
+		margin-left: 8px;
+	}
+.wd_hb_hang { display: flex; flex-direction: row; align-items: center;}
+.wd_hb_ming {
+	font-family: 'PJS600';
+	color: #dae2fd;
+	font-size: 12px;
+	line-height: 16px;
+	font-weight: 600;
+}
+.wd_hb_xin {
+	font-family: 'SG700';
+	padding-left: 6px;
+	padding-right: 6px;
+	border-radius: 3px;
+	background-color: rgba(78, 222, 163, 0.15);
+	color: #4edea3;
+	font-size: 10px;
+	line-height: 14px;
+		margin-left: 6px;
+	}
+.wd_hb_fu {
+	font-family: 'SG700';
+	color: #c7c4d7;
+	font-size: 10px;
+	line-height: 14px;
+}
+.wd_hb_you { display: flex; flex-direction: row; align-items: center;}
+.wd_hb_shi_tu { width: 13px; height: 13px; }
+.wd_hb_shi {
+	font-family: 'SG700';
+	color: #ffb95f;
+	font-size: 10px;
+	line-height: 14px;
+	white-space: nowrap;
+		margin-left: 4px;
+	}
+
+/* 里程碑 */
+.wd_li_cheng { display: flex; flex-direction: row; align-items: center;
+	padding-top: 4px;
+		margin-top: 12px;
+	}
+.wd_lc_nei { display: flex; flex: 1; flex-direction: column;}
+.wd_lc_di { height: 6px; border-radius: 3px; background-color: #222a3d; overflow: hidden; }
+.wd_lc_tiao { width: 66.6%; height: 6px; border-radius: 3px; background-color: #c0c1ff; }
+.wd_lc_hang { display: flex; flex-direction: row; align-items: center; justify-content: space-between;
+		margin-top: 4px;
+	}
+.wd_lc_zi {
+	font-family: 'SG700';
+	color: #c7c4d7;
+	font-size: 10px;
+	line-height: 14px;
+	white-space: nowrap;
+}
+.wd_lc_zi_ji { color: #c0c1ff; }
+
+/* 片段 B：竞标者堆叠 */
+.wd_jing_biao {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	padding: 10px;
+	border-radius: 8px;
+	background-color: #131b2e;
+		margin-top: 12px;
+	}
+.wd_jb_zuo { display: flex; flex-direction: row; align-items: center;}
+.wd_jb_tou_zu { display: flex; flex-direction: row; align-items: center; }
+.wd_jb_tou {
+	width: 24px;
+	height: 24px;
+	border-radius: 12px;
+	border: 2px solid #171f33;
+	background-color: #31394d;
+}
+.wd_jb_tou_die { margin-left: -8px; }
+.wd_jb_shu {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	margin-left: -8px;
+	border: 2px solid #171f33;
+	border-radius: 12px;
+	background-color: #c0c1ff;
+}
+.wd_jb_shu_zi { font-family: 'SG700'; color: #1000a9; font-size: 10px; line-height: 14px; font-weight: 700; }
+.wd_jb_zi { font-family: 'PJS400'; color: #dae2fd; font-size: 12px; line-height: 16px;
+		margin-left: 8px;
+	}
+.wd_jb_cha { font-family: 'SG700'; color: #c0c1ff; font-size: 10px; line-height: 14px; font-weight: 500; white-space: nowrap; }
+
+/* 片段 C：平台自动校验 */
+.wd_yan_zheng {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	padding: 8px;
+	border-radius: 8px;
+	background-color: #131b2e;
+		margin-top: 12px;
+	}
+.wd_yz_zuo { display: flex; flex-direction: row; align-items: center;}
+.wd_yz_tu { width: 15px; height: 15px; }
+.wd_yz_zi { font-family: 'SG700'; color: #c7c4d7; font-size: 10px; line-height: 14px;
+		margin-left: 4px;
+	}
+.wd_yz_you { font-family: 'SG700'; color: #dae2fd; font-size: 10px; line-height: 14px; white-space: nowrap; }
+
+/* 片段 D：交付横幅 */
+.wd_jiao_fu {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	padding: 10px;
+	border-radius: 8px;
+	background-color: #222a3d;
+		margin-top: 12px;
+	}
+.wd_jf_zuo { display: flex; flex-direction: row; align-items: center;}
+.wd_jf_tu_kuang {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	border-radius: 4px;
+	background-color: rgba(0, 165, 114, 0.2);
+}
+.wd_jf_tu { width: 16px; height: 16px; }
+.wd_jf_wen { display: flex; flex-direction: column;
+		margin-left: 8px;
+	}
+.wd_jf_zhu { font-family: 'PJS600'; color: #dae2fd; font-size: 12px; line-height: 16px; font-weight: 500; }
+.wd_jf_fu { font-family: 'SG700'; color: #c7c4d7; font-size: 10px; line-height: 14px; }
+.wd_jf_an {
+	font-family: 'SG700';
+	color: #c0c1ff;
+	font-size: 10px;
+	line-height: 14px;
+	font-weight: 600;
+	text-decoration-line: underline;
+	white-space: nowrap;
+}
+
+/* 片段 E：评分结果 */
+.wd_ping_fen {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	padding: 8px;
+	border-radius: 8px;
+	background-color: #131b2e;
+		margin-top: 12px;
+	}
+.wd_pf_zuo { display: flex; flex-direction: row; align-items: center;}
+.wd_pf_xing { width: 15px; height: 15px;
+		margin-left: 2px;
+	}
+.wd_pf_zi { font-family: 'SG700'; color: #dae2fd; font-size: 10px; line-height: 14px; font-weight: 600; margin-left: 4px; }
+.wd_pf_you { font-family: 'SG700'; color: #4edea3; font-size: 10px; line-height: 14px; font-weight: 500; white-space: nowrap; }
+
+/* 片段 F：发单人 */
+.wd_fa_dan {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	padding: 8px;
+	border-radius: 8px;
+	background-color: #131b2e;
+		margin-top: 12px;
+	}
+.wd_fd_zuo { display: flex; flex-direction: row; align-items: center;}
+.wd_fd_tou {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	border-radius: 14px;
+	background-color: #31394d;
+}
+.wd_fd_tou_zi { font-family: 'SG700'; color: #c0c1ff; font-size: 10px; line-height: 14px; font-weight: 700; }
+.wd_fd_wen { display: flex; flex-direction: column;
+		margin-left: 8px;
+	}
+.wd_fd_zhu { font-family: 'PJS600'; color: #dae2fd; font-size: 12px; line-height: 16px; font-weight: 500; }
+.wd_fd_fu { font-family: 'SG700'; color: #c7c4d7; font-size: 10px; line-height: 14px; }
+.wd_fd_shi { font-family: 'SG700'; color: #ffb95f; font-size: 10px; line-height: 14px; white-space: nowrap; }
+
+/* 卡片按钮 */
+.wd_an_hang { display: flex; flex-direction: row; align-items: center; justify-content: flex-end;
+	padding-top: 4px;
+		margin-top: 12px;
+	}
+.wd_an {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+height: 26px;
+	padding-left: 12px;
+	padding-right: 12px;
+	border-radius: 8px;
+	background-color: #222a3d;
+		margin-left: 8px;
+	}
+/* 设计稿里带 15px 图标的按钮行比纯文字按钮行高 1px（31 vs 30） */
+.wd_an_you_tu { height: 27px; }
+.wd_an_tu { width: 15px; height: 15px; }
+.wd_an_zi {
+	font-family: 'SG700';
+	color: #dae2fd;
+	font-size: 10px;
+	line-height: 14px;
+	white-space: nowrap;
+		margin-left: 4px;
+	}
+.wd_an_zhu { background-color: #8083ff; }
+.wd_an_liang { background-color: #c0c1ff; }
+.wd_an_lv { background-color: #00a572; }
+.wd_an_zise { background-color: #31394d; }
+.wd_an_zi_hong { color: #ffb4ab; }
+.wd_an_zi_zhu { color: #0d0096; font-weight: 700; }
+.wd_an_zi_liang { color: #1000a9; font-weight: 700; }
+.wd_an_zi_lv { color: #00311f; font-weight: 700; }
+.wd_an_zi_zise { color: #c0c1ff; font-weight: 600; }
+
+/* 空态 */
+.wd_kong {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	margin-top: 16px;
+	padding: 32px;
+	border-radius: 12px;
+	background-color: #131b2e;
+}
+.wd_kong_yuan {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 64px;
+	height: 64px;
+	margin-bottom: 8px;
+	border-radius: 32px;
+	background-color: #222a3d;
+}
+.wd_kong_tu { width: 32px; height: 32px; }
+.wd_kong_biao { font-family: 'PJS700'; color: #dae2fd; font-size: 18px; line-height: 24px; font-weight: 700; text-align: center; }
+.wd_kong_shuo {
+	font-family: 'PJS400';
+	color: #c7c4d7;
+	font-size: 12px;
+	line-height: 16px;
+	margin-top: 4px;
+	text-align: center;
+}
+.wd_kong_an {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	margin-top: 16px;
+	padding-left: 16px;
+	padding-right: 16px;
+	padding-top: 8px;
+	padding-bottom: 8px;
+	border-radius: 9999px;
+	background-color: #8083ff;
+}
+.wd_kong_an_zi { font-family: 'SG700'; color: #0d0096; font-size: 10px; line-height: 14px; font-weight: 700; }
+</style>

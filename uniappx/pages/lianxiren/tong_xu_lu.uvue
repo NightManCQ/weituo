@@ -1,0 +1,1058 @@
+<script setup lang="ts">
+import { onShow } from '@dcloudio/uni-app'
+import { computed, onMounted, ref } from 'vue'
+import type { 好友联系人, 群聊联系人, 用户 } from '../../common/leixing'
+import { 读取当前用户 } from '../../common/wangluo'
+import { 会话列表 as 真实会话列表 } from '../xiaoxi/会话列表'
+import { 格式化会话时间 } from '../xiaoxi/时间'
+import {
+	联系人列表 as 真实联系人列表,
+	联系人列表正在加载 as 列表正在加载,
+	联系人列表加载错误 as 列表加载错误,
+	刷新联系人列表,
+} from './联系人列表'
+
+/**
+ * 设计图/联系人.html 的界面 + 旧版 pages/lianxiren/lianxiren.uvue 的接口逻辑。
+ *
+ * 数据全部来自 ./联系人列表（GET /my/contacts，App.ts 启动时已预拉一次）：
+ * 好友联系人 / 群聊联系人 -> 设计稿的分组行结构，再由「首字母 + 最近联系」重新分组。
+ * 旧版的搜索过滤、登录判断、点击进聊天在这里原样保留，目标页换成新版 dui_hua。
+ *
+ * 按要求不迁移顶栏 header 与底栏 nav：本页由首页 pages/shou_ye/shou_ye 当作组件
+ * 用 v-if 挂载，顶栏由首页唯一一份 ding_lan 渲染、底栏由首页唯一一份 di_lan 渲染。
+ * 本页只保留两个占位 view（64+状态栏高 / 74+窗口底高）做内容避让。
+ *
+ * 页面级滚动：根容器不锁死高度，内容自然撑开；分组头为静态头（uvue 页面级滚动
+ * 下 sticky 不可靠，首屏视觉与设计稿一致）。
+ * 图标/头像全部本地化到 /static/lianxiren/，字体为本地 ttf，App 端不依赖外链。
+ *
+ * 登录 / 退出 / 更换账号：App.ts 只在 onLaunch 拉一次联系人，之后靠这里的
+ * 「用户编号变化即重新拉取」兜底 —— 未登录时 ./联系人列表 会把列表清空，
+ * 换号后按新令牌重新请求，不会残留上一个账号的好友。
+ */
+
+// 跨标签入口（好友申请在消息页处理）统一抛给首页切换，和 hui_hua_lie_biao 保持一致
+const 抛出 = defineEmits(['change-tab'])
+
+type 片段 = { 文: string; 样: string }
+type 徽章 = { 文: string; 样: string; 图标: string }
+type 联系人 = {
+	键: string
+	名称: string
+	项目类型: string
+	首字: string
+	排序: string
+	搜索: string
+	头像: string
+	图标: string
+	图标底色: string
+	在线: string
+	徽章: 徽章[]
+	副: 片段[]
+	右文: string
+	右样: string
+}
+type 分组 = { 键: string; 字母: string; 计数: string; 置顶: boolean; 列表: 联系人[] }
+type 筛选项 = { 键: string; 名称: string; 数: string; 图标: string; 激活图标: string }
+type 字母项 = { 字: string; 目标: string; 淡: boolean }
+type 桶 = { 字母: string; 列表: 联系人[] }
+
+// 组件的 onLoad 不会触发，窗口信息在 setup 期间同步取值
+const 系统信息: any = uni.getSystemInfoSync()
+const 状态栏高 = ref(系统信息.statusBarHeight ?? 0)
+const 窗口底高 = ref(系统信息.windowBottom ?? 0)
+// 空状态/筛选后内容不足一屏时，保证深色背景仍铺满视口（否则会露出首页浅色底）
+const 视口高 = ref(系统信息.windowHeight ?? 932)
+
+const 搜索词 = ref('')
+const 筛选 = ref('all')
+const 当前用户 = ref<用户 | null>(null)
+
+const 图标目录 = '/static/lianxiren/icons/'
+
+// 后端没有头像、也没有「群组图标」字段：按名称做一次稳定散列，给每个联系人或群组
+// 分配固定的图标与底色，避免整屏都是同一个灰色方块（设计稿里每行图标各不相同）。
+const 群图标池 = ['forum.svg', 'diversity_3.svg', 'groups_2_variant.svg', 'translate.svg',
+	'memory.svg', 'rocket_launch.svg', 'handshake.svg', 'fitness_center.svg', 'bolt.svg']
+const 头像底色池 = ['#2d3449', '#33304d', '#1f3a34', '#3a2f24', '#2a3548', '#3a2a3f']
+
+const 拉丁字母 = 'abcdefghijklmnopqrstuvwxyz'
+
+function 色序(文本: string): number {
+	let 和 = 0
+	for (let i = 0; i < 文本.length; i++) 和 += 文本.charCodeAt(i)
+	return 和
+}
+
+function 徽(文: string, 样: string, 图标: string = ''): 徽章 { return { 文, 样, 图标 } }
+function 段(文: string, 样: string = ''): 片段 { return { 文, 样 } }
+
+/* ---------------- 联系人列表：接口数据 -> 设计稿行结构 ---------------- */
+
+function 时间戳(值: string | null): number {
+	if (值 == null || 值 == '') return 0
+	const 数值 = new Date(值).getTime()
+	if (Number.isNaN(数值)) return 0
+	return 数值
+}
+
+/** 分组首字母：后端给了拼音（lin-qian-qian），取第一个拉丁字母；否则退回名称首字，再不行归到 # */
+function 取首字母(拼英: string, 名称: string): string {
+	const 拼音 = 拼英.trim().toLowerCase()
+	for (let i = 0; i < 拼音.length; i++) {
+		const 位置 = 拉丁字母.indexOf(拼音.slice(i, i + 1))
+		if (位置 >= 0) return 拉丁字母.slice(位置, 位置 + 1).toUpperCase()
+	}
+	if (名称.length > 0) {
+		const 位置 = 拉丁字母.indexOf(名称.slice(0, 1).toLowerCase())
+		if (位置 >= 0) return 拉丁字母.slice(位置, 位置 + 1).toUpperCase()
+	}
+	return '#'
+}
+
+/** 搜索词同时支持「林浅浅 / lin-qian-qian / linqianqian / 登录名」 */
+function 搜索串(拼英: string, 名称: string, 附加: string): string {
+	return (拼英 + ' ' + 拼英.split('-').join('') + ' ' + 名称 + ' ' + 附加).toLowerCase()
+}
+
+function 转换好友(项: 好友联系人): 联系人 {
+	const 徽章列表: 徽章[] = []
+	徽章列表.push(徽('好友', 'lv'))
+	// 副标题写成单段：拆成多段时 " · " 这种只有空格的片段会被 white-space 折叠成 "·"
+	const 建立时间 = 项.建立时间
+	let 副标题 = '@' + 项.登录名
+	if (建立时间.length >= 10) 副标题 = 副标题 + ' · ' + 建立时间.slice(0, 10) + ' 结识'
+	const 副列表: 片段[] = []
+	副列表.push(段(副标题))
+	const 昵称 = 项.昵称
+	const 序 = 色序(昵称)
+	return {
+		键: '好友:' + 项.用户编号,
+		名称: 昵称,
+		项目类型: '好友',
+		首字: 昵称.length > 0 ? 昵称.slice(0, 1) : '友',
+		排序: 项.拼英,
+		搜索: 搜索串(项.拼英, 昵称, 项.登录名),
+		头像: '',
+		图标: '',
+		图标底色: 头像底色池[序 % 头像底色池.length],
+		在线: '',
+		徽章: 徽章列表,
+		副: 副列表,
+		右文: '',
+		右样: 'zi_hui',
+	}
+}
+
+function 转换群聊(项: 群聊联系人): 联系人 {
+	const 名称 = 项.群组名称
+	const 最近 = 项.最近消息 ?? ''
+	const 公告 = 项.群组公告
+	const 时间 = 项.最近消息时间 ?? ''
+	const 序 = 色序(名称)
+
+	const 徽章列表: 徽章[] = []
+	徽章列表.push(徽('群组 (' + String(项.成员数) + '人)', 'hui'))
+
+	const 副列表: 片段[] = []
+	if (最近 != '') {
+		副列表.push(段('最近： ' + 最近))
+	} else if (公告 != '') {
+		副列表.push(段(公告))
+	} else {
+		副列表.push(段('还没有消息'))
+	}
+
+	return {
+		键: '群聊:' + 项.群组编号,
+		名称: 名称,
+		项目类型: '群聊',
+		首字: 名称.length > 0 ? 名称.slice(0, 1) : '群',
+		排序: 项.拼英,
+		搜索: 搜索串(项.拼英, 名称, 公告 + ' ' + 最近),
+		头像: '',
+		图标: 图标目录 + 群图标池[序 % 群图标池.length],
+		图标底色: 头像底色池[序 % 头像底色池.length],
+		在线: '',
+		徽章: 徽章列表,
+		副: 副列表,
+		右文: 时间 != '' ? 格式化会话时间(时间) : String(项.成员数) + ' 人',
+		右样: 'zi_hui',
+	}
+}
+
+function 入桶(桶表: 桶[], 项: 联系人) {
+	const 字母 = 取首字母(项.排序, 项.名称)
+	for (let i = 0; i < 桶表.length; i++) {
+		if (桶表[i].字母 == 字母) {
+			桶表[i].列表.push(项)
+			return
+		}
+	}
+	const 列表: 联系人[] = []
+	列表.push(项)
+	桶表.push({ 字母: 字母, 列表: 列表 })
+}
+
+/** 真实数据的分组：最近联系的群聊置顶，其余按拼音首字母归档，# 固定排最后 */
+const 全部分组 = computed<分组[]>(() => {
+	const 结果: 分组[] = []
+	if (当前用户.value == null) return 结果
+
+	const 数据 = 真实联系人列表.value.数据
+	const 好友行: 联系人[] = []
+	const 群聊原始: 群聊联系人[] = []
+	for (let i = 0; i < 数据.length; i++) {
+		const 条目 = 数据[i]
+		if (条目.项目类型 == '好友') 好友行.push(转换好友(条目 as 好友联系人))
+		else 群聊原始.push(条目 as 群聊联系人)
+	}
+
+	// 最近联系：有最近消息时间的群聊按时间倒序取前 3（设计稿的 ★ 置顶组）
+	群聊原始.sort((甲: 群聊联系人, 乙: 群聊联系人): number => 时间戳(乙.最近消息时间) - 时间戳(甲.最近消息时间))
+	const 最近: 联系人[] = []
+	const 其余群聊: 联系人[] = []
+	for (let i = 0; i < 群聊原始.length; i++) {
+		const 群 = 群聊原始[i]
+		if (最近.length < 3 && 时间戳(群.最近消息时间) > 0) 最近.push(转换群聊(群))
+		else 其余群聊.push(转换群聊(群))
+	}
+	if (最近.length > 0) {
+		结果.push({ 键: 'pinned', 字母: '最近联系 · Pinned', 计数: String(最近.length) + ' 项', 置顶: true, 列表: 最近 })
+	}
+
+	// 首字母分桶（好友与群聊混排，与设计稿一致）
+	const 桶表: 桶[] = []
+	for (let i = 0; i < 好友行.length; i++) 入桶(桶表, 好友行[i])
+	for (let i = 0; i < 其余群聊.length; i++) 入桶(桶表, 其余群聊[i])
+	桶表.sort((甲: 桶, 乙: 桶): number => 甲.字母.localeCompare(乙.字母))
+
+	// A-Z 在前，# 组（没有拼音的名字）固定排在最后
+	for (let i = 0; i < 桶表.length; i++) {
+		const 桶 = 桶表[i]
+		if (桶.字母 == '#') continue
+		桶.列表.sort((甲: 联系人, 乙: 联系人): number => 甲.排序.localeCompare(乙.排序))
+		结果.push({ 键: 桶.字母, 字母: 桶.字母, 计数: String(桶.列表.length) + ' 项', 置顶: false, 列表: 桶.列表 })
+	}
+	for (let i = 0; i < 桶表.length; i++) {
+		const 桶 = 桶表[i]
+		if (桶.字母 != '#') continue
+		桶.列表.sort((甲: 联系人, 乙: 联系人): number => 甲.排序.localeCompare(乙.排序))
+		结果.push({ 键: 'qita', 字母: '#', 计数: String(桶.列表.length) + ' 项', 置顶: false, 列表: 桶.列表 })
+	}
+	return 结果
+})
+
+/** 搜索词 + 分类筛选：按设计稿 updateView() 的思路过滤，空分组整体隐藏 */
+const 可见分组 = computed<分组[]>(() => {
+	const 词 = 搜索词.value.trim().toLowerCase()
+	const 类 = 筛选.value
+	const 结果: 分组[] = []
+	const 源 = 全部分组.value
+	for (let i = 0; i < 源.length; i++) {
+		const 组 = 源[i]
+		if (类 == 'recent' && !组.置顶) continue
+		const 行: 联系人[] = []
+		for (let j = 0; j < 组.列表.length; j++) {
+			const 项 = 组.列表[j]
+			if (类 == 'friends' && 项.项目类型 != '好友') continue
+			if (类 == 'groups' && 项.项目类型 != '群聊') continue
+			if (词 != '' && 项.搜索.indexOf(词) < 0) continue
+			行.push(项)
+		}
+		if (行.length > 0) {
+			结果.push({ 键: 组.键, 字母: 组.字母, 计数: String(行.length) + ' 项', 置顶: 组.置顶, 列表: 行 })
+		}
+	}
+	return 结果
+})
+const 可见行数 = computed<number>(() => {
+	let 合计 = 0
+	for (let i = 0; i < 可见分组.value.length; i++) 合计 += 可见分组.value[i].列表.length
+	return 合计
+})
+
+const 好友数 = computed<number>(() => 真实联系人列表.value.联系人个数)
+const 群聊数 = computed<number>(() => 真实联系人列表.value.群聊个数)
+const 最近联系数 = computed<number>(() => {
+	let 数 = 0
+	const 数据 = 真实联系人列表.value.数据
+	for (let i = 0; i < 数据.length; i++) {
+		const 条目 = 数据[i]
+		if (条目.项目类型 != '群聊') continue
+		if (时间戳((条目 as 群聊联系人).最近消息时间) > 0) 数 += 1
+	}
+	return 数 < 3 ? 数 : 3
+})
+
+/** 待处理的「好友验证 / 群邀请」条数：复用会话列表模块，处理后这里会实时减少 */
+const 申请数 = computed<number>(() => {
+	let 数 = 0
+	for (let i = 0; i < 真实会话列表.value.length; i++) {
+		const 类型 = 真实会话列表.value[i].会话类型
+		if (类型 == '好友验证' || 类型 == '群邀请') 数 += 1
+	}
+	return 数
+})
+
+const 筛选表 = computed<筛选项[]>(() => {
+	const 表: 筛选项[] = []
+	表.push({
+		键: 'all', 名称: '全部联系人', 数: String(好友数.value + 群聊数.value),
+		图标: 图标目录 + 'groups_2_variant.svg', 激活图标: 图标目录 + 'groups_2_deep.svg',
+	})
+	表.push({
+		键: 'friends', 名称: '好友', 数: String(好友数.value),
+		图标: 图标目录 + 'contacts.svg', 激活图标: 图标目录 + 'contacts_deep.svg',
+	})
+	表.push({
+		键: 'groups', 名称: '群聊', 数: String(群聊数.value),
+		图标: 图标目录 + 'diversity_3.svg', 激活图标: 图标目录 + 'diversity_3_deep.svg',
+	})
+	表.push({
+		键: 'recent', 名称: '最近', 数: String(最近联系数.value),
+		图标: 图标目录 + 'star.svg', 激活图标: 图标目录 + 'star_deep.svg',
+	})
+	return 表
+})
+
+function 筛选图标(标: 筛选项): string {
+	return 筛选.value == 标.键 ? 标.激活图标 : 标.图标
+}
+function 徽章类(样: string): string { return 'lxr_hui_bg_' + 样 }
+function 徽章字类(样: string): string { return 'lxr_hui_se_' + 样 }
+function 在线类(样: string): string { return 'lxr_dian_' + 样 }
+function 右类(样: string): string { return 'lxr_you_' + 样 }
+/** 副标题：最后一段占满剩余宽度并省略，避免多行撑开行高 */
+function 副标题类(片: 片段, 序: number, 总: number): string {
+	const 色 = 片.样 == '' ? '' : 'lxr_fu_' + 片.样
+	return 色 + (序 == 总 - 1 ? ' lxr_fu_yu' : '')
+}
+function 字母类(项: 字母项): string {
+	if (显示字母.value == 项.字) return 'lxr_zi_mu_ji'
+	if (项.淡) return 'lxr_zi_mu_dan'
+	if (项.字 == '★') return 'lxr_zi_mu_xing'
+	return ''
+}
+
+// v-for 里的点击不能写 @click="fn(项)"：web 端会把带循环变量的处理器缓存成
+// 所有行共用的闭包，统一用 :data-* + dataset 回查。
+function 切换筛选(事件: any) {
+	const 键 = 事件.currentTarget.dataset['key']
+	if (typeof 键 == 'string') 筛选.value = 键
+}
+function 清除搜索() { 搜索词.value = '' }
+function 重置筛选() { 搜索词.value = ''; 筛选.value = 'all' }
+
+function 提示(文字: string) { uni.showToast({ title: 文字, icon: 'none' }) }
+function 前往登录() { uni.navigateTo({ url: '/pages/deng_lu/deng_lu' }) }
+function 去添加好友() { uni.navigateTo({ url: '/pages/tianjiahaoyou/tianjiahaoyou' }) }
+/** 好友申请/群邀请的同意拒绝在消息页的验证卡片里处理，这里切到消息标签 */
+function 看申请() { 抛出('change-tab', '消息') }
+/** 「群组协作大厅」= 已加入的群聊，直接筛出群聊 */
+function 看群聊() { 筛选.value = 'groups' }
+
+/**
+ * 进入聊天（旧版 lianxiren.uvue 的 进入聊天/打开联系人）：
+ * 好友的私聊编号就是用户编号（后端 /my/friends/{编号}/messages 两种编号都接受），
+ * 群聊的编号就是群组编号（/groups/{群组编号}/messages）。
+ */
+function 打开聊天(会话编号: string, 会话名称: string, 会话类型: string, 业务编号: string) {
+	if (会话编号 == '') {
+		提示('编号缺失，无法打开聊天')
+		return
+	}
+	uni.navigateTo({
+		url: `/pages/liaotian/dui_hua?hui_hua=${encodeURIComponent(会话编号)}&ming_cheng=${encodeURIComponent(会话名称)}&lei_xing=${会话类型}&bian_hao=${encodeURIComponent(业务编号)}`,
+	})
+}
+
+function 点联系人(事件参数: any) {
+	const 键 = 事件参数.currentTarget.dataset['key']
+	if (typeof 键 != 'string') return
+	const 数据 = 真实联系人列表.value.数据
+	for (let i = 0; i < 数据.length; i++) {
+		const 条目 = 数据[i]
+		if (条目.项目类型 == '好友') {
+			const 好友 = 条目 as 好友联系人
+			if ('好友:' + 好友.用户编号 == 键) {
+				打开聊天(好友.用户编号, 好友.昵称, '好友', 好友.用户编号)
+				return
+			}
+		} else {
+			const 群 = 条目 as 群聊联系人
+			if ('群聊:' + 群.群组编号 == 键) {
+				打开聊天(群.群组编号, 群.群组名称, '群聊', 群.群组编号)
+				return
+			}
+		}
+	}
+}
+
+/* ---------------- 生命周期：登录 / 退出 / 更换账号 ---------------- */
+
+// 首页用 v-if 挂载本页，标签切换会重新挂载但不触发页面 onShow，所以两个钩子都挂。
+// 用户编号变化（登录、退出、换号）必须重拉；同一个人反复切标签做 3s 节流。
+let 上次用户键 = ''
+let 上次刷新时刻 = 0
+
+async function 刷新联系人() {
+	try {
+		await 刷新联系人列表()
+	} catch (原因) {
+		// 模块内已写入 联系人列表加载错误，这里只兜底日志，避免未捕获的 Promise
+		console.error('联系人列表加载失败', 原因)
+	}
+}
+
+function 同步登录态() {
+	const 用户 = 读取当前用户()
+	当前用户.value = 用户
+	const 键 = 用户 == null ? '' : 用户.用户编号
+	const 换号 = 键 != 上次用户键
+	上次用户键 = 键
+	const 现在 = Date.now()
+	if (!换号 && 现在 - 上次刷新时刻 < 3000) return
+	上次刷新时刻 = 现在
+	void 刷新联系人()
+}
+onShow(同步登录态)
+onMounted(同步登录态)
+
+/* ---------------- 空状态与统计文案 ---------------- */
+
+const 空态标题 = computed<string>(() => {
+	if (当前用户.value == null) return '登录后查看联系人与群聊'
+	if (列表加载错误.value != '') return '联系人加载失败'
+	if (列表正在加载.value) return '正在同步联系人…'
+	if (好友数.value + 群聊数.value == 0) return '还没有好友或群聊'
+	return '未找到相关联系人或群组'
+})
+const 空态说明 = computed<string>(() => {
+	if (当前用户.value == null) return '登录后即可查看好友与群聊，并在通讯录里直接发起聊天。'
+	if (列表加载错误.value != '') return 列表加载错误.value
+	if (列表正在加载.value) return '正在从服务器拉取你的好友与群聊列表。'
+	if (好友数.value + 群聊数.value == 0) return '先添加好友，或创建一个群聊，就能在这里看到他们。'
+	return '可以尝试搜索昵称、群名或拼音首字母，或切换筛选标签。'
+})
+const 空态按钮 = computed<string>(() => {
+	if (当前用户.value == null) return '前往登录'
+	if (列表加载错误.value != '') return '重新加载'
+	if (好友数.value + 群聊数.value == 0) return '添加好友'
+	if (可见行数.value == 0) return '显示全部联系人'
+	return ''
+})
+function 空态点击() {
+	if (当前用户.value == null) { 前往登录(); return }
+	if (列表加载错误.value != '') { void 刷新联系人(); return }
+	if (好友数.value + 群聊数.value == 0) { 去添加好友(); return }
+	重置筛选()
+}
+
+const 概览文案 = computed<string>(() => {
+	if (当前用户.value == null) return '未登录'
+	return '共 ' + String(好友数.value) + ' 位好友'
+})
+const 申请文案 = computed<string>(() => {
+	if (申请数.value <= 0) return '查看'
+	return '+' + String(申请数.value) + ' 新申请'
+})
+const 申请说明 = computed<string>(() => {
+	if (申请数.value <= 0) return '来自同城求助、游戏开黑与设计委托'
+	return '有 ' + String(申请数.value) + ' 条好友或群聊邀请待处理'
+})
+const 群聊说明 = computed<string>(() => String(群聊数.value) + ' 个已加入的群聊')
+const 统计说明 = computed<string>(() => {
+	return '共 ' + String(好友数.value) + ' 位好友 · ' + String(群聊数.value) + ' 个协作群聊 · 信用凭证受智能网络保障'
+})
+
+/* ---------------- 字母索引：HUD 气泡 + 滚动定位 ---------------- */
+const 显示字母 = ref('')
+const 字母栏顶 = ref(-1)
+const 字母栏高 = ref(1)
+const 上次序 = ref(-1)
+let HUD计时: any = null
+
+/** 索引栏按「当前可见的分组」生成：筛选后不会指向已隐藏的组 */
+const 字母表 = computed<字母项[]>(() => {
+	const 表: 字母项[] = []
+	let 有井号 = false
+	for (let i = 0; i < 可见分组.value.length; i++) {
+		const 组 = 可见分组.value[i]
+		const 字 = 组.置顶 ? '★' : 组.字母
+		if (字 == '#') 有井号 = true
+		表.push({ 字: 字, 目标: 组.键, 淡: false })
+	}
+	if (!有井号) 表.push({ 字: '#', 目标: 'footer', 淡: false })
+	return 表
+})
+
+function 显示HUD(字: string) {
+	显示字母.value = 字
+	if (HUD计时 != null) clearTimeout(HUD计时)
+	HUD计时 = setTimeout(() => {
+		显示字母.value = ''
+		上次序.value = -1
+	}, 600)
+}
+
+function 跳到分组(目标: string, 字: string) {
+	显示HUD(字)
+	if (目标 == '') return
+	try {
+		const 查询: any = uni.createSelectorQuery()
+		查询.select('.lxr_zu_' + 目标).boundingClientRect()
+		查询.selectViewport().scrollOffset()
+		查询.exec((结果: any) => {
+			if (结果 == null || 结果.length < 1) return
+			const 矩形 = 结果[0]
+			if (矩形 == null) return
+			const 视口 = 结果.length > 1 ? 结果[1] : null
+			const 当前 = 视口 != null ? (视口.scrollTop ?? 0) : 0
+			const 顶部 = 矩形.top ?? 0
+			uni.pageScrollTo({
+				scrollTop: Math.max(0, 当前 + 顶部 - (64 + 状态栏高.value) - 8),
+				duration: 200,
+			})
+		})
+	} catch (错误) {
+		// App 端若不支持 selectViewport().scrollOffset()，HUD 提示仍正常
+	}
+}
+
+function 点字母(事件: any) {
+	const 序 = Number(事件.currentTarget.dataset['index'])
+	if (isNaN(序) || 序 < 0 || 序 >= 字母表.value.length) return
+	const 项 = 字母表.value[序]
+	跳到分组(项.目标, 项.字)
+}
+
+/** 首次触摸时量一次字母栏位置，供滑动换算字符索引 */
+function 准备滑动() {
+	if (字母栏高.value > 1) return
+	try {
+		const 查询: any = uni.createSelectorQuery()
+		查询.select('.lxr_zi_mu_lan').boundingClientRect((矩形: any) => {
+			if (矩形 != null) {
+				字母栏顶.value = 矩形.top ?? 0
+				字母栏高.value = 矩形.height ?? 1
+			}
+		}).exec()
+	} catch (错误) { /* 忽略，点击索引仍可用 */ }
+}
+function 滑动字母(事件: any) {
+	if (字母栏顶.value < 0) return
+	const 触点 = (事件.touches != null && 事件.touches.length > 0)
+		? 事件.touches[0]
+		: ((事件.changedTouches != null && 事件.changedTouches.length > 0) ? 事件.changedTouches[0] : null)
+	if (触点 == null) return
+	const y = 触点.clientY
+	if (typeof y != 'number') return
+	let 序 = Math.floor(((y - 字母栏顶.value) / 字母栏高.value) * 字母表.value.length)
+	if (序 < 0) 序 = 0
+	if (序 >= 字母表.value.length) 序 = 字母表.value.length - 1
+	if (序 == 上次序.value) return
+	上次序.value = 序
+	跳到分组(字母表.value[序].目标, 字母表.value[序].字)
+}
+function 结束滑动() { 上次序.value = -1 }
+</script>
+
+<template>
+	<view class="lxr_ye" :style="{ minHeight: 视口高 + 'px' }">
+		<!-- 动态光晕背景：设计稿是 blur-[100px]，uvue 既没有 blur 滤镜、App 端也不支持
+		     radial-gradient，所以用预烘焙的径向渐隐 PNG（static/guang/*.png）：
+		     alpha 从中心连续衰减到边缘的 0。不能再用「linear-gradient + border-radius:50%」——
+		     线性渐变只沿一个方向衰减，圆形裁剪处仍留 40%~60% 的起始透明度，
+		     会在页面上切出一条可见的圆弧色块。 -->
+		<view class="lxr_guang_ceng">
+			<image class="lxr_guang lxr_guang_1" src="/static/guang/zi_08.png" mode="scaleToFill"></image>
+			<image class="lxr_guang lxr_guang_2" src="/static/guang/lv_06.png" mode="scaleToFill"></image>
+			<image class="lxr_guang lxr_guang_3" src="/static/guang/dan_zi_04.png" mode="scaleToFill"></image>
+		</view>
+
+		<view class="lxr_nei_rong">
+			<!-- 顶栏占位：为首页那份 fixed 顶栏留出 64px 内容高度 + 状态栏高度 -->
+			<view :style="{ height: (64 + 状态栏高) + 'px' }"></view>
+
+			<!-- 搜索栏 + 筛选标签 -->
+			<view class="lxr_ding_qu">
+				<view class="lxr_sou_suo">
+					<image class="lxr_sou_suo_tu" src="/static/lianxiren/icons/search.svg" mode="aspectFit"></image>
+					<input
+						class="lxr_sou_suo_kuang"
+						v-model="搜索词"
+						placeholder="搜索搭子、代办专员、悬赏群组..."
+						placeholder-class="lxr_zhan_wei"
+					/>
+					<view v-if="搜索词.length > 0" class="lxr_qing_chu" @click="清除搜索">
+						<image class="lxr_qing_chu_tu" src="/static/lianxiren/icons/cancel.svg" mode="aspectFit"></image>
+					</view>
+				</view>
+				<scroll-view class="lxr_shai_tiao" direction="horizontal" :show-scrollbar="false">
+					<view class="lxr_shai_hang">
+						<view
+							v-for="标 in 筛选表"
+							:key="标.键"
+							class="lxr_shai_an"
+							:class="筛选 == 标.键 ? 'lxr_shai_an_ji' : ''"
+							:data-key="标.键"
+							@click="切换筛选"
+						>
+							<image class="lxr_shai_tu" :src="筛选图标(标)" mode="aspectFit"></image>
+							<text class="lxr_shai_zi" :class="筛选 == 标.键 ? 'lxr_shai_zi_ji' : ''">{{ 标.名称 }}</text>
+							<text class="lxr_shai_shu" :class="筛选 == 标.键 ? 'lxr_shai_shu_ji' : ''">{{ 标.数 }}</text>
+						</view>
+					</view>
+				</scroll-view>
+			</view>
+
+			<!-- 常用联络功能 -->
+			<view class="lxr_kuai_qu">
+				<view class="lxr_kuai_tou">
+					<text class="lxr_kuai_tou_zi">常用联络功能</text>
+					<view class="lxr_zai_xian">
+						<view class="lxr_zai_xian_dian"></view>
+						<text class="lxr_zai_xian_zi">{{ 概览文案 }}</text>
+					</view>
+				</view>
+				<!-- 好友验证 / 群邀请的真实条数来自会话列表模块，处理完会实时减少 -->
+				<view class="lxr_kuai_hang" @click="看申请">
+					<view class="lxr_kuai_zuo">
+						<view class="lxr_kuai_yuan lxr_kuai_yuan_zi">
+							<image class="lxr_kuai_yuan_tu" src="/static/lianxiren/icons/contacts.svg" mode="aspectFit"></image>
+						</view>
+						<view class="lxr_kuai_wen">
+							<text class="lxr_kuai_ming">新的好友与协作请求</text>
+							<text class="lxr_kuai_fu">{{ 申请说明 }}</text>
+						</view>
+					</view>
+					<view class="lxr_kuai_you">
+						<text v-if="申请数 > 0" class="lxr_xin_shen_qing">{{ 申请文案 }}</text>
+						<text v-else class="lxr_cha_kan">{{ 申请文案 }}</text>
+					</view>
+				</view>
+				<view class="lxr_kuai_hang" @click="看群聊">
+					<view class="lxr_kuai_zuo">
+						<view class="lxr_kuai_yuan lxr_kuai_yuan_cheng">
+							<image class="lxr_kuai_yuan_tu" src="/static/lianxiren/icons/forum.svg" mode="aspectFit"></image>
+						</view>
+						<view class="lxr_kuai_wen">
+							<text class="lxr_kuai_ming">群组协作大厅</text>
+							<text class="lxr_kuai_fu">{{ 群聊说明 }}</text>
+						</view>
+					</view>
+					<view class="lxr_kuai_you"><text class="lxr_cha_kan">查看</text></view>
+				</view>
+			</view>
+
+			<!-- 分隔条 -->
+			<view class="lxr_fen_ge"></view>
+
+			<!-- 已有数据时刷新失败：列表仍可用，只在顶部提示并给重试（空列表走下方空状态） -->
+			<view v-if="列表加载错误 != '' && 可见行数 > 0" class="lxr_cuo_wu">
+				<text class="lxr_cuo_wu_zi">{{ 列表加载错误 }}</text>
+				<text class="lxr_cuo_wu_an" @click="刷新联系人">重试</text>
+			</view>
+
+			<!-- 联系人目录（右侧留出字母索引栏空间） -->
+			<view class="lxr_mu_lu">
+				<!-- key 带上筛选/搜索词：uni-app x 的组件 slot 会缓存，仅换 组.键 时
+				     复用的分组节点内层列表不重渲染，筛选后组内行会保持旧值 -->
+				<view
+					v-for="组 in 可见分组"
+					:key="组.键 + '_' + 筛选 + '_' + 搜索词"
+					class="lxr_fen_zu"
+					:class="'lxr_zu_' + 组.键"
+				>
+					<view class="lxr_zu_tou" :class="组.置顶 ? 'lxr_zu_tou_zhi' : ''">
+						<view class="lxr_zu_tou_zuo">
+							<image v-if="组.置顶" class="lxr_zu_xing" src="/static/lianxiren/icons/star.svg" mode="aspectFit"></image>
+							<text class="lxr_zu_biao" :class="组.置顶 ? 'lxr_zu_biao_zhi' : 'lxr_zu_biao_zi_mu'">{{ 组.字母 }}</text>
+						</view>
+						<text class="lxr_zu_shu">{{ 组.计数 }}</text>
+					</view>
+
+					<view v-for="项 in 组.列表" :key="项.键" class="lxr_hang" :data-key="项.键" @click="点联系人">
+						<view class="lxr_hang_zuo">
+							<view class="lxr_tou_xiang_kuang">
+								<!-- 后端联系人没有头像 URL：好友降级成「昵称首字」文字头像，群聊用群组图标 -->
+								<image v-if="项.头像 != ''" class="lxr_tou_xiang" :src="项.头像" mode="aspectFill"></image>
+								<view v-else-if="项.项目类型 == '群聊'" class="lxr_tou_xiang_tu" :style="{ backgroundColor: 项.图标底色 }">
+									<image class="lxr_tou_xiang_tu_nei" :src="项.图标" mode="aspectFit"></image>
+								</view>
+								<view v-else class="lxr_tou_xiang_wen" :style="{ backgroundColor: 项.图标底色 }">
+									<text class="lxr_tou_xiang_zi">{{ 项.首字 }}</text>
+								</view>
+								<view v-if="项.在线 != ''" class="lxr_zai_xian_dian_xiao" :class="在线类(项.在线)"></view>
+							</view>
+							<view class="lxr_hang_wen">
+								<view class="lxr_ming_hang">
+									<text class="lxr_ming">{{ 项.名称 }}</text>
+									<view v-for="徽 in 项.徽章" :key="徽.文" class="lxr_hui_zhang" :class="徽章类(徽.样)">
+										<image v-if="徽.图标 != ''" class="lxr_hui_tu" :src="徽.图标" mode="aspectFit"></image>
+										<text class="lxr_hui_zi" :class="徽章字类(徽.样)">{{ 徽.文 }}</text>
+									</view>
+								</view>
+								<view class="lxr_fu_hang">
+									<text
+										v-for="(片, 序) in 项.副"
+										:key="片.文"
+										class="lxr_fu_zi"
+										:class="副标题类(片, 序, 项.副.length)"
+									>{{ 片.文 }}</text>
+								</view>
+							</view>
+						</view>
+						<view class="lxr_hang_you">
+							<text class="lxr_you_zi" :class="右类(项.右样)">{{ 项.右文 }}</text>
+						</view>
+					</view>
+				</view>
+
+				<!-- 空状态：未登录 / 加载中 / 加载失败 / 无结果 共用同一块版式 -->
+				<view v-if="可见行数 == 0" class="lxr_kong">
+					<view class="lxr_kong_yuan">
+						<image class="lxr_kong_tu" src="/static/lianxiren/icons/person_search.svg" mode="aspectFit"></image>
+					</view>
+					<text class="lxr_kong_ming">{{ 空态标题 }}</text>
+					<text class="lxr_kong_fu">{{ 空态说明 }}</text>
+					<view v-if="空态按钮 != ''" class="lxr_kong_an" @click="空态点击">
+						<text class="lxr_kong_an_zi">{{ 空态按钮 }}</text>
+					</view>
+				</view>
+			</view>
+
+			<!-- 底部统计 -->
+			<view class="lxr_tong_ji lxr_zu_footer">
+				<view class="lxr_tong_ji_tou">
+					<view class="lxr_tong_ji_dian"></view>
+					<text class="lxr_tong_ji_zi">LinkQuest 协同互助网络</text>
+				</view>
+				<text class="lxr_tong_ji_fu">{{ 统计说明 }}</text>
+				<view class="lxr_lian_jie_hang">
+					<text class="lxr_lian_jie" @click="提示('导出通讯录')">导出通讯录</text>
+					<text class="lxr_lian_jie_ge">·</text>
+					<text class="lxr_lian_jie" @click="提示('黑名单管理')">黑名单管理</text>
+					<text class="lxr_lian_jie_ge">·</text>
+					<text class="lxr_lian_jie" @click="提示('权限与隐私')">权限与隐私</text>
+				</view>
+			</view>
+
+			<!-- 底栏占位：58px 固定底栏 + 16px 余量 + windowBottom -->
+			<view :style="{ height: (74 + 窗口底高) + 'px' }"></view>
+		</view>
+
+		<!-- 居中 HUD 字母气泡：只在滑动/点字母时渲染，且不参与点击命中 -->
+		<view v-if="显示字母 != ''" class="lxr_hud">
+			<view class="lxr_hud_ka"><text class="lxr_hud_zi">{{ 显示字母 }}</text></view>
+		</view>
+
+		<!-- 右侧字母快速索引栏 -->
+		<view class="lxr_zi_mu_lan" @touchstart="准备滑动" @touchmove="滑动字母" @touchend="结束滑动">
+			<view
+				v-for="(项, 序) in 字母表"
+				:key="项.字"
+				class="lxr_zi_mu_an"
+				:data-index="序"
+				@click="点字母"
+			>
+				<text class="lxr_zi_mu_zi" :class="字母类(项)">{{ 项.字 }}</text>
+			</view>
+		</view>
+	</view>
+</template>
+
+<style>
+/* 设计稿字体：Plus Jakarta Sans（正文）、Space Grotesk（标签），全部本地 ttf */
+@font-face { font-family: 'PJS400'; src: url('/static/hui_hua/fonts/PlusJakartaSans-400.ttf'); }
+@font-face { font-family: 'PJS600'; src: url('/static/hui_hua/fonts/PlusJakartaSans-600.ttf'); }
+@font-face { font-family: 'SG600'; src: url('/static/hui_hua/fonts/SpaceGrotesk-600.ttf'); }
+@font-face { font-family: 'SG700'; src: url('/static/hui_hua/fonts/SpaceGrotesk-700.ttf'); }
+
+.lxr_sou_suo_kuang, .lxr_kuai_fu, .lxr_fu_zi, .lxr_kong_fu, .lxr_tong_ji_fu { font-family: 'PJS400'; }
+.lxr_kuai_ming, .lxr_ming, .lxr_kong_ming { font-family: 'PJS600'; }
+.lxr_shai_zi, .lxr_zai_xian_zi, .lxr_hui_zi, .lxr_zu_shu, .lxr_you_zi,
+.lxr_lian_jie, .lxr_kong_an_zi, .lxr_zi_mu_zi, .lxr_cha_kan { font-family: 'SG600'; }
+.lxr_shai_shu, .lxr_kuai_tou_zi, .lxr_xin_shen_qing, .lxr_zu_biao_zhi,
+.lxr_zu_biao_zi_mu, .lxr_tong_ji_zi, .lxr_hud_zi { font-family: 'SG700'; }
+
+.lxr_ye {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	min-height: 800px;
+	background-color: #0b1326;
+}
+.lxr_nei_rong {
+	position: relative;
+	z-index: 1;
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+}
+
+/* ---------- 光晕背景 ---------- */
+.lxr_guang_ceng {
+	position: absolute;
+	top: 0; left: 0; right: 0;
+	height: 900px;
+	overflow: hidden;
+}
+.lxr_guang { position: absolute; }
+.lxr_guang_1 { top: -128px; left: -80px; width: 320px; height: 320px; }
+.lxr_guang_2 { top: 280px; right: -96px; width: 320px; height: 320px; }
+.lxr_guang_3 { top: 620px; left: 90px; width: 288px; height: 288px; }
+
+/* ---------- 搜索 + 筛选 ---------- */
+.lxr_ding_qu {
+	display: flex; flex-direction: column;
+	padding-left: 16px; padding-right: 16px; padding-top: 4px; padding-bottom: 8px;
+}
+.lxr_sou_suo { position: relative; display: flex; align-items: center; width: 100%; height: 44px; }
+.lxr_sou_suo_tu { position: absolute; left: 14px; width: 20px; height: 20px; z-index: 1; }
+.lxr_sou_suo_kuang {
+	width: 100%; height: 44px;
+	padding-left: 44px; padding-right: 40px;
+	border-radius: 9999px;
+	background-color: #131b2e;
+	color: #dae2fd; font-size: 14px;
+}
+.lxr_zhan_wei { color: #908fa0; font-size: 14px; }
+.lxr_qing_chu {
+	position: absolute; right: 10px; z-index: 1;
+	display: flex; align-items: center; justify-content: center;
+	width: 28px; height: 28px; border-radius: 14px;
+}
+.lxr_qing_chu_tu { width: 18px; height: 18px; }
+
+.lxr_shai_tiao { width: 100%; margin-top: 8px; }
+.lxr_shai_hang { display: flex; flex-direction: row; align-items: center; padding-top: 4px; padding-bottom: 4px; }
+.lxr_shai_an {
+	display: flex; flex-direction: row; align-items: center;
+	padding-left: 14px; padding-right: 14px; padding-top: 6px; padding-bottom: 6px;
+	margin-right: 4px; border-radius: 9999px;
+	background-color: #131b2e;
+}
+.lxr_shai_an_ji { background-color: #8083ff; }
+.lxr_shai_tu { width: 16px; height: 16px; margin-right: 6px; }
+.lxr_shai_zi { color: #c7c4d7; font-size: 12px; font-weight: 600; line-height: 16px; white-space: nowrap; }
+.lxr_shai_zi_ji { color: #0d0096; }
+.lxr_shai_shu {
+	margin-left: 6px;
+	padding-left: 6px; padding-right: 6px; padding-top: 1px; padding-bottom: 1px;
+	border-radius: 9999px; background-color: #2d3449;
+	color: #c7c4d7; font-size: 10px; line-height: 14px;
+}
+.lxr_shai_shu_ji { background-color: rgba(13, 0, 150, 0.15); color: #0d0096; }
+
+/* ---------- 常用联络功能 ---------- */
+.lxr_kuai_qu { display: flex; flex-direction: column; width: 100%; margin-top: 4px; }
+.lxr_kuai_tou {
+	display: flex; flex-direction: row; align-items: center; justify-content: space-between;
+	padding-left: 16px; padding-right: 16px; padding-top: 8px; padding-bottom: 8px;
+}
+.lxr_kuai_tou_zi { color: #908fa0; font-size: 10px; line-height: 14px; letter-spacing: 1px; }
+.lxr_zai_xian { display: flex; flex-direction: row; align-items: center; }
+.lxr_zai_xian_dian { width: 6px; height: 6px; border-radius: 3px; background-color: #4edea3; margin-right: 4px; }
+.lxr_zai_xian_zi { color: #4edea3; font-size: 10px; line-height: 14px; }
+
+.lxr_kuai_hang {
+	display: flex; flex-direction: row; align-items: center; justify-content: space-between;
+	width: 100%; padding-left: 16px; padding-right: 16px; padding-top: 12px; padding-bottom: 12px;
+}
+.lxr_kuai_zuo { display: flex; flex-direction: row; align-items: center; flex: 1; overflow: hidden; }
+.lxr_kuai_yuan {
+	display: flex; align-items: center; justify-content: center;
+	width: 40px; height: 40px; border-radius: 20px; margin-right: 12px;
+}
+.lxr_kuai_yuan_zi { background-color: rgba(128, 131, 255, 0.20); }
+.lxr_kuai_yuan_cheng { background-color: rgba(202, 129, 0, 0.20); }
+.lxr_kuai_yuan_tu { width: 20px; height: 20px; }
+.lxr_kuai_wen { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
+.lxr_kuai_ming { color: #dae2fd; font-size: 14px; font-weight: 600; }
+.lxr_kuai_fu { color: #c7c4d7; font-size: 12px; margin-top: 2px; }
+.lxr_kuai_you { display: flex; align-items: center; margin-left: 8px; }
+.lxr_xin_shen_qing {
+	padding-left: 8px; padding-right: 8px; padding-top: 2px; padding-bottom: 2px;
+	border-radius: 9999px; background-color: #00a572; color: #00311f;
+	font-size: 10px; font-weight: 700;
+}
+.lxr_cha_kan { color: #c7c4d7; font-size: 12px; }
+
+.lxr_fen_ge { width: 100%; height: 8px; background-color: #060e20; margin-top: 4px; margin-bottom: 4px; }
+
+/* 刷新失败提示条：保留旧数据，只提示 + 重试 */
+.lxr_cuo_wu {
+	display: flex; flex-direction: row; align-items: center; justify-content: space-between;
+	margin-left: 16px; margin-right: 16px; margin-top: 4px; margin-bottom: 4px;
+	padding-left: 12px; padding-right: 12px; padding-top: 8px; padding-bottom: 8px;
+	border-radius: 12px;
+	background-color: rgba(255, 110, 110, 0.12);
+}
+.lxr_cuo_wu_zi { flex: 1; color: #ff9c9c; font-size: 12px; line-height: 16px; }
+.lxr_cuo_wu_an { color: #ffb95f; font-size: 12px; margin-left: 8px; }
+
+/* ---------- 联系人目录 ---------- */
+.lxr_mu_lu { display: flex; flex-direction: column; width: 100%; padding-right: 28px; }
+.lxr_fen_zu { display: flex; flex-direction: column; width: 100%; }
+.lxr_zu_tou {
+	display: flex; flex-direction: row; align-items: center; justify-content: space-between;
+	width: 100%; padding-left: 16px; padding-right: 16px; padding-top: 6px; padding-bottom: 6px;
+	background-color: #0b1326;
+}
+.lxr_zu_tou_zhi { padding-top: 8px; padding-bottom: 8px; }
+.lxr_zu_tou_zuo { display: flex; flex-direction: row; align-items: center; }
+.lxr_zu_xing { width: 16px; height: 16px; margin-right: 6px; }
+.lxr_zu_biao_zhi { color: #c7c4d7; font-size: 10px; letter-spacing: 1px; }
+.lxr_zu_biao_zi_mu { color: #c0c1ff; font-size: 12px; font-weight: 700; }
+.lxr_zu_shu { color: #908fa0; font-size: 10px; }
+
+.lxr_hang {
+	display: flex; flex-direction: row; align-items: center; justify-content: space-between;
+	width: 100%; padding-left: 16px; padding-right: 16px; padding-top: 12px; padding-bottom: 12px;
+}
+.lxr_hang_zuo { display: flex; flex-direction: row; align-items: center; flex: 1; overflow: hidden; }
+.lxr_tou_xiang_kuang { position: relative; width: 44px; height: 44px; margin-right: 12px; }
+.lxr_tou_xiang { width: 44px; height: 44px; border-radius: 22px; }
+.lxr_tou_xiang_tu {
+	display: flex; align-items: center; justify-content: center;
+	width: 44px; height: 44px; border-radius: 22px;
+}
+.lxr_tou_xiang_tu_nei { width: 22px; height: 22px; }
+/* 好友没有头像图：昵称首字文字头像，底色与群组图标底一致 */
+.lxr_tou_xiang_wen {
+	display: flex; align-items: center; justify-content: center;
+	width: 44px; height: 44px; border-radius: 22px;
+	background-color: #2d3449;
+}
+.lxr_tou_xiang_zi { color: #c0c1ff; font-size: 16px; font-weight: 600; }
+.lxr_zai_xian_dian_xiao {
+	position: absolute; right: 0; bottom: 0;
+	width: 12px; height: 12px; border-radius: 6px;
+	border-width: 2px; border-style: solid; border-color: #0b1326;
+}
+.lxr_dian_lv { background-color: #4edea3; }
+.lxr_dian_hui { background-color: #2d3449; }
+.lxr_dian_cheng { background-color: #ffb95f; }
+
+.lxr_hang_wen { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
+.lxr_ming_hang { display: flex; flex-direction: row; align-items: center; overflow: hidden; }
+.lxr_ming { color: #dae2fd; font-size: 18px; font-weight: 600; line-height: 24px; white-space: nowrap; }
+
+/* 徽章容器底色 */
+.lxr_hui_zhang {
+	display: flex; flex-direction: row; align-items: center;
+	padding-left: 6px; padding-right: 6px; padding-top: 2px; padding-bottom: 2px;
+	margin-left: 8px; border-radius: 9999px;
+}
+.lxr_hui_bg_zi { background-color: rgba(128, 131, 255, 0.20); }
+.lxr_hui_bg_lv { background-color: rgba(78, 222, 163, 0.15); }
+.lxr_hui_bg_cheng { background-color: rgba(202, 129, 0, 0.20); }
+.lxr_hui_bg_hui { background-color: #222a3d; }
+.lxr_hui_bg_shen { background-color: #00a572; }
+.lxr_hui_tu { width: 10px; height: 10px; margin-right: 2px; }
+/* 徽章文字色 */
+.lxr_hui_zi { color: #c7c4d7; font-size: 10px; font-weight: 700; line-height: 14px; white-space: nowrap; }
+.lxr_hui_se_zi { color: #c0c1ff; }
+.lxr_hui_se_lv { color: #4edea3; }
+.lxr_hui_se_cheng { color: #ffb95f; }
+.lxr_hui_se_hui { color: #c7c4d7; }
+.lxr_hui_se_shen { color: #00311f; }
+
+/* 副标题：多段富文本横排，最后一段省略 */
+.lxr_fu_hang { display: flex; flex-direction: row; align-items: center; overflow: hidden; margin-top: 2px; }
+.lxr_fu_zi { color: #c7c4d7; font-size: 12px; line-height: 16px; white-space: nowrap; }
+.lxr_fu_lv { color: #4edea3; font-weight: 600; }
+.lxr_fu_bai { color: #dae2fd; }
+.lxr_fu_yu { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+
+/* 行右侧状态标签 */
+.lxr_hang_you { display: flex; flex-direction: row; align-items: center; margin-left: 8px; }
+.lxr_you_zi { color: #c7c4d7; font-size: 10px; white-space: nowrap; }
+.lxr_you_pai_hui_cheng {
+	padding-left: 8px; padding-right: 8px; padding-top: 2px; padding-bottom: 2px;
+	border-radius: 9999px; background-color: #222a3d; color: #ffb95f;
+}
+.lxr_you_pai_lv {
+	padding-left: 8px; padding-right: 8px; padding-top: 2px; padding-bottom: 2px;
+	border-radius: 9999px; background-color: rgba(78, 222, 163, 0.15); color: #4edea3;
+}
+.lxr_you_zi_hui { color: #908fa0; }
+.lxr_you_zi_dan { color: #6b6a78; }
+.lxr_you_zi_lv { color: #4edea3; font-weight: 700; }
+.lxr_you_zi_cheng { color: #ffb95f; }
+
+/* ---------- 空状态 ---------- */
+.lxr_kong {
+	display: flex; flex-direction: column; align-items: center; justify-content: center;
+	width: 100%; padding-top: 64px; padding-bottom: 64px; padding-left: 16px; padding-right: 16px;
+}
+.lxr_kong_yuan {
+	display: flex; align-items: center; justify-content: center;
+	width: 64px; height: 64px; border-radius: 32px;
+	background-color: #222a3d; margin-bottom: 12px;
+}
+.lxr_kong_tu { width: 32px; height: 32px; }
+.lxr_kong_ming { color: #dae2fd; font-size: 18px; font-weight: 600; text-align: center; }
+.lxr_kong_fu { color: #c7c4d7; font-size: 12px; margin-top: 4px; text-align: center; line-height: 18px; }
+.lxr_kong_an {
+	display: flex; align-items: center; justify-content: center;
+	margin-top: 16px; padding-left: 16px; padding-right: 16px;
+	padding-top: 8px; padding-bottom: 8px;
+	border-radius: 9999px; background-color: #8083ff;
+}
+.lxr_kong_an_zi { color: #0d0096; font-size: 12px; }
+
+/* ---------- 底部统计 ---------- */
+.lxr_tong_ji {
+	display: flex; flex-direction: column; align-items: center; justify-content: center;
+	width: 100%; padding-top: 32px; padding-bottom: 32px; padding-left: 16px; padding-right: 16px;
+}
+.lxr_tong_ji_tou { display: flex; flex-direction: row; align-items: center; }
+.lxr_tong_ji_dian { width: 6px; height: 6px; border-radius: 3px; background-color: #4edea3; margin-right: 8px; }
+.lxr_tong_ji_zi { color: #908fa0; font-size: 10px; letter-spacing: 1px; }
+.lxr_tong_ji_fu { color: #c7c4d7; font-size: 12px; margin-top: 4px; text-align: center; }
+.lxr_lian_jie_hang { display: flex; flex-direction: row; align-items: center; margin-top: 12px; }
+.lxr_lian_jie { color: #c0c1ff; font-size: 10px; }
+.lxr_lian_jie_ge { color: #6b6a78; font-size: 10px; margin-left: 16px; margin-right: 16px; }
+
+/* ---------- 居中 HUD 字母气泡 ----------
+ * 曾经是 top/left/right/bottom:0 的全屏 fixed 层 + opacity:0 隐藏，
+ * 但 opacity 为 0 的元素仍然参与点击命中，z-index:60 又高于底栏(50)，
+ * 结果整页（含底栏）点击全被这层透明蒙皮吃掉。
+ * 现在：未显示时 v-if 不渲染；显示时只占中间 80×80，且 pointer-events: none。
+ */
+.lxr_hud {
+	position: fixed; top: 50%; left: 50%;
+	margin-left: -40px; margin-top: -40px;
+	width: 80px; height: 80px;
+	z-index: 60;
+	display: flex; align-items: center; justify-content: center;
+	pointer-events: none;
+}
+.lxr_hud_ka {
+	display: flex; align-items: center; justify-content: center;
+	width: 80px; height: 80px; border-radius: 16px;
+	background-color: #222a3d;
+	border-width: 1px; border-style: solid; border-color: rgba(192, 193, 255, 0.30);
+}
+.lxr_hud_zi { color: #4edea3; font-size: 38px; }
+
+/* ---------- 右侧字母快速索引栏 ---------- */
+.lxr_zi_mu_lan {
+	position: fixed;
+	right: 4px; top: 112px; bottom: 112px;
+	z-index: 40;
+	display: flex; flex-direction: column; align-items: center; justify-content: center;
+	padding-left: 6px; padding-right: 6px; padding-top: 12px; padding-bottom: 12px;
+	border-radius: 9999px;
+}
+.lxr_zi_mu_an { display: flex; align-items: center; justify-content: center; padding: 2px; }
+.lxr_zi_mu_zi { color: #908fa0; font-size: 10px; line-height: 12px; }
+.lxr_zi_mu_xing { color: #ffb95f; }
+.lxr_zi_mu_dan { color: #5b5a68; }
+.lxr_zi_mu_ji { color: #4edea3; font-weight: 700; }
+</style>

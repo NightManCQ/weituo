@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_stack" name="shell-type"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&amp;family=Space+Grotesk:wght@600;700&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{width:100vw;margin:0;padding:0;background-color:#0b1326;color:#dae2fd;}body{overscroll-behavior-y:none;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { colors: { "secondary-fixed-dim": "#4edea3", "surface-container-lowest": "#060e20", "primary": "#c0c1ff", "inverse-primary": "#494bd6", "on-primary-fixed": "#07006c", "on-tertiary-container": "#3e2400", "primary-container": "#8083ff", "on-secondary-fixed-variant": "#005236", "primary-fixed-dim": "#c0c1ff", "on-surface-variant": "#c7c4d7", "on-surface": "#dae2fd", "on-tertiary-fixed-variant": "#653e00", "inverse-on-surface": "#283044", "on-error-container": "#ffdad6", "surface-container": "#171f33", "error-container": "#93000a", "secondary": "#4edea3", "tertiary-fixed": "#ffddb8", "surface-variant": "#2d3449", "surface-tint": "#c0c1ff", "surface-container-highest": "#2d3449", "secondary-container": "#00a572", "background": "#0b1326", "tertiary-fixed-dim": "#ffb95f", "on-tertiary-fixed": "#2a1700", "primary-fixed": "#e1e0ff", "surface-container-high": "#222a3d", "on-primary-container": "#0d0096", "surface-container-low": "#131b2e", "outline-variant": "#464554", "on-primary-fixed-variant": "#2f2ebe", "inverse-surface": "#dae2fd", "tertiary": "#ffb95f", "on-error": "#690005", "secondary-fixed": "#6ffbbe", "outline": "#908fa0", "on-background": "#dae2fd", "on-tertiary": "#472a00", "surface-bright": "#31394d", "on-primary": "#1000a9", "tertiary-container": "#ca8100", "surface": "#0b1326", "on-secondary-container": "#00311f", "on-secondary-fixed": "#002113", "on-secondary": "#003824", "error": "#ffb4ab", "surface-dim": "#0b1326" }, borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, spacing: { "space-md": "1rem", "margin-desktop": "2.5rem", "space-sm": "0.5rem", "space-xs": "0.25rem", "space-xl": "2rem", "gutter-desktop": "1.5rem", "margin": "1rem", "gutter": "1rem", "space-lg": "1.5rem" }, fontFamily: { "headline-md": ["Plus Jakarta Sans"], "label-sm": ["Space Grotesk"], "headline-sm": ["Plus Jakarta Sans"], "label-md": ["Space Grotesk"], "display-lg-mobile": ["Plus Jakarta Sans"], "display-lg": ["Plus Jakarta Sans"], "body-lg": ["Plus Jakarta Sans"], "label-lg": ["Space Grotesk"], "body-md": ["Plus Jakarta Sans"], "body-sm": ["Plus Jakarta Sans"], "headline-lg": ["Plus Jakarta Sans"] }, fontSize: { "headline-md": ["22px", { "lineHeight": "28px", "letterSpacing": "-0.015em", "fontWeight": "700" }], "label-sm": ["10px", { "lineHeight": "14px", "letterSpacing": "0.05em", "fontWeight": "700" }], "headline-sm": ["18px", { "lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "600" }], "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.03em", "fontWeight": "600" }], "display-lg-mobile": ["30px", { "lineHeight": "36px", "letterSpacing": "-0.025em", "fontWeight": "800" }], "display-lg": ["40px", { "lineHeight": "48px", "letterSpacing": "-0.03em", "fontWeight": "800" }], "body-lg": ["16px", { "lineHeight": "24px", "letterSpacing": "0", "fontWeight": "400" }], "label-lg": ["14px", { "lineHeight": "18px", "letterSpacing": "0.02em", "fontWeight": "600" }], "body-md": ["14px", { "lineHeight": "20px", "letterSpacing": "0", "fontWeight": "400" }], "body-sm": ["12px", { "lineHeight": "16px", "letterSpacing": "0.01em", "fontWeight": "400" }], "headline-lg": ["28px", { "lineHeight": "36px", "letterSpacing": "-0.02em", "fontWeight": "700" }] } } } }</script><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface font-body-md text-on-surface flex flex-col min-h-screen antialiased selection:bg-primary-container selection:text-on-primary-container"><header class="fixed top-0 w-full z-50 pt-safe bg-surface/80 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-16 px-margin flex items-center justify-between gap-space-sm"><div class="flex items-center gap-space-xs"><button aria-label="Go back" class="min-w-[44px] min-h-[44px] -ml-2 rounded-full flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors" onclick="history.back()" type="button"><span class="material-symbols-outlined text-[24px]">arrow_back</span></button><img alt="App favicon icon for LinkQuest, an instant messaging and quest bounty mutual aid app. Clean minimalist vector-style symbol representing a glowing chat speech bubble interwoven with a quest compass star / lightning link emblem. Vibrant indigo (#6366f1) and neon emerald green (#10b981) glowing accents on a deep dark navy (#0b1326) edge-to-edge full-bleed gradient background. CRITICAL: Do NOT draw any rounded rectangle, border, frame, white outline, or squircle container. The entire square image is the icon with a continuous full-bleed dark navy background filling edge to edge. High contrast, iconic, sleek modern tech aesthetic." class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida/AEtjO1Wzs_KgLePVUIRbiSauQx7UWrIJkpm74ptpBxE_AJSjWKKtsy6745pK10UE7kqOoY9fs8e8unSDSCe1_mF9WsfZt_DH84arbSOID50mpHpssyDzVvoJIhHkurdHn4I4C9HceDAcZIkPMD-j8rYFPNQ2owlXTnpXy_eFamgX3zr-cZDxermgR4YX65gFfLFe1ruV-J71r2QvwnOPKqx5Xpf2rkWUMdkiSb_rf--qn5ZVnw"/><div class="flex flex-col ml-space-xs"><span class="font-headline-sm text-headline-sm text-on-surface truncate">Connect &amp; Create</span><span class="font-label-sm text-label-sm text-secondary tracking-widest uppercase">LinkQuest Net</span></div></div><div class="flex items-center gap-space-xs"><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center shrink-0"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="flex flex-col relative w-full pt-16 pb-safe bg-surface min-h-screen"><div class="flex flex-col w-full pb-10">
+<!-- Search & QR Scan Hub Header -->
+<div class="px-margin pt-space-sm pb-space-md">
+<div class="relative flex items-center gap-space-sm">
+<div class="relative flex-1 flex items-center bg-surface-container-low rounded-xl px-space-md py-space-sm shadow-sm">
+<span class="material-symbols-outlined text-outline text-[20px] mr-space-xs shrink-0">search</span>
+<input class="w-full bg-transparent text-on-surface placeholder:text-outline text-body-md font-body-md focus:outline-none" id="globalSearchInput" placeholder="搜索 ID / 手机号 / 技能标签 / 群号" type="text"/>
+<button class="hidden text-outline hover:text-on-surface p-1" id="clearSearchBtn" type="button">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+</div>
+<button aria-label="Scan QR Code" class="h-11 w-11 shrink-0 rounded-xl bg-surface-container-high hover:bg-surface-variant flex items-center justify-center text-secondary transition-all active:scale-95 shadow-sm" onclick="triggerScanFeedback()" type="button">
+<span class="material-symbols-outlined text-[22px]">qr_code_scanner</span>
+</button>
+</div>
+</div>
+<!-- Hero Quick Action Cards: Group Initiation Hub -->
+<div class="px-margin mb-space-lg">
+<div class="relative overflow-hidden rounded-xl bg-surface-container-high p-space-lg shadow-md">
+<!-- Glow ambient backdrop -->
+<div class="absolute -top-12 -right-12 w-40 h-40 bg-primary-container/20 rounded-full blur-3xl pointer-events-none"></div>
+<div class="absolute -bottom-8 -left-8 w-36 h-36 bg-secondary/15 rounded-full blur-2xl pointer-events-none"></div>
+<div class="relative z-10 flex flex-col gap-space-md">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="px-2 py-0.5 rounded-full bg-primary/10 text-primary font-label-sm text-label-sm tracking-wide">GUILD HUB</span>
+<span class="px-2 py-0.5 rounded-full bg-secondary/10 text-secondary font-label-sm text-label-sm">悬赏担保支持</span>
+</div>
+<span class="material-symbols-outlined text-primary text-[22px]">diversity_3</span>
+</div>
+<div>
+<h2 class="font-headline-md text-headline-md text-on-surface">创建新群聊 &amp; 协作空间</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1">支持兴趣交流群与带智能合约担保的委托悬赏群</p>
+</div>
+<!-- Create options split action -->
+<div class="grid grid-cols-2 gap-space-sm pt-space-xs">
+<button class="flex flex-col p-space-sm rounded-xl bg-surface-container-lowest/80 hover:bg-surface-container-lowest transition-all text-left group active:scale-98" onclick="openCreateGroupModal('bounty')" type="button">
+<div class="flex items-center justify-between mb-1">
+<span class="material-symbols-outlined text-secondary text-[20px]">assignment_turned_in</span>
+<span class="material-symbols-outlined text-outline text-[16px] group-hover:translate-x-0.5 transition-transform">arrow_forward</span>
+</div>
+<span class="font-headline-sm text-body-md text-on-surface font-semibold">委托协作群</span>
+<span class="font-label-sm text-label-sm text-secondary-fixed-dim">带奖金池 &amp; 履约托管</span>
+</button>
+<button class="flex flex-col p-space-sm rounded-xl bg-surface-container-lowest/80 hover:bg-surface-container-lowest transition-all text-left group active:scale-98" onclick="openCreateGroupModal('casual')" type="button">
+<div class="flex items-center justify-between mb-1">
+<span class="material-symbols-outlined text-primary text-[20px]">forum</span>
+<span class="material-symbols-outlined text-outline text-[16px] group-hover:translate-x-0.5 transition-transform">arrow_forward</span>
+</div>
+<span class="font-headline-sm text-body-md text-on-surface font-semibold">普通交流群</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">好友速建 · 自由畅聊</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Secondary Quick Capsule Utilities -->
+<div class="grid grid-cols-2 gap-space-sm mt-space-sm">
+<button class="flex items-center gap-space-sm px-space-md py-3 rounded-xl bg-surface-container-low hover:bg-surface-container transition-all active:scale-98" onclick="triggerRadarScan()" type="button">
+<div class="w-8 h-8 rounded-full bg-secondary/15 flex items-center justify-center text-secondary shrink-0">
+<span class="material-symbols-outlined text-[18px]">radar</span>
+</div>
+<div class="flex flex-col text-left truncate">
+<span class="font-label-lg text-label-lg text-on-surface truncate">面对面互助雷达</span>
+<span class="font-label-sm text-label-sm text-outline truncate">探寻 500m 内在线赏金客</span>
+</div>
+</button>
+<button class="flex items-center gap-space-sm px-space-md py-3 rounded-xl bg-surface-container-low hover:bg-surface-container transition-all active:scale-98" onclick="showMyQRModal()" type="button">
+<div class="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center text-primary shrink-0">
+<span class="material-symbols-outlined text-[18px]">badge</span>
+</div>
+<div class="flex flex-col text-left truncate">
+<span class="font-label-lg text-label-lg text-on-surface truncate">我的专属名片</span>
+<span class="font-label-sm text-label-sm text-outline truncate">LinkID: LQ-9821</span>
+</div>
+</button>
+</div>
+</div>
+<!-- Segmented Navigation (People vs Groups) -->
+<div class="px-margin mb-space-md">
+<div class="flex p-1 bg-surface-container-low rounded-xl">
+<button class="flex-1 py-2 rounded-lg font-label-lg text-label-lg transition-all flex items-center justify-center gap-1.5 bg-surface-bright text-on-surface shadow-sm" id="tabBtnPeople" onclick="switchTab('people')" type="button">
+<span class="material-symbols-outlined text-[18px]">person_search</span>
+<span>找互助好友</span>
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+</button>
+<button class="flex-1 py-2 rounded-lg font-label-lg text-label-lg transition-all flex items-center justify-center gap-1.5 text-on-surface-variant hover:text-on-surface" id="tabBtnGroups" onclick="switchTab('groups')" type="button">
+<span class="material-symbols-outlined text-[18px]">groups</span>
+<span>发现活跃群组</span>
+<span class="px-1.5 py-0.2 rounded-full bg-primary/15 text-primary text-label-sm font-label-sm">48+</span>
+</button>
+</div>
+</div>
+<!-- TAB 1: PEOPLE (找好友 / 热门互助达人) -->
+<div class="flex flex-col px-margin gap-space-lg" id="tabContentPeople">
+<!-- Tag Cloud Filters -->
+<div class="flex items-center gap-space-xs overflow-x-auto pb-1 no-scrollbar">
+<span class="font-label-sm text-label-sm text-outline shrink-0 pr-1">技能检索:</span>
+<button class="shrink-0 px-2.5 py-1 rounded-full bg-primary text-on-primary font-label-sm text-label-sm" type="button">全部推荐</button>
+<button class="shrink-0 px-2.5 py-1 rounded-full bg-surface-container-high text-on-surface-variant hover:text-on-surface font-label-sm text-label-sm" type="button">UI/UX设计</button>
+<button class="shrink-0 px-2.5 py-1 rounded-full bg-surface-container-high text-on-surface-variant hover:text-on-surface font-label-sm text-label-sm" type="button">Rust / Go开发</button>
+<button class="shrink-0 px-2.5 py-1 rounded-full bg-surface-container-high text-on-surface-variant hover:text-on-surface font-label-sm text-label-sm" type="button">Blender 3D</button>
+<button class="shrink-0 px-2.5 py-1 rounded-full bg-surface-container-high text-on-surface-variant hover:text-on-surface font-label-sm text-label-sm" type="button">同城急送</button>
+</div>
+<!-- Suggested Collaborators List -->
+<div class="flex flex-col gap-space-sm">
+<div class="flex items-center justify-between">
+<h3 class="font-headline-sm text-headline-sm text-on-surface flex items-center gap-1.5">
+<span class="material-symbols-outlined text-secondary text-[20px]">verified</span>
+          高信誉技能接单达人
+        </h3>
+<span class="font-label-sm text-label-sm text-outline">实时在线推荐</span>
+</div>
+<!-- Person 1 -->
+<div class="flex items-center justify-between p-space-md rounded-xl bg-surface-container-low hover:bg-surface-container transition-all">
+<div class="flex items-center gap-space-md min-w-0">
+<div class="relative shrink-0">
+<img class="w-12 h-12 rounded-full object-cover" data-alt="Digital portrait headshot of a friendly female UI/UX designer with neon teal headset in a minimalist cybertech studio lighting with deep navy slate background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDDNkaBCD5AKjj2UPFvpaMjJoJdSPnxjkyOLVCzgPN-0Dwu492t9EgrTc5_RRuW18fNpGkPa_x_ibO7f2H5DB5bqqUNR2TZiqsdLYC5eUj2NO_ddx6CmRnszAclI6DBkbu2p5wUPjz8uAG89nj15BqgxRbxWMs4ccun2QoPFXR-Ue1yj5D_S1l12V0BSc1GCNGSN4iXAqmIZHhrw6boaJRXfBsW8oAtx-kkisrt9YYd"/>
+<span class="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-secondary border-2 border-surface-container-low" title="在线接单中"></span>
+</div>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-space-xs truncate">
+<span class="font-headline-sm text-body-lg text-on-surface font-semibold truncate">林栖 · Maya</span>
+<span class="px-1.5 py-0.5 rounded bg-tertiary/15 text-tertiary font-label-sm text-label-sm shrink-0">信用 99.8</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant truncate">主攻 Figma系统架构 · 动效设计 · 接单完成率 100%</p>
+<div class="flex items-center gap-1.5 mt-1">
+<span class="px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm">UI/UX</span>
+<span class="px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm">移动端架构</span>
+<span class="text-secondary font-label-sm text-label-sm flex items-center ml-1">
+<span class="material-symbols-outlined text-[12px] mr-0.5">monetization_on</span>已结34单
+              </span>
+</div>
+</div>
+</div>
+<button class="shrink-0 ml-2 px-3 py-1.5 rounded-full bg-primary text-on-primary hover:bg-primary-fixed-dim transition-all text-label-md font-label-md flex items-center gap-1 active:scale-95 shadow-sm" onclick="toggleFriendRequest(this, '林栖 · Maya')" type="button">
+<span class="material-symbols-outlined text-[16px]">person_add</span>
+<span>添加</span>
+</button>
+</div>
+<!-- Person 2 -->
+<div class="flex items-center justify-between p-space-md rounded-xl bg-surface-container-low hover:bg-surface-container transition-all">
+<div class="flex items-center gap-space-md min-w-0">
+<div class="relative shrink-0">
+<img class="w-12 h-12 rounded-full object-cover" data-alt="Modern close up avatar portrait of an Asian male software engineer with glasses, ambient violet indigo backlighting, dark technical setting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAyOsiv_kLhWOaOB031xu6raDVB-UG0_6slKNOZwpOIca8_rdyV7N1p9qQb0Q6vDpF4TyDDrvjE8enS_pcC4_JzZA0vA63bChcEn3qbMxOd_LUnFTQbc3kXzz53Af9-ENU9h6W7p2gUW3zOMFW2rgh_hhVI0URC9g0FGCsoGKupqKhxtevXLcxy-IkHg-kM496oZbvTYhelyetta2DCenYOXTD9AgD4k4TzWfWZu0Jw"/>
+<span class="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-secondary border-2 border-surface-container-low" title="在线接单中"></span>
+</div>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-space-xs truncate">
+<span class="font-headline-sm text-body-lg text-on-surface font-semibold truncate">Alex 晨风</span>
+<span class="px-1.5 py-0.5 rounded bg-tertiary/15 text-tertiary font-label-sm text-label-sm shrink-0">信用 98.4</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant truncate">FastAPI / Go 高并发微服务 · 悬赏答疑先锋</p>
+<div class="flex items-center gap-1.5 mt-1">
+<span class="px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm">后端开发</span>
+<span class="px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm">智能合约</span>
+<span class="text-secondary font-label-sm text-label-sm flex items-center ml-1">
+<span class="material-symbols-outlined text-[12px] mr-0.5">monetization_on</span>已结52单
+              </span>
+</div>
+</div>
+</div>
+<button class="shrink-0 ml-2 px-3 py-1.5 rounded-full bg-primary text-on-primary hover:bg-primary-fixed-dim transition-all text-label-md font-label-md flex items-center gap-1 active:scale-95 shadow-sm" onclick="toggleFriendRequest(this, 'Alex 晨风')" type="button">
+<span class="material-symbols-outlined text-[16px]">person_add</span>
+<span>添加</span>
+</button>
+</div>
+<!-- Person 3 -->
+<div class="flex items-center justify-between p-space-md rounded-xl bg-surface-container-low hover:bg-surface-container transition-all">
+<div class="flex items-center gap-space-md min-w-0">
+<div class="relative shrink-0">
+<img class="w-12 h-12 rounded-full object-cover" data-alt="Artistic profile photo of a creative 3D artist wearing neon reflective hoodie, volumetric cyberpunk glow lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC-bESFEI4lfqwt3zfRbJdyTBpUqcAWolkbr9fRP2RqvAzAdE1sE4EZqOd7M9XCX1Z7uRjz644B6GFksZ3acljlMdsTAXaQAsGyWu22Db-THpKi0umfLrJvqjwwbudHWCv9E3TOA2vvl48bi-6aisNHDd3fr00Rcu1VM0Cpy7E0kha85h6yqLegyIhp-0sd0p2JRHR1PJR_6tXXcWMfter47Xpk4mVduRAWfFOd4cRw"/>
+<span class="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-outline-variant border-2 border-surface-container-low" title="离线可留言"></span>
+</div>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-space-xs truncate">
+<span class="font-headline-sm text-body-lg text-on-surface font-semibold truncate">Zero.三维工坊</span>
+<span class="px-1.5 py-0.5 rounded bg-tertiary/15 text-tertiary font-label-sm text-label-sm shrink-0">信用 99.1</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant truncate">Blender产品级渲染 / 角色建模 / C4D动效互助</p>
+<div class="flex items-center gap-1.5 mt-1">
+<span class="px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm">3D建模</span>
+<span class="px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm">着色器</span>
+</div>
+</div>
+</div>
+<button class="shrink-0 ml-2 px-3 py-1.5 rounded-full bg-primary text-on-primary hover:bg-primary-fixed-dim transition-all text-label-md font-label-md flex items-center gap-1 active:scale-95 shadow-sm" onclick="toggleFriendRequest(this, 'Zero.三维工坊')" type="button">
+<span class="material-symbols-outlined text-[16px]">person_add</span>
+<span>添加</span>
+</button>
+</div>
+</div>
+</div>
+<!-- TAB 2: GROUPS (发现群组 / 技术互助 & 委托群) -->
+<div class="hidden flex flex-col px-margin gap-space-lg" id="tabContentGroups">
+<!-- Category Pills -->
+<div class="flex items-center gap-space-xs overflow-x-auto pb-1 no-scrollbar">
+<button class="shrink-0 px-2.5 py-1 rounded-full bg-primary text-on-primary font-label-sm text-label-sm" type="button">精选推荐群</button>
+<button class="shrink-0 px-2.5 py-1 rounded-full bg-surface-container-high text-on-surface-variant hover:text-on-surface font-label-sm text-label-sm" type="button">悬赏求助大厅</button>
+<button class="shrink-0 px-2.5 py-1 rounded-full bg-surface-container-high text-on-surface-variant hover:text-on-surface font-label-sm text-label-sm" type="button">同城应急互助</button>
+<button class="shrink-0 px-2.5 py-1 rounded-full bg-surface-container-high text-on-surface-variant hover:text-on-surface font-label-sm text-label-sm" type="button">技术攻坚组</button>
+</div>
+<!-- Active Groups List -->
+<div class="flex flex-col gap-space-sm">
+<div class="flex items-center justify-between">
+<h3 class="font-headline-sm text-headline-sm text-on-surface flex items-center gap-1.5">
+<span class="material-symbols-outlined text-primary text-[20px]">explore</span>
+          高活跃技术互助与赏金群
+        </h3>
+<span class="font-label-sm text-label-sm text-secondary">含担保池</span>
+</div>
+<!-- Group 1 -->
+<div class="p-space-md rounded-xl bg-surface-container-low hover:bg-surface-container transition-all flex flex-col gap-space-sm">
+<div class="flex items-start justify-between gap-space-sm">
+<div class="flex items-center gap-space-sm min-w-0">
+<div class="w-12 h-12 rounded-xl bg-surface-container-high flex items-center justify-center text-primary shrink-0 relative overflow-hidden">
+<span class="material-symbols-outlined text-[26px]">terminal</span>
+<div class="absolute bottom-0 inset-x-0 h-1 bg-secondary"></div>
+</div>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-space-xs truncate">
+<span class="font-headline-sm text-body-lg text-on-surface font-semibold truncate">FastAPI &amp; Python 互助协作组</span>
+<span class="px-1.5 py-0.5 rounded bg-primary-container/20 text-primary font-label-sm text-label-sm shrink-0">技术公会</span>
+</div>
+<span class="font-body-sm text-body-sm text-on-surface-variant truncate">群号: LQ-GRP-5021 · 自动化部署 / 异步高并发悬赏</span>
+</div>
+</div>
+<button class="shrink-0 px-3.5 py-1.5 rounded-full bg-secondary-container text-on-secondary-container font-label-md text-label-md flex items-center gap-1 hover:brightness-110 active:scale-95 transition-all shadow-sm" onclick="toggleJoinGroup(this, 'FastAPI &amp; Python 互助协作组')" type="button">
+<span class="material-symbols-outlined text-[16px]">group_add</span>
+<span>申请加入</span>
+</button>
+</div>
+<div class="flex items-center justify-between pt-2 border-t-0 bg-surface-container/40 rounded-lg px-space-sm py-1.5">
+<div class="flex items-center gap-space-md text-label-sm font-label-sm text-on-surface-variant">
+<span class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">group</span> 482 / 500 人
+            </span>
+<span class="flex items-center gap-1 text-secondary">
+<span class="material-symbols-outlined text-[14px]">paid</span> 6 个进行中悬赏
+            </span>
+</div>
+<span class="font-label-sm text-label-sm text-tertiary">累计发放: 12,400 积分</span>
+</div>
+</div>
+<!-- Group 2 -->
+<div class="p-space-md rounded-xl bg-surface-container-low hover:bg-surface-container transition-all flex flex-col gap-space-sm">
+<div class="flex items-start justify-between gap-space-sm">
+<div class="flex items-center gap-space-sm min-w-0">
+<div class="w-12 h-12 rounded-xl bg-surface-container-high flex items-center justify-center text-secondary shrink-0 relative overflow-hidden">
+<span class="material-symbols-outlined text-[26px]">view_in_ar</span>
+<div class="absolute bottom-0 inset-x-0 h-1 bg-primary"></div>
+</div>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-space-xs truncate">
+<span class="font-headline-sm text-body-lg text-on-surface font-semibold truncate">Blender 材质渲染与即时约稿</span>
+<span class="px-1.5 py-0.5 rounded bg-secondary/10 text-secondary font-label-sm text-label-sm shrink-0">双向担保</span>
+</div>
+<span class="font-body-sm text-body-sm text-on-surface-variant truncate">群号: LQ-GRP-8812 · 商业模型 / 材质贴图求助与急聘</span>
+</div>
+</div>
+<button class="shrink-0 px-3.5 py-1.5 rounded-full bg-secondary-container text-on-secondary-container font-label-md text-label-md flex items-center gap-1 hover:brightness-110 active:scale-95 transition-all shadow-sm" onclick="toggleJoinGroup(this, 'Blender 材质渲染与即时约稿')" type="button">
+<span class="material-symbols-outlined text-[16px]">group_add</span>
+<span>申请加入</span>
+</button>
+</div>
+<div class="flex items-center justify-between pt-2 bg-surface-container/40 rounded-lg px-space-sm py-1.5">
+<div class="flex items-center gap-space-md text-label-sm font-label-sm text-on-surface-variant">
+<span class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">group</span> 320 / 500 人
+            </span>
+<span class="flex items-center gap-1 text-secondary">
+<span class="material-symbols-outlined text-[14px]">paid</span> 11 个进行中悬赏
+            </span>
+</div>
+<span class="font-label-sm text-label-sm text-tertiary">累计发放: 38,900 积分</span>
+</div>
+</div>
+<!-- Group 3 -->
+<div class="p-space-md rounded-xl bg-surface-container-low hover:bg-surface-container transition-all flex flex-col gap-space-sm">
+<div class="flex items-start justify-between gap-space-sm">
+<div class="flex items-center gap-space-sm min-w-0">
+<div class="w-12 h-12 rounded-xl bg-surface-container-high flex items-center justify-center text-tertiary shrink-0 relative overflow-hidden">
+<span class="material-symbols-outlined text-[26px]">draw</span>
+<div class="absolute bottom-0 inset-x-0 h-1 bg-tertiary"></div>
+</div>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-space-xs truncate">
+<span class="font-headline-sm text-body-lg text-on-surface font-semibold truncate">二次元插画与立绘约稿派发组</span>
+<span class="px-1.5 py-0.5 rounded bg-tertiary/15 text-tertiary font-label-sm text-label-sm shrink-0">官方认证</span>
+</div>
+<span class="font-body-sm text-body-sm text-on-surface-variant truncate">群号: LQ-GRP-1049 · 甲方预算托管 / 画师急速匹配</span>
+</div>
+</div>
+<button class="shrink-0 px-3.5 py-1.5 rounded-full bg-secondary-container text-on-secondary-container font-label-md text-label-md flex items-center gap-1 hover:brightness-110 active:scale-95 transition-all shadow-sm" onclick="toggleJoinGroup(this, '二次元插画与立绘约稿派发组')" type="button">
+<span class="material-symbols-outlined text-[16px]">group_add</span>
+<span>申请加入</span>
+</button>
+</div>
+<div class="flex items-center justify-between pt-2 bg-surface-container/40 rounded-lg px-space-sm py-1.5">
+<div class="flex items-center gap-space-md text-label-sm font-label-sm text-on-surface-variant">
+<span class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">group</span> 495 / 500 人
+            </span>
+<span class="flex items-center gap-1 text-secondary">
+<span class="material-symbols-outlined text-[14px]">paid</span> 18 个进行中悬赏
+            </span>
+</div>
+<span class="font-label-sm text-label-sm text-tertiary">累计发放: 94,000 积分</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Interactive Create Group Action Modal (Sheet) -->
+<div class="hidden fixed inset-0 z-50 flex items-end justify-center bg-surface-container-lowest/80 backdrop-blur-sm px-margin pb-safe" id="createGroupModal">
+<div class="w-full max-w-md bg-surface-container rounded-t-xl p-space-lg flex flex-col gap-space-md shadow-xl animate-fade-in">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="px-2 py-0.5 rounded-full bg-secondary/15 text-secondary font-label-sm text-label-sm" id="modalGroupBadge">委托协作群</span>
+<h3 class="font-headline-md text-headline-sm text-on-surface" id="modalGroupTitle">创建新群空间</h3>
+</div>
+<button class="text-outline hover:text-on-surface p-1" onclick="closeCreateGroupModal()" type="button">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+<div class="flex flex-col gap-space-sm">
+<div>
+<label class="font-label-sm text-label-sm text-on-surface-variant block mb-1">群组名称</label>
+<input class="w-full bg-surface-container-low text-on-surface placeholder:text-outline rounded-lg px-space-md py-2.5 font-body-md text-body-md focus:outline-none" id="newGroupNameInput" placeholder="例如: 杭州移动端攻坚小队" type="text"/>
+</div>
+<div>
+<label class="font-label-sm text-label-sm text-on-surface-variant block mb-1">群类型与悬赏属性</label>
+<div class="grid grid-cols-2 gap-space-xs">
+<button class="p-2.5 rounded-lg bg-surface-bright text-on-surface font-label-md text-label-md flex items-center justify-center gap-1.5 shadow-sm" id="typeOptionBounty" onclick="selectGroupType('bounty')" type="button">
+<span class="material-symbols-outlined text-secondary text-[18px]">verified_user</span>
+<span>悬赏担保群</span>
+</button>
+<button class="p-2.5 rounded-lg bg-surface-container-low text-on-surface-variant font-label-md text-label-md flex items-center justify-center gap-1.5" id="typeOptionCasual" onclick="selectGroupType('casual')" type="button">
+<span class="material-symbols-outlined text-[18px]">chat</span>
+<span>普通交流群</span>
+</button>
+</div>
+</div>
+<div class="p-space-sm rounded-lg bg-surface-container-low flex items-center justify-between" id="escrowDepositSection">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary text-[20px]">lock</span>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface">初始托管担保池</span>
+<span class="font-label-sm text-label-sm text-outline">可随时退还或分发</span>
+</div>
+</div>
+<span class="font-headline-sm text-body-md text-secondary font-semibold">100 积分</span>
+</div>
+</div>
+<div class="flex gap-space-sm pt-space-xs">
+<button class="flex-1 py-3 rounded-lg bg-surface-container-high text-on-surface font-label-lg text-label-lg hover:bg-surface-variant transition-colors" onclick="closeCreateGroupModal()" type="button">
+          取消
+        </button>
+<button class="flex-1 py-3 rounded-lg bg-primary text-on-primary font-label-lg text-label-lg hover:bg-primary-fixed-dim transition-all shadow-md active:scale-98" onclick="confirmCreateGroup()" type="button">
+          立即建立并邀请
+        </button>
+</div>
+</div>
+</div>
+<!-- QR Code Popover Modal -->
+<div class="hidden fixed inset-0 z-50 flex items-center justify-center bg-surface-container-lowest/80 backdrop-blur-sm px-margin" id="qrCardModal">
+<div class="w-full max-w-xs bg-surface-container rounded-xl p-space-lg flex flex-col items-center gap-space-md text-center shadow-xl">
+<div class="flex items-center justify-between w-full">
+<span class="font-label-sm text-label-sm text-secondary tracking-wider uppercase">LinkQuest Identity</span>
+<button class="text-outline hover:text-on-surface" onclick="closeMyQRModal()" type="button">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+<div class="p-4 bg-surface-container-lowest rounded-xl shadow-inner flex flex-col items-center">
+<!-- Minimal SVG QR Representation -->
+<svg class="w-40 h-40 text-on-surface" fill="currentColor" viewbox="0 0 100 100">
+<rect fill="currentColor" height="25" rx="4" width="25" x="10" y="10"></rect>
+<rect fill="#060e20" height="15" rx="2" width="15" x="15" y="15"></rect>
+<rect fill="currentColor" height="9" rx="1" width="9" x="18" y="18"></rect>
+<rect fill="currentColor" height="25" rx="4" width="25" x="65" y="10"></rect>
+<rect fill="#060e20" height="15" rx="2" width="15" x="70" y="15"></rect>
+<rect fill="currentColor" height="9" rx="1" width="9" x="73" y="18"></rect>
+<rect fill="currentColor" height="25" rx="4" width="25" x="10" y="65"></rect>
+<rect fill="#060e20" height="15" rx="2" width="15" x="15" y="70"></rect>
+<rect fill="currentColor" height="9" rx="1" width="9" x="18" y="73"></rect>
+<circle cx="50" cy="50" fill="#4edea3" r="8"></circle>
+<rect height="20" rx="2" width="10" x="45" y="15"></rect>
+<rect height="20" rx="2" width="10" x="45" y="65"></rect>
+<rect height="10" rx="2" width="20" x="15" y="45"></rect>
+<rect height="10" rx="2" width="20" x="65" y="45"></rect>
+<circle cx="75" cy="75" r="5"></circle>
+<circle cx="85" cy="85" r="4"></circle>
+</svg>
+</div>
+<div class="flex flex-col">
+<span class="font-headline-sm text-headline-sm text-on-surface">夜莺之翼 · LQ</span>
+<span class="font-label-md text-label-md text-primary mt-0.5">ID: LQ-9821 · 信誉评分 99.9</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">出示此码，面对面扫码即可零延迟建立悬赏协作好友</p>
+<button class="w-full py-2.5 rounded-lg bg-surface-container-high text-on-surface font-label-md text-label-md hover:bg-surface-variant transition-colors" onclick="closeMyQRModal()" type="button">
+        完成
+      </button>
+</div>
+</div>
+<!-- Toast Notification Bar (Feedback) -->
+<div class="fixed top-20 left-1/2 -translate-x-1/2 z-50 pointer-events-none transition-all duration-300 opacity-0 -translate-y-2 flex items-center gap-2 px-4 py-2.5 rounded-full bg-surface-container-highest text-on-surface shadow-xl" id="toastNotification">
+<span class="material-symbols-outlined text-[18px] text-secondary" id="toastIcon">check_circle</span>
+<span class="font-label-md text-label-md" id="toastMessage">操作已完成</span>
+</div>
+</div>
+<script>
+  function switchTab(tab) {
+    const tabBtnPeople = document.getElementById('tabBtnPeople');
+    const tabBtnGroups = document.getElementById('tabBtnGroups');
+    const tabContentPeople = document.getElementById('tabContentPeople');
+    const tabContentGroups = document.getElementById('tabContentGroups');
+
+    if (tab === 'people') {
+      tabContentPeople.classList.remove('hidden');
+      tabContentGroups.classList.add('hidden');
+      tabBtnPeople.className = "flex-1 py-2 rounded-lg font-label-lg text-label-lg transition-all flex items-center justify-center gap-1.5 bg-surface-bright text-on-surface shadow-sm";
+      tabBtnGroups.className = "flex-1 py-2 rounded-lg font-label-lg text-label-lg transition-all flex items-center justify-center gap-1.5 text-on-surface-variant hover:text-on-surface";
+    } else {
+      tabContentPeople.classList.add('hidden');
+      tabContentGroups.classList.remove('hidden');
+      tabBtnGroups.className = "flex-1 py-2 rounded-lg font-label-lg text-label-lg transition-all flex items-center justify-center gap-1.5 bg-surface-bright text-on-surface shadow-sm";
+      tabBtnPeople.className = "flex-1 py-2 rounded-lg font-label-lg text-label-lg transition-all flex items-center justify-center gap-1.5 text-on-surface-variant hover:text-on-surface";
+    }
+  }
+
+  function toggleFriendRequest(button, name) {
+    if (button.dataset.sent === "true") {
+      button.dataset.sent = "false";
+      button.className = "shrink-0 ml-2 px-3 py-1.5 rounded-full bg-primary text-on-primary hover:bg-primary-fixed-dim transition-all text-label-md font-label-md flex items-center gap-1 active:scale-95 shadow-sm";
+      button.innerHTML = '<span class="material-symbols-outlined text-[16px]">person_add</span><span>添加</span>';
+      showToast('已取消好友申请', 'info');
+    } else {
+      button.dataset.sent = "true";
+      button.className = "shrink-0 ml-2 px-3 py-1.5 rounded-full bg-surface-container-high text-secondary font-label-md text-label-md flex items-center gap-1 transition-all";
+      button.innerHTML = '<span class="material-symbols-outlined text-[16px]">check</span><span>已申请</span>';
+      showToast(`已向 ${name} 发送协作好友申请！`, 'check_circle');
+    }
+  }
+
+  function toggleJoinGroup(button, groupName) {
+    if (button.dataset.joined === "true") {
+      button.dataset.joined = "false";
+      button.className = "shrink-0 px-3.5 py-1.5 rounded-full bg-secondary-container text-on-secondary-container font-label-md text-label-md flex items-center gap-1 hover:brightness-110 active:scale-95 transition-all shadow-sm";
+      button.innerHTML = '<span class="material-symbols-outlined text-[16px]">group_add</span><span>申请加入</span>';
+      showToast('已撤回加群申请', 'info');
+    } else {
+      button.dataset.joined = "true";
+      button.className = "shrink-0 px-3.5 py-1.5 rounded-full bg-surface-container-high text-primary font-label-md text-label-md flex items-center gap-1 transition-all";
+      button.innerHTML = '<span class="material-symbols-outlined text-[16px]">hourglass_top</span><span>审核中</span>';
+      showToast(`已提交加入「${groupName}」的申请`, 'verified');
+    }
+  }
+
+  function openCreateGroupModal(type) {
+    const modal = document.getElementById('createGroupModal');
+    modal.classList.remove('hidden');
+    selectGroupType(type);
+  }
+
+  function closeCreateGroupModal() {
+    document.getElementById('createGroupModal').classList.add('hidden');
+  }
+
+  function selectGroupType(type) {
+    const btnBounty = document.getElementById('typeOptionBounty');
+    const btnCasual = document.getElementById('typeOptionCasual');
+    const badge = document.getElementById('modalGroupBadge');
+    const escrowSec = document.getElementById('escrowDepositSection');
+
+    if (type === 'bounty') {
+      btnBounty.className = "p-2.5 rounded-lg bg-surface-bright text-on-surface font-label-md text-label-md flex items-center justify-center gap-1.5 shadow-sm";
+      btnCasual.className = "p-2.5 rounded-lg bg-surface-container-low text-on-surface-variant font-label-md text-label-md flex items-center justify-center gap-1.5";
+      badge.textContent = "委托协作群";
+      badge.className = "px-2 py-0.5 rounded-full bg-secondary/15 text-secondary font-label-sm text-label-sm";
+      escrowSec.classList.remove('hidden');
+    } else {
+      btnCasual.className = "p-2.5 rounded-lg bg-surface-bright text-on-surface font-label-md text-label-md flex items-center justify-center gap-1.5 shadow-sm";
+      btnBounty.className = "p-2.5 rounded-lg bg-surface-container-low text-on-surface-variant font-label-md text-label-md flex items-center justify-center gap-1.5";
+      badge.textContent = "普通交流群";
+      badge.className = "px-2 py-0.5 rounded-full bg-primary/15 text-primary font-label-sm text-label-sm";
+      escrowSec.classList.add('hidden');
+    }
+  }
+
+  function confirmCreateGroup() {
+    const input = document.getElementById('newGroupNameInput');
+    const name = input.value.trim() || "新协作讨论群";
+    closeCreateGroupModal();
+    showToast(`群聊「${name}」创建成功！邀请码已复制`, 'celebration');
+    input.value = '';
+  }
+
+  function showMyQRModal() {
+    document.getElementById('qrCardModal').classList.remove('hidden');
+  }
+
+  function closeMyQRModal() {
+    document.getElementById('qrCardModal').classList.add('hidden');
+  }
+
+  function triggerScanFeedback() {
+    showToast('正在调起摄像头扫码镜头...', 'photo_camera');
+  }
+
+  function triggerRadarScan() {
+    showToast('互助雷达启动中: 正在扫描附近 500m 活跃节点...', 'radar');
+  }
+
+  let toastTimer;
+  function showToast(msg, icon = 'check_circle') {
+    const toast = document.getElementById('toastNotification');
+    const toastMessage = document.getElementById('toastMessage');
+    const toastIcon = document.getElementById('toastIcon');
+
+    toastMessage.textContent = msg;
+    toastIcon.textContent = icon;
+
+    toast.classList.remove('opacity-0', '-translate-y-2');
+    toast.classList.add('opacity-100', 'translate-y-0');
+
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+      toast.classList.remove('opacity-100', 'translate-y-0');
+      toast.classList.add('opacity-0', '-translate-y-2');
+    }, 2800);
+  }
+
+  // Quick real-time search input handling
+  const searchInput = document.getElementById('globalSearchInput');
+  const clearBtn = document.getElementById('clearSearchBtn');
+
+  searchInput.addEventListener('input', (e) => {
+    if (e.target.value.length > 0) {
+      clearBtn.classList.remove('hidden');
+    } else {
+      clearBtn.classList.add('hidden');
+    }
+  });
+
+  clearBtn.addEventListener('click', () => {
+    searchInput.value = '';
+    clearBtn.classList.add('hidden');
+    searchInput.focus();
+  });
+</script></main></body></html>

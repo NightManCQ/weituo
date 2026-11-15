@@ -1,224 +1,1797 @@
 <script setup lang="ts">
-import { onLoad, onShow } from '@dcloudio/uni-app'
-import { ref } from 'vue'
-import type { 任务, 任务投标, 用户, 用户详细信息 } from '../../common/leixing'
-import { 创建编号, 发送请求, 读取当前用户 } from '../../common/wangluo'
-import { 格式化时间 } from '../xiaoxi/时间'
-import { 已投标, 投标已截止, 撤回委托投标, 提交委托投标, 查找我的投标, 选择委托投标 } from './委托'
+	import { onLoad, onShow, onUnload } from '@dcloudio/uni-app'
+	import { computed, ref } from 'vue'
+	import type { 任务, 任务投标, 任务位置, 用户, 用户详细信息 } from '../../common/leixing'
+	import { 发送请求, 读取当前用户 } from '../../common/wangluo'
+	import { 格式化日期 } from '../xiaoxi/时间'
+	import { 投标已截止, 撤回委托投标, 提交委托投标, 查找我的投标, 选择委托投标 } from './委托'
+	import { 推断分类名, 取头像 } from './分类'
 
-const 委托 = ref<任务 | null>(null)
-const 当前用户 = ref<用户 | null>(null)
-const 正在加载 = ref(true)
-const 错误 = ref('')
-const 投标列表 = ref<任务投标[]>([])
-const 投标列表错误 = ref('')
-const 我的投标 = ref<任务投标 | null>(null)
-const 正在投标 = ref(false)
-const 正在选择投标 = ref(false)
-let 委托编号 = ''
+	/**
+	 * 设计稿「委托详情.html」的视觉 + 旧版 pages/weituo/weituo.uvue 的业务逻辑。
+	 *
+	 * 界面（Hero / 任务卡 / 履约保障 / 发起人 / 竞标池 / 底部操作栏）按设计稿落地，不迁顶栏底栏；
+	 * 数据与交互全部接真实接口，和旧版一致：
+	 *   GET  /weituo/{编号}                       委托详情
+	 *   GET  /users/{编号}                        发布者昵称（任务表只有发布者编号）
+	 *   GET  /tasks/{编号}/bids                   投标列表（需登录，401 只影响竞标池，不影响详情）
+	 *   POST /tasks/{编号}/bids                   提交投标（不弹表单，报价沿用委托报酬）
+	 *   POST /tasks/{编号}/bids/{bid}/withdraw    撤回自己的投标
+	 *   POST /tasks/{编号}/bids/{bid}/select      发布者选择承接者
+	 *   GET  /tasks/{编号}/group-chat             打开委托群聊
+	 *
+	 * 后端没有分类 / 头像 / 信用分 / 履约率 / 发单数这些字段，不做编造：
+	 *   分类按标题+描述关键词推断（与委托广场共用 pages/weituo/分类.ts，两边永远一致）；
+	 *   头像按发布者编号散列取本地图；
+	 *   设计稿里的「信用评价 / 历史履约率 / 已发单结项」换成能算的真实信息
+	 *   （委托编号 / 发布日期 / 竞标人数）。
+	 *
+	 * 页面级滚动：根容器不锁死高度；顶栏与底部操作栏 fixed，靠占位视图避让。
+	 */
 
-async function 加载() {
-  if (!委托编号) return
-  正在加载.value = true
-  错误.value = ''
-  投标列表错误.value = ''
-  投标列表.value = []
-  我的投标.value = null
-  try {
-    委托.value = await 发送请求<任务>(`/weituo/${encodeURIComponent(委托编号)}`)
-  } catch (原因) {
-    错误.value = 原因 instanceof Error ? 原因.message : '委托详情加载失败'
-    正在加载.value = false
-    return
-  }
-  正在加载.value = false
+	type 标签项 = { 键 : string; 文字 : string; 样式 : string }
+	type 要点项 = { 键 : string; 文字 : string; 末 : boolean }
+	type 竞标人卡 = {
+		键 : string
+		名称 : string
+		头像 : string
+		简介 : string
+		报价 : string
+		周期 : string
+		状态 : string
+		状态样式 : string
+	}
+	type 详情视图 = {
+		标题 : string
+		标签 : 标签项[]
+		描述 : string
+		要点 : 要点项[]
+		投标截止 : string
+		交付截止 : string
+		积分 : string
+		有报酬 : boolean
+		估值 : string
+		发起人 : string
+		发起人副标题 : string
+		发起人头像 : string
+		编号短 : string
+		发布日 : string
+		竞标人 : string
+		竞标池说明 : string
+		候选人 : 竞标人卡[]
+	}
 
-  // 投标列表要登录才能查（后端 401），而且失败只影响投标区域，
-  // 不能让它把整张委托详情一起变成错误页
-  const 用户 = 当前用户.value
-  const 当前委托 = 委托.value
-  if (用户 == null || 当前委托 == null) return
-  try {
-    投标列表.value = await 加载投标列表(当前委托)
-    我的投标.value = 查找我的投标(投标列表.value, 用户.用户编号)
-  } catch (原因) {
-    投标列表错误.value = 原因 instanceof Error ? 原因.message : '投标信息加载失败'
-    // 401 时网络层会清掉登录信息，这里同步一下，页面直接切到「未登录」状态
-    当前用户.value = 读取当前用户()
-    我的投标.value = null
-  }
-}
+	const 收藏键 = '委托收藏'
 
-async function 加载投标列表(任务 : 任务) : Promise<任务投标[]> {
-  const 列表 = await 发送请求<任务投标[]>(`/tasks/${encodeURIComponent(任务.任务编号)}/bids`)
-  for (let i = 0; i < 列表.length; i++) {
-    if (任务.发布者编号 == 当前用户.value?.用户编号 || 列表[i].投标用户编号 == 当前用户.value?.用户编号) {
-      try {
-        const 用户信息 = await 发送请求<用户详细信息>(`/users/${encodeURIComponent(列表[i].投标用户编号)}`)
-        列表[i].投标用户昵称 = 用户信息.昵称
-      } catch {}
-    }
-  }
-  return 列表
-}
+	const 状态栏高 = ref(0)
+	const 委托编号 = ref('')
+	const 委托 = ref<任务 | null>(null)
+	const 当前用户 = ref<用户 | null>(null)
+	const 发布者 = ref<用户详细信息 | null>(null)
+	const 投标列表 = ref<任务投标[]>([])
+	const 我的投标 = ref<任务投标 | null>(null)
+	const 正在加载 = ref(true)
+	const 错误 = ref('')
+	const 投标列表错误 = ref('')
+	const 正在投标 = ref(false)
+	const 正在选择投标 = ref(false)
+	const 已收藏 = ref(false)
+	const 按下键 = ref('')
+	// 每 1 秒推一次，倒计时和「是否还能投标」都跟着它刷新
+	const 现在 = ref(Date.now())
+	let 倒计时器 = 0
 
-// 投标：不填任何表单，点一下直接发起投标，请求逻辑在 ./委托.ts 里与委托广场共用
-async function 提交投标() {
-  if (委托.value == null) return
-  if (当前用户.value == null) {
-    uni.switchTab({ url: '/pages/wode/wode' })
-    return
-  }
-  if (正在投标.value) return
-  const 当前委托 = 委托.value
-  if (投标已截止(当前委托)) {
-    uni.showToast({ title: '委托投标已截止', icon: 'none' })
-    return
-  }
-  正在投标.value = true
-  try {
-    await 提交委托投标(当前委托)
-    uni.showToast({ title: '投标成功', icon: 'success' })
-    await 加载()
-  } catch (原因) {
-    uni.showToast({ title: 原因 instanceof Error ? 原因.message : '投标失败', icon: 'none' })
-  } finally {
-    正在投标.value = false
-  }
-}
+	/* ---------------- 小工具 ---------------- */
 
-// 我的投标状态文案：放在函数里拼，避免模板对可空对象取属性
-function 我的投标说明() : string {
-  const 投标 = 我的投标.value
-  if (投标 == null) return ''
-  const 截止说明 = 投标.投标状态 == '投标中' && 投标已截止(委托.value!) ? ' · 投标已截止' : ''
-  const 补充 = 投标.投标说明.length > 0 ? ` · ${投标.投标说明}` : ''
-  return `我的投标：${投标.投标状态} · 报价 ${投标.报价积分} 积分${补充}${截止说明}`
-}
+	function 时间戳(值 : string | null) : number {
+		if (值 == null || 值 == '') return 0
+		const 数值 = new Date(值).getTime()
+		if (Number.isNaN(数值)) return 0
+		return 数值
+	}
 
-// 投标列表是 v-for，按钮不能写 @click="撤回投标(投标.投标编号)"：
-// web 端会把这些带参数的处理器缓存成所有行共用的闭包，点哪一行都是第一行。
-// 统一在按钮上挂 data-bid，处理函数从 dataset 取投标编号。
-function 撤回投标(事件: { currentTarget: { dataset: Record<string, unknown> } }) {
-  const 投标编号 = 事件.currentTarget.dataset['bid']
-  if (typeof 投标编号 != 'string' || 委托.value == null) return
-  void 执行撤回(委托.value.任务编号, 投标编号)
-}
+	function 两位数(值 : number) : string {
+		return 值 < 10 ? '0' + 值 : '' + 值
+	}
 
-async function 执行撤回(任务编号: string, 投标编号: string) {
-  try {
-    await 撤回委托投标(任务编号, 投标编号)
-    uni.showToast({ title: '投标已撤回', icon: 'success' })
-    await 加载()
-  } catch (原因) {
-    uni.showToast({ title: 原因 instanceof Error ? 原因.message : '撤回失败', icon: 'none' })
-  }
-}
+	function 短时间(值 : string | null) : string {
+		const 数 = 时间戳(值)
+		if (数 == 0) return '未设置'
+		const 日 = new Date(数)
+		return 两位数(日.getMonth() + 1) + '-' + 两位数(日.getDate()) + ' ' + 两位数(日.getHours()) + ':' + 两位数(日.getMinutes())
+	}
 
-function 选择投标(事件: { currentTarget: { dataset: Record<string, unknown> } }) {
-  const 投标编号 = 事件.currentTarget.dataset['bid']
-  if (typeof 投标编号 != 'string' || 委托.value == null) return
-  void 执行选择(委托.value.任务编号, 投标编号)
-}
+	// 整数千分位：2450 → 2,450
+	function 分组数字(值 : number) : string {
+		const 文 = '' + 值
+		let 结果 = ''
+		let 计 = 0
+		for (let i = 文.length - 1; i >= 0; i--) {
+			结果 = 文[i] + 结果
+			计++
+			if (计 == 3 && i > 0) {
+				结果 = ',' + 结果
+				计 = 0
+			}
+		}
+		return 结果
+	}
 
-async function 执行选择(任务编号: string, 投标编号: string) {
-  if (正在选择投标.value) return
-  正在选择投标.value = true
-  try {
-    await 选择委托投标(任务编号, 投标编号)
-    uni.showToast({ title: '承接用户已选择', icon: 'success' })
-    await 加载()
-  } catch (原因) {
-    uni.showToast({ title: 原因 instanceof Error ? 原因.message : '选择失败', icon: 'none' })
-  } finally {
-    正在选择投标.value = false
-  }
-}
+	// 后端位置是「省/市/县/镇/村/地址」拆分结构，页面只需要能看懂的一段
+	function 地点文本(位置 : 任务位置 | null) : string {
+		if (位置 == null) return ''
+		const 段 : string[] = []
+		if (位置.市 != null && 位置.市 != '') 段.push(位置.市)
+		if (位置.县 != null && 位置.县 != '') 段.push(位置.县)
+		if (段.length == 0 && 位置.省 != null && 位置.省 != '') 段.push(位置.省)
+		if (段.length == 0) {
+			const 址 = 位置.地址
+			return 址 == null ? '' : 址
+		}
+		let 文 = ''
+		for (let i = 0; i < 段.length; i++) 文 = i == 0 ? 段[i] : 文 + ' · ' + 段[i]
+		return 文
+	}
 
-async function 执行(操作: string) {
-  if (委托.value == null) return
-  try {
-    await 发送请求(`/tasks/${encodeURIComponent(委托.value.任务编号)}/${操作}`, {
-      method: 'POST',
-      headers: { 'Idempotency-Key': 创建编号() },
-    })
-    uni.showToast({ title: '操作成功', icon: 'success' })
-    await 加载()
-  } catch (原因) {
-    uni.showToast({ title: 原因 instanceof Error ? 原因.message : '操作失败', icon: 'none' })
-  }
-}
+	// 抢单模式的投标窗口只有 5 分钟（发布页 pages/fabuweiituo/fa_bu_w_t 的约定），
+	// 后端没有模式字段，只能反推：创建到投标截止的间隔在 10 分钟内就是抢单。
+	function 判抢单(单 : 任务) : boolean {
+		const 起 = 时间戳(单.创建时间)
+		const 止 = 时间戳(单.投标截止时间)
+		if (起 == 0 || 止 == 0) return false
+		return 止 - 起 <= 10 * 60 * 1000
+	}
 
-async function 打开委托会话() {
-  if (委托.value == null) return
-  const 结果 = await 发送请求<{ 群组编号: string }>(`/tasks/${encodeURIComponent(委托.value.任务编号)}/group-chat`)
-  uni.navigateTo({
-    url: `/pages/liaotian/liaotian?hui_hua=${encodeURIComponent(结果.群组编号)}&ming_cheng=${encodeURIComponent(委托.value.标题)}&lei_xing=委托&bian_hao=${encodeURIComponent(委托.value.任务编号)}`,
-  })
-}
+	function 状态短语(态 : string) : string {
+		if (态 == '待接单') return '立即接单'
+		if (态 == '已接单') return '委托已被接单'
+		if (态 == '进行中') return '委托进行中'
+		if (态 == '待验收') return '等待委托方验收'
+		if (态 == '已完成') return '委托已完成'
+		if (态 == '已取消') return '委托已取消'
+		return '委托' + 态
+	}
 
-onLoad((参数) => {
-  委托编号 = 参数['id'] as string || ''
-  当前用户.value = 读取当前用户()
-  void 加载()
-})
+	function 提示(文字 : string) {
+		uni.showToast({ title: 文字, icon: 'none' })
+	}
 
-// 从「我的」页去登录（或退出登录）再返回时，投标状态要跟着重新判断
-onShow(() => {
-  const 用户 = 读取当前用户()
-  const 原用户编号 = 当前用户.value?.用户编号 ?? ''
-  当前用户.value = 用户
-  if (委托编号.length > 0 && 原用户编号 != (用户?.用户编号 ?? '')) void 加载()
-})
+	/* ---------------- 角色与状态 ---------------- */
+
+	const 是发布者 = computed(() : boolean => {
+		const 单 = 委托.value
+		const 我 = 当前用户.value
+		if (单 == null || 我 == null) return false
+		return 单.发布者编号 == 我.用户编号
+	})
+
+	const 是接单者 = computed(() : boolean => {
+		const 单 = 委托.value
+		const 我 = 当前用户.value
+		if (单 == null || 我 == null) return false
+		const 编号 = 单.接单者编号
+		return 编号 != null && 编号 == 我.用户编号
+	})
+
+	// 用 现在 而不是 Date.now()：到点后按钮能从「可投标」自动翻成「已截止」
+	const 已截止 = computed(() : boolean => {
+		const 单 = 委托.value
+		if (单 == null) return true
+		return 时间戳(单.投标截止时间) - 现在.value <= 0
+	})
+
+	const 状态文案 = computed(() : string => {
+		const 单 = 委托.value
+		if (单 == null) return ''
+		if (单.任务状态 == '投标中') return '招募中 · ' + (判抢单(单) ? '抢单模式' : '竞标模式')
+		return 单.任务状态
+	})
+
+	const 倒计时文案 = computed(() : string => {
+		const 单 = 委托.value
+		if (单 == null) return '—'
+		const 止 = 时间戳(单.投标截止时间)
+		if (止 == 0) return '未设截止'
+		const 差 = 止 - 现在.value
+		if (差 <= 0) return '已截止'
+		const 总秒 = Math.floor(差 / 1000)
+		const 天 = Math.floor(总秒 / 86400)
+		const 时 = 两位数(Math.floor((总秒 % 86400) / 3600))
+		const 分 = 两位数(Math.floor((总秒 % 3600) / 60))
+		const 秒 = 两位数(总秒 % 60)
+		if (天 > 0) return '' + 天 + '天 ' + 时 + ':' + 分 + ':' + 秒
+		return 时 + ':' + 分 + ':' + 秒
+	})
+
+	const 倒计时已截止 = computed(() : boolean => {
+		const 单 = 委托.value
+		if (单 == null) return false
+		return 时间戳(单.投标截止时间) - 现在.value <= 0
+	})
+
+	// 剩余不足 6 小时且还能投标，才配得上设计稿那个「急需」红标
+	const 是否紧急 = computed(() : boolean => {
+		const 单 = 委托.value
+		if (单 == null) return false
+		if (单.任务状态 != '投标中') return false
+		const 差 = 时间戳(单.投标截止时间) - 现在.value
+		return 差 > 0 && 差 <= 6 * 3600 * 1000
+	})
+
+	// 生命周期步进器：设计稿 4 步（已发布 / 选人竞标中 / 签约履约 / 验收打款）
+	// 值 = 走到第几步；-1 表示委托已取消（整条灰掉），4 表示全部完成
+	const 步进 = computed(() : number => {
+		const 单 = 委托.value
+		if (单 == null) return -1
+		const 态 = 单.任务状态
+		if (态 == '已完成') return 4
+		if (态 == '待验收') return 3
+		if (态 == '进行中' || 态 == '已接单') return 2
+		if (态 == '投标中' || 态 == '待接单') return 1
+		return -1
+	})
+
+	const 主按钮文案 = computed(() : string => {
+		const 单 = 委托.value
+		if (单 == null) return '加载中'
+		if (当前用户.value == null) return '登录后参与竞标'
+		if (是发布者.value) {
+			if (单.任务状态 == '投标中') {
+				const 数 = 投标列表.value.length
+				return 数 == 0 ? '等待创作者投标' : '查看 ' + 数 + ' 份竞标方案'
+			}
+			return '打开委托会话'
+		}
+		if (是接单者.value) return '进入履约协作'
+		const 投 = 我的投标.value
+		if (投 != null && 投.投标状态 == '投标中') return '已投标 · 撤回投标'
+		if (单.任务状态 != '投标中') return 状态短语(单.任务状态)
+		if (已截止.value) return '投标已截止'
+		return '立即申请接单 / 提交方案'
+	})
+
+	// 竞标池为空时给一句人话：未登录 / 加载失败 / 真的没人投标
+	const 池空文案 = computed(() : string => {
+		if (投标列表错误.value != '') return 投标列表错误.value
+		if (当前用户.value == null) return '登录后可查看竞标池与投标方案'
+		return '还没有人投标，把委托分享给合适的创作者吧'
+	})
+
+	const 主按钮可用 = computed(() : boolean => {
+		const 单 = 委托.value
+		if (单 == null) return false
+		if (正在投标.value || 正在选择投标.value) return false
+		if (当前用户.value == null) return true // 点它去登录
+		if (是发布者.value) return 单.任务状态 == '投标中'
+		if (是接单者.value) return true
+		const 投 = 我的投标.value
+		if (投 != null && 投.投标状态 == '投标中') return true
+		if (单.任务状态 != '投标中') return false
+		return !已截止.value
+	})
+
+	/* ---------------- 委托详情 → 设计稿视图 ---------------- */
+
+	function 空视图() : 详情视图 {
+		return {
+			标题: '', 标签: [], 描述: '', 要点: [],
+			投标截止: '—', 交付截止: '—',
+			积分: '待定', 有报酬: false, 估值: '赏金待委托方确认',
+			发起人: '委托方', 发起人副标题: '', 发起人头像: 取头像(''),
+			编号短: '—', 发布日: '—', 竞标人: '0 人', 竞标池说明: '暂无投标', 候选人: [],
+		}
+	}
+
+	const 视图 = computed(() : 详情视图 => {
+		const 单 = 委托.value
+		if (单 == null) return 空视图()
+
+		// 标签：分类 → 模式 → 地点。后端没有资质要求字段，不编造「信誉分≥700」这类标签
+		const 分类名 = 推断分类名(单.标题, 单.描述)
+		const 抢单 = 判抢单(单)
+		const 标签 : 标签项[] = []
+		标签.push({ 键: '分类', 文字: '#' + 分类名, 样式: 'wt_biao_qian_zhu' })
+		标签.push({ 键: '模式', 文字: 抢单 ? '#抢单速配' : '#竞标竞选', 样式: 抢单 ? 'wt_biao_qian_cheng' : 'wt_biao_qian_lv' })
+		const 地点 = 地点文本(单.位置)
+		if (地点 != '') 标签.push({ 键: '地点', 文字: '#' + 地点, 样式: 'wt_biao_qian_zhu' })
+
+		// 描述由用户自己分行时，才把分行内容当成「交付标准」清单渲染；
+		// 只有一段话就整块不出现，不把一句话硬拆成条目。
+		const 要点 : 要点项[] = []
+		const 行 = 单.描述.split('\n')
+		if (行.length > 1) {
+			for (let i = 0; i < 行.length; i++) {
+				const 句 = 行[i].trim()
+				if (句 != '') 要点.push({ 键: '点' + i, 文字: 句, 末: false })
+			}
+		}
+		if (要点.length > 0) 要点[要点.length - 1].末 = true
+
+		// 投标列表 → 竞标卡
+		const 候选人 : 竞标人卡[] = []
+		for (let i = 0; i < 投标列表.value.length; i++) {
+			const 投 = 投标列表.value[i]
+			const 昵称 = 投.投标用户昵称
+			const 名称 = 昵称 != null && 昵称 != '' ? 昵称 : '投标用户 ' + 投.投标用户编号.slice(0, 6)
+			const 状态 = 投.投标状态
+			let 状态样式 = 'wt_xin_yong_hui'
+			if (状态 == '投标中') 状态样式 = 'wt_xin_yong_lv'
+			else if (状态 == '已选中') 状态样式 = 'wt_xin_yong_zi'
+			const 说明 = 投.投标说明
+			const 完成 = 投.预计完成时间
+			候选人.push({
+				键: 投.投标编号,
+				名称: 名称,
+				头像: 取头像(投.投标用户编号),
+				简介: 说明 != null && 说明 != '' ? 说明 : '暂未填写方案说明',
+				报价: 分组数字(投.报价积分) + ' PTS',
+				周期: 完成 == null || 完成 == '' ? '交付期待沟通' : '预计 ' + 短时间(完成) + ' 交付',
+				状态: 状态,
+				状态样式: 状态样式,
+			})
+		}
+
+		const 发 = 发布者.value
+		const 发布者名 = 发 != null && 发.昵称 != '' ? 发.昵称 : '委托方 ' + 单.发布者编号.slice(0, 6)
+		const 报酬 = 单.报酬积分
+		const 投标数 = 投标列表.value.length
+		let 池说明 = '暂无投标'
+		if (投标数 > 0) 池说明 = '已报 ' + 投标数 + ' 人' + (单.任务状态 == '投标中' ? ' · 审核中' : '')
+		const 描述 = 单.描述
+		const 编号文 = 单.任务编号
+
+		return {
+			标题: 单.标题,
+			标签: 标签,
+			描述: 描述 != '' ? 描述 : '委托方暂未提供补充说明。',
+			要点: 要点,
+			投标截止: 短时间(单.投标截止时间),
+			交付截止: 短时间(单.截止时间),
+			积分: 报酬 == null ? '待定' : '+' + 分组数字(报酬),
+			有报酬: 报酬 != null,
+			估值: 报酬 == null ? '赏金待委托方确认' : '预估价值约合 ¥' + (报酬 * 0.1).toFixed(2),
+			发起人: 发布者名,
+			发起人副标题: 'LinkQuest 委托方',
+			发起人头像: 取头像(单.发布者编号),
+			编号短: 编号文.length > 8 ? 编号文.slice(0, 8) : 编号文,
+			发布日: 格式化日期(单.创建时间),
+			竞标人: 投标数 + ' 人',
+			竞标池说明: 池说明,
+			候选人: 候选人,
+		}
+	})
+
+	/* ---------------- 数据加载（迁移自旧版 weituo.uvue） ---------------- */
+
+	async function 加载() {
+		if (委托编号.value == '') return
+		正在加载.value = true
+		错误.value = ''
+		投标列表错误.value = ''
+		投标列表.value = []
+		我的投标.value = null
+		try {
+			委托.value = await 发送请求<任务>('/weituo/' + encodeURIComponent(委托编号.value))
+		} catch (原因) {
+			错误.value = 原因 instanceof Error ? 原因.message : '委托详情加载失败'
+			正在加载.value = false
+			return
+		}
+		正在加载.value = false
+
+		// 发布者昵称：拿不到就用编号兜底，不能因为这一步失败让整页变错误页
+		await 补充发布者()
+
+		// 投标列表要登录才能查（后端 401），失败只影响竞标池
+		const 我 = 当前用户.value
+		const 单 = 委托.value
+		if (我 == null || 单 == null) return
+		try {
+			投标列表.value = await 加载投标列表(单)
+			我的投标.value = 查找我的投标(投标列表.value, 我.用户编号)
+		} catch (原因) {
+			投标列表错误.value = 原因 instanceof Error ? 原因.message : '投标信息加载失败'
+			// 401 时网络层会清掉登录信息，这里同步一下，页面直接切到未登录状态
+			当前用户.value = 读取当前用户()
+			我的投标.value = null
+		}
+	}
+
+	async function 补充发布者() {
+		const 单 = 委托.value
+		if (单 == null) return
+		try {
+			发布者.value = await 发送请求<用户详细信息>('/users/' + encodeURIComponent(单.发布者编号))
+		} catch {
+			发布者.value = null
+		}
+	}
+
+	async function 加载投标列表(单 : 任务) : Promise<任务投标[]> {
+		const 列表 = await 发送请求<任务投标[]>('/tasks/' + encodeURIComponent(单.任务编号) + '/bids')
+		// 竞标池要显示的是人名，投标接口只给编号，这里逐条补昵称。
+		// 旧版只在「我是发布者 / 这条投标是我」时才补，别人点进来看到的全是编号；
+		// 详情页本来就是公开可见的投标池，统一补齐更符合设计稿。
+		// 补不到就保留编号占位，不影响列表渲染（先补完再赋值，避免卡片不重绘）。
+		const 上限 = 列表.length > 12 ? 12 : 列表.length
+		for (let i = 0; i < 上限; i++) {
+			try {
+				const 信息 = await 发送请求<用户详细信息>('/users/' + encodeURIComponent(列表[i].投标用户编号))
+				列表[i].投标用户昵称 = 信息.昵称
+			} catch {}
+		}
+		return 列表
+	}
+
+	/* ---------------- 投标 / 撤回 / 选择 ---------------- */
+
+	async function 提交投标() {
+		const 单 = 委托.value
+		const 我 = 当前用户.value
+		if (单 == null) return
+		if (我 == null) {
+			uni.navigateTo({ url: '/pages/deng_lu/deng_lu' })
+			return
+		}
+		if (正在投标.value) return
+		if (单.发布者编号 == 我.用户编号) {
+			提示('不能投标自己发布的委托')
+			return
+		}
+		if (投标已截止(单)) {
+			提示('委托投标已截止')
+			return
+		}
+		正在投标.value = true
+		try {
+			await 提交委托投标(单)
+			uni.showToast({ title: '投标成功', icon: 'success' })
+			await 加载()
+		} catch (原因) {
+			提示(原因 instanceof Error ? 原因.message : '投标失败')
+		} finally {
+			正在投标.value = false
+		}
+	}
+
+	async function 执行撤回(任务编号 : string, 投标编号 : string) {
+		try {
+			await 撤回委托投标(任务编号, 投标编号)
+			uni.showToast({ title: '投标已撤回', icon: 'success' })
+			await 加载()
+		} catch (原因) {
+			提示(原因 instanceof Error ? 原因.message : '撤回失败')
+		}
+	}
+
+	async function 执行选择(任务编号 : string, 投标编号 : string) {
+		if (正在选择投标.value) return
+		正在选择投标.value = true
+		try {
+			await 选择委托投标(任务编号, 投标编号)
+			uni.showToast({ title: '承接用户已选择', icon: 'success' })
+			await 加载()
+		} catch (原因) {
+			提示(原因 instanceof Error ? 原因.message : '选择失败')
+		} finally {
+			正在选择投标.value = false
+		}
+	}
+
+	// 底部主按钮按角色 / 状态分发，逻辑与旧版按钮矩阵一致
+	function 主操作() {
+		const 单 = 委托.value
+		if (单 == null) return
+		const 我 = 当前用户.value
+		if (我 == null) {
+			uni.navigateTo({ url: '/pages/deng_lu/deng_lu' })
+			return
+		}
+		if (正在投标.value || 正在选择投标.value) return
+		if (是发布者.value) {
+			if (单.任务状态 == '投标中') {
+				if (投标列表.value.length == 0) 提示('还在等创作者投标，可以先把委托分享出去')
+				else 提示('在下方候选池点选承接者')
+			} else {
+				void 打开委托会话()
+			}
+			return
+		}
+		if (是接单者.value) {
+			void 打开委托会话()
+			return
+		}
+		const 投 = 我的投标.value
+		if (投 != null && 投.投标状态 == '投标中') {
+			void 执行撤回(单.任务编号, 投.投标编号)
+			return
+		}
+		if (单.任务状态 != '投标中') {
+			提示(状态短语(单.任务状态) + '，无法投标')
+			return
+		}
+		if (已截止.value) {
+			提示('委托投标已截止')
+			return
+		}
+		void 提交投标()
+	}
+
+	// 竞标卡是 v-for，按钮不能写 @click="选择(人.键)"：
+	// web 端会把带参数的处理器缓存成所有行共用的闭包，点哪行都是第一行。
+	// 统一挂 data-bid，处理函数从 dataset 取投标编号（旧版 weituo.uvue 同样的坑）。
+	function 点候选人(事件 : { currentTarget : { dataset : Record<string, unknown> } }) {
+		const 键 = 事件.currentTarget.dataset['bid']
+		if (typeof 键 != 'string') return
+		按下键.value = 键
+		setTimeout(() => { 按下键.value = '' }, 180)
+
+		const 单 = 委托.value
+		if (单 == null) return
+		let 目标 : 任务投标 | null = null
+		for (let i = 0; i < 投标列表.value.length; i++) {
+			if (投标列表.value[i].投标编号 == 键) 目标 = 投标列表.value[i]
+		}
+		if (目标 == null) return
+		const 我 = 当前用户.value
+		if (我 == null) {
+			提示('登录后才能查看竞标方案')
+			return
+		}
+
+		// 发布者点自己的候选池 = 选择承接者（后端要求投标仍在投标中）
+		if (是发布者.value && 单.任务状态 == '投标中' && 目标.投标状态 == '投标中') {
+			const 投标 = 目标
+			uni.showModal({
+				title: '接受该投标',
+				content: '将以 ' + 投标.报价积分 + ' 积分把委托交给 ' + (投标.投标用户昵称 != null ? 投标.投标用户昵称 : '该投标人') + '，确认后进入履约阶段。',
+				success: (结果) => {
+					if (结果.confirm) void 执行选择(单.任务编号, 投标.投标编号)
+				},
+			})
+			return
+		}
+
+		// 点自己的投标 = 撤回
+		if (目标.投标用户编号 == 我.用户编号 && 目标.投标状态 == '投标中') {
+			const 投标 = 目标
+			uni.showModal({
+				title: '撤回投标',
+				content: '撤回后可以重新投标，确定撤回吗？',
+				success: (结果) => {
+					if (结果.confirm) void 执行撤回(单.任务编号, 投标.投标编号)
+				},
+			})
+			return
+		}
+
+		提示('该投标当前状态：' + 目标.投标状态)
+	}
+
+	/* ---------------- 会话 / 收藏 / 分享 ---------------- */
+
+	async function 打开委托会话() {
+		const 单 = 委托.value
+		if (单 == null) return
+		if (当前用户.value == null) {
+			uni.navigateTo({ url: '/pages/deng_lu/deng_lu' })
+			return
+		}
+		try {
+			const 结果 = await 发送请求<{ 群组编号 : string }>('/tasks/' + encodeURIComponent(单.任务编号) + '/group-chat')
+			uni.navigateTo({
+				url: '/pages/liaotian/liaotian?hui_hua=' + encodeURIComponent(结果.群组编号) + '&ming_cheng=' + encodeURIComponent(单.标题) + '&lei_xing=委托&bian_hao=' + encodeURIComponent(单.任务编号),
+			})
+		} catch (原因) {
+			提示(原因 instanceof Error ? 原因.message : '打开委托会话失败')
+		}
+	}
+
+	// 收藏没有后端接口，纯本地记录，存成逗号分隔的委托编号
+	function 读取收藏() : string[] {
+		try {
+			const 值 = uni.getStorageSync(收藏键)
+			if (typeof 值 == 'string' && 值.length > 0) return 值.split(',')
+		} catch {}
+		return []
+	}
+
+	function 写入收藏(列表 : string[]) {
+		let 文 = ''
+		for (let i = 0; i < 列表.length; i++) 文 = i == 0 ? 列表[i] : 文 + ',' + 列表[i]
+		try {
+			uni.setStorageSync(收藏键, 文)
+		} catch {}
+	}
+
+	function 切换收藏() {
+		const 单 = 委托.value
+		if (单 == null) return
+		const 表 = 读取收藏()
+		const 新表 : string[] = []
+		let 已存在 = false
+		for (let i = 0; i < 表.length; i++) {
+			if (表[i] == 单.任务编号) 已存在 = true
+			else 新表.push(表[i])
+		}
+		if (!已存在) 新表.push(单.任务编号)
+		写入收藏(新表)
+		已收藏.value = !已存在
+		uni.showToast({ title: 已存在 ? '已取消收藏' : '已收藏委托', icon: 'none' })
+	}
+
+	function 分享委托() {
+		const 单 = 委托.value
+		if (单 == null) return
+		const 报酬 = 单.报酬积分
+		const 赏金 = 报酬 == null ? '赏金待定' : 报酬 + ' PTS'
+		uni.setClipboardData({
+			data: 'LinkQuest 委托：' + 单.标题 + '（' + 赏金 + '）编号 ' + 单.任务编号,
+			success: () => { 提示('委托信息已复制，去分享给好友吧') },
+			fail: () => { 提示('复制失败，请截图分享') },
+		})
+	}
+
+	/* ---------------- 生命周期 ---------------- */
+
+	onLoad((参数) => {
+		const 信息 = uni.getSystemInfoSync()
+		状态栏高.value = 信息.statusBarHeight ?? 0
+		const 编号 = 参数['id']
+		委托编号.value = 编号 == null ? '' : '' + 编号
+		当前用户.value = 读取当前用户()
+
+		const 收藏 = 读取收藏()
+		for (let i = 0; i < 收藏.length; i++) {
+			if (收藏[i] == 委托编号.value) 已收藏.value = true
+		}
+
+		// 倒计时每秒走一格；截止后按钮也会自己从「可投标」翻成「已截止」
+		倒计时器 = setInterval(() => { 现在.value = Date.now() }, 1000)
+		void 加载()
+	})
+
+	// 从「我的」页去登录（或退出登录）再返回时，投标状态要跟着重新判断
+	onShow(() => {
+		const 用户 = 读取当前用户()
+		const 原编号 = 当前用户.value == null ? '' : 当前用户.value.用户编号
+		const 新编号 = 用户 == null ? '' : 用户.用户编号
+		当前用户.value = 用户
+		if (委托编号.value != '' && 原编号 != 新编号) void 加载()
+	})
+
+	onUnload(() => {
+		if (倒计时器 != 0) {
+			clearInterval(倒计时器)
+			倒计时器 = 0
+		}
+	})
 </script>
 
 <template>
-  <view class="ye_mian">
-    <button class="wen_ben_an_niu ju_zuo" @click="uni.navigateBack()">← 返回</button>
-    <view v-if="正在加载" class="kong_zhuang_tai">正在加载委托详情…</view>
-    <view v-else-if="错误" class="ti_shi_xin_xi cuo_wu">{{ 错误 }} <button class="wen_ben_an_niu" @click="加载">重试</button></view>
-    <view v-else-if="委托 != null" class="ka_pian">
-      <text class="biao_ji">{{ 委托.任务状态 }}</text>
-      <text class="biao_ti">{{ 委托.标题 }}</text>
-      <text class="biao_qian">委托说明</text>
-      <text class="zheng_wen">{{ 委托.描述 || '委托方暂未提供补充说明。' }}</text>
-      <text class="biao_qian">委托报酬</text>
-      <text class="zheng_wen">{{ 委托.报酬积分 == null ? '无积分报酬' : `${委托.报酬积分} 积分` }}</text>
-      <text class="biao_qian">发布于</text><text class="zheng_wen">{{ 格式化时间(委托.创建时间) }}</text>
-      <text class="biao_qian">截止时间</text><text class="zheng_wen">{{ 委托.截止时间 == null ? '未设置' : 格式化时间(委托.截止时间) }}</text>
-      <text class="biao_qian">投标截止时间</text><text class="zheng_wen">{{ 委托.投标截止时间 == null ? '未设置' : 格式化时间(委托.投标截止时间) }}</text>
-      <text class="biao_qian">委托地址</text>
-      <text class="zheng_wen">{{ 委托.位置 == null ? '未填写' : [委托.位置.省, 委托.位置.市, 委托.位置.县, 委托.位置.地址].filter(Boolean).join(' · ') }}</text>
-      <text class="biao_qian">投标状态</text>
-      <view v-if="当前用户 == null">
-        <text class="zheng_wen">当前未登录，登录后才能投标</text>
-        <button class="ci_yao_an_niu" @click="uni.switchTab({ url: '/pages/wode/wode' })">去登录</button>
-      </view>
-      <view v-else-if="委托.发布者编号 == 当前用户.用户编号">
-        <text class="zheng_wen">{{ 投标列表.length == 0 ? '这是你发布的委托，还没有人投标' : `这是你发布的委托，已有 ${投标列表.length} 人投标` }}</text>
-        <text class="fu_zhu_wen_ben">{{ 投标已截止(委托) ? '投标已截止，可以在投标人列表里选择承接者' : '投标截止后可以在投标人列表里选择承接者' }}</text>
-      </view>
-      <view v-else-if="我的投标 != null">
-        <text class="zheng_wen">{{ 我的投标说明() }}</text>
-      </view>
-      <view v-else>
-        <text class="zheng_wen">{{ 投标已截止(委托) ? '投标已截止，你没有参与投标' : '你还没有投标，点击下方按钮即可报名' }}</text>
-      </view>
-      <view v-if="投标列表错误" class="ti_shi_xin_xi cuo_wu">{{ 投标列表错误 }}</view>
-      <button v-if="当前用户 != null && 委托.发布者编号 != 当前用户.用户编号 && 委托.任务状态 == '投标中' && !投标已截止(委托) && !已投标(投标列表, 当前用户.用户编号)" class="zhu_yao_an_niu" :disabled="正在投标" @click="提交投标">投标</button>
-      <view v-if="投标列表.length > 0" class="tou_biao_lie_biao">
-        <text class="biao_qian">投标人列表（{{ 投标列表.length }}）</text>
-        <view v-for="投标 in 投标列表" :key="投标.投标编号" class="lie_biao_hang tou_biao_hang">
-          <view class="zhan_kai">
-            <text>{{ 投标.投标用户昵称 || 投标.投标用户编号 }}</text>
-            <text class="fu_zhu_wen_ben">{{ 投标.报价积分 }} 积分 · {{ 投标.投标状态 }}</text>
-            <text v-if="投标.投标说明" class="fu_zhu_wen_ben">{{ 投标.投标说明 }}</text>
-          </view>
-          <button v-if="委托.发布者编号 == 当前用户?.用户编号 && 委托.任务状态 == '投标中' && 投标.投标状态 == '投标中'" :data-bid="投标.投标编号" class="ci_yao_an_niu" :disabled="正在选择投标" @click="选择投标">接受</button>
-          <button v-if="投标.投标用户编号 == 当前用户?.用户编号 && 投标.投标状态 == '投标中' && !投标已截止(委托)" :data-bid="投标.投标编号" class="wen_ben_an_niu" @click="撤回投标">撤回</button>
-        </view>
-      </view>
-      <button v-if="当前用户 != null && (委托.发布者编号 == 当前用户.用户编号 || 委托.接单者编号 == 当前用户.用户编号)" class="ci_yao_an_niu" @click="打开委托会话">打开委托会话</button>
-    </view>
-  </view>
+	<view class="wt_ye">
+		<!-- 固定顶栏：与设计稿一致，返回按钮由 ding_lan 内部按页面栈判断 -->
+		<ding_lan 外观="委托详情" :显示返回="true" :状态栏高="状态栏高">
+			<view class="wt_ding_tou">
+				<image class="wt_ding_tou_tu" src="/static/wei_tuo/icons/person.svg" mode="aspectFit"></image>
+			</view>
+		</ding_lan>
+
+		<!-- 页面级滚动：内容由页面自身撑开，顶栏/底部操作栏仍为 fixed -->
+		<view class="wt_nei_rong">
+			<view :style="{ height: (64 + 状态栏高) + 'px' }"></view>
+
+			<!-- 加载 / 错误：只在拿不到委托时占位，避免整页空白或假数据 -->
+			<view v-if="正在加载" class="wt_zhuang_tai_ka">
+				<view class="wt_deng_dai"></view>
+				<text class="wt_zhuang_tai_wen">正在加载委托详情…</text>
+			</view>
+			<view v-else-if="错误 != ''" class="wt_zhuang_tai_ka">
+				<text class="wt_zhuang_tai_wen">{{ 错误 }}</text>
+				<view class="wt_chong_shi" @click="加载">
+					<text class="wt_chong_shi_zi">重试</text>
+				</view>
+			</view>
+
+			<view v-else-if="委托 != null" class="wt_zheng_ti">
+				<!-- 顶部环境光晕（径向渐隐 PNG，边缘 alpha 为 0，不会切出圆弧） + 悬赏 Hero 卡 -->
+				<view class="wt_guang_qu">
+					<image class="wt_guang_zhu" src="/static/guang/zi_15.png" mode="scaleToFill"></image>
+					<image class="wt_guang_ci" src="/static/guang/lv_12.png" mode="scaleToFill"></image>
+					<view class="wt_hero_qu">
+						<view class="wt_hero">
+							<view class="wt_hero_tiao"></view>
+
+							<!-- 状态徽章与平台存管 -->
+							<view class="wt_hui_zhang_hang">
+								<view class="wt_hui_zhang_zuo">
+									<view class="wt_zhuang_tai">
+										<view class="wt_zhuang_tai_dian"></view>
+										<text class="wt_zhuang_tai_zi">{{ 状态文案 }}</text>
+									</view>
+									<view v-if="是否紧急" class="wt_ji_xu">
+										<image class="wt_tu_13" src="/static/wei_tuo/icons/fire.svg" mode="aspectFit"></image>
+										<text class="wt_ji_xu_zi">急需</text>
+									</view>
+								</view>
+								<view class="wt_tuo_guan">
+									<image class="wt_tu_13" src="/static/wei_tuo/icons/verified_user.svg" mode="aspectFit"></image>
+									<text class="wt_tuo_guan_zi">平台托管存管</text>
+								</view>
+							</view>
+
+							<!-- 悬赏积分与报名倒计时 -->
+							<view class="wt_jin_e_hang">
+								<view class="wt_jin_e_zuo">
+									<view class="wt_jin_e_tou">
+										<image class="wt_qian_bi" src="/static/wei_tuo/icons/monetization_on.svg" mode="aspectFit"></image>
+										<text class="wt_jin_e_shu">{{ 视图.积分 }}</text>
+										<text v-if="视图.有报酬" class="wt_jin_e_dan">PTS</text>
+									</view>
+									<view class="wt_jia_zhi_hang">
+										<text class="wt_jia_zhi">{{ 视图.估值 }}</text>
+										<view class="wt_jia_zhi_dian"></view>
+										<text class="wt_jia_zhi_lv">验收满意后解冻划转</text>
+									</view>
+								</view>
+								<view class="wt_dao_ji_shi">
+									<text class="wt_dao_ji_biao">报名倒计时</text>
+									<view class="wt_dao_ji_hang">
+										<image class="wt_tu_14" src="/static/wei_tuo/icons/timer.svg" mode="aspectFit"></image>
+										<text :class="倒计时已截止 ? 'wt_dao_ji_shu wt_dao_ji_shu_jin' : 'wt_dao_ji_shu'">{{ 倒计时文案 }}</text>
+									</view>
+								</view>
+							</view>
+
+							<!-- 委托生命周期步进器：步进值由任务状态推导 -->
+							<view class="wt_bu_jin">
+								<view class="wt_bu">
+									<view :class="步进 > 0 ? 'wt_bu_yuan_yi' : (步进 == 0 ? 'wt_bu_yuan_te' : 'wt_bu_yuan_hui')">
+										<image v-if="步进 > 0" class="wt_tu_13" src="/static/wei_tuo/icons/check.svg" mode="aspectFit"></image>
+										<view v-else-if="步进 == 0" class="wt_bu_yuan_bai"></view>
+										<view v-else class="wt_bu_yuan_xiao"></view>
+									</view>
+									<text :class="步进 > 0 ? 'wt_bu_zi' : (步进 == 0 ? 'wt_bu_zi_te' : 'wt_bu_zi_hui')">已发布</text>
+								</view>
+								<view :class="步进 > 0 ? 'wt_bu_xian_yi' : 'wt_bu_xian'"></view>
+								<view class="wt_bu">
+									<view :class="步进 > 1 ? 'wt_bu_yuan_yi' : (步进 == 1 ? 'wt_bu_yuan_te' : 'wt_bu_yuan_hui')">
+										<image v-if="步进 > 1" class="wt_tu_13" src="/static/wei_tuo/icons/check.svg" mode="aspectFit"></image>
+										<view v-else-if="步进 == 1" class="wt_bu_yuan_bai"></view>
+										<view v-else class="wt_bu_yuan_xiao"></view>
+									</view>
+									<text :class="步进 > 1 ? 'wt_bu_zi' : (步进 == 1 ? 'wt_bu_zi_te' : 'wt_bu_zi_hui')">选人竞标中</text>
+								</view>
+								<view :class="步进 > 1 ? 'wt_bu_xian_yi' : 'wt_bu_xian'"></view>
+								<view class="wt_bu">
+									<view :class="步进 > 2 ? 'wt_bu_yuan_yi' : (步进 == 2 ? 'wt_bu_yuan_te' : 'wt_bu_yuan_hui')">
+										<image v-if="步进 > 2" class="wt_tu_13" src="/static/wei_tuo/icons/check.svg" mode="aspectFit"></image>
+										<view v-else-if="步进 == 2" class="wt_bu_yuan_bai"></view>
+										<view v-else class="wt_bu_yuan_xiao"></view>
+									</view>
+									<text :class="步进 > 2 ? 'wt_bu_zi' : (步进 == 2 ? 'wt_bu_zi_te' : 'wt_bu_zi_hui')">签约履约</text>
+								</view>
+								<view :class="步进 > 2 ? 'wt_bu_xian_yi' : 'wt_bu_xian'"></view>
+								<view class="wt_bu">
+									<view :class="步进 > 3 ? 'wt_bu_yuan_yi' : (步进 == 3 ? 'wt_bu_yuan_te' : 'wt_bu_yuan_hui')">
+										<image v-if="步进 > 3" class="wt_tu_13" src="/static/wei_tuo/icons/check.svg" mode="aspectFit"></image>
+										<view v-else-if="步进 == 3" class="wt_bu_yuan_bai"></view>
+										<view v-else class="wt_bu_yuan_xiao"></view>
+									</view>
+									<text :class="步进 > 3 ? 'wt_bu_zi' : (步进 == 3 ? 'wt_bu_zi_te' : 'wt_bu_zi_hui')">验收打款</text>
+								</view>
+							</view>
+						</view>
+					</view>
+				</view>
+
+				<!-- 任务详情卡 -->
+				<view class="wt_ka wt_ren_wu_ka">
+					<text class="wt_biao_ti">{{ 视图.标题 }}</text>
+					<view class="wt_biao_qian_hang">
+						<text v-for="签 in 视图.标签" :key="签.键" :class="签.样式">{{ 签.文字 }}</text>
+					</view>
+
+					<view class="wt_xiang_shu">
+						<view class="wt_xiao_biao_ti_hang">
+							<image class="wt_tu_20" src="/static/wei_tuo/icons/assignment.svg" mode="aspectFit"></image>
+							<text class="wt_xiao_biao_ti">任务详述与交付标准</text>
+						</view>
+						<text class="wt_zheng_wen">{{ 视图.描述 }}</text>
+
+						<view v-if="视图.要点.length > 0" class="wt_gui_ge_ka">
+							<view v-for="点 in 视图.要点" :key="点.键" class="wt_gui_ge_hang" :class="点.末 ? 'wt_gui_ge_mo' : ''">
+								<image class="wt_gui_ge_tu" src="/static/wei_tuo/icons/check_circle.svg" mode="aspectFit"></image>
+								<text class="wt_gui_ge_wen"><text class="wt_gui_ge_zheng">{{ 点.文字 }}</text></text>
+							</view>
+						</view>
+					</view>
+
+					<!-- 时间线在 Hero 里只有倒计时，这里补两行明确日期 -->
+					<view class="wt_qi_xian">
+						<image class="wt_tu_14" src="/static/wei_tuo/icons/schedule.svg" mode="aspectFit"></image>
+						<text class="wt_qi_xian_zi">投标截止 {{ 视图.投标截止 }}</text>
+						<view class="wt_qi_xian_dian"></view>
+						<text class="wt_qi_xian_zi">交付截止 {{ 视图.交付截止 }}</text>
+					</view>
+
+					<!-- 设计稿在规格卡之后留了一行空白 -->
+					<view class="wt_ka_wei"></view>
+				</view>
+
+				<!-- 履约保障与合作约定（平台固定规则，不是委托数据） -->
+				<view class="wt_ka wt_bao_zhang_ka">
+					<view class="wt_xiao_biao_ti_hang">
+						<image class="wt_tu_20" src="/static/wei_tuo/icons/gavel.svg" mode="aspectFit"></image>
+						<text class="wt_xiao_biao_ti wt_bao_biao">履约保障与合作约定</text>
+					</view>
+					<view class="wt_bao_zhang_ge">
+						<view class="wt_bao_zhang_xiang">
+							<image class="wt_tu_20" src="/static/wei_tuo/icons/security.svg" mode="aspectFit"></image>
+							<text class="wt_bao_zhang_ming">平台质保</text>
+							<text class="wt_bao_zhang_fu">先行赔付机制</text>
+						</view>
+						<view class="wt_bao_zhang_xiang">
+							<image class="wt_tu_20" src="/static/wei_tuo/icons/published_with_changes.svg" mode="aspectFit"></image>
+							<text class="wt_bao_zhang_ming">修改权益</text>
+							<text class="wt_bao_zhang_fu">免费细节改动2次</text>
+						</view>
+						<view class="wt_bao_zhang_xiang wt_bao_zhang_mo">
+							<image class="wt_tu_20" src="/static/wei_tuo/icons/alarm_on.svg" mode="aspectFit"></image>
+							<text class="wt_bao_zhang_ming">超时赔偿</text>
+							<text class="wt_bao_zhang_fu">无故延期全额退款</text>
+						</view>
+					</view>
+					<view class="wt_ban_quan" @click="提示('交付物版权归委托方所有；创作者享署名权')">
+						<view class="wt_ban_quan_zuo">
+							<image class="wt_tu_18" src="/static/wei_tuo/icons/lock.svg" mode="aspectFit"></image>
+							<text class="wt_ban_quan_zi">交付物版权归委托方所有；创作者享署名权</text>
+						</view>
+						<image class="wt_tu_16" src="/static/wei_tuo/icons/chevron_right.svg" mode="aspectFit"></image>
+					</view>
+				</view>
+
+				<!-- 委托发起人 -->
+				<view class="wt_ka wt_fa_qi_ka">
+					<view class="wt_fa_qi_tou">
+						<text class="wt_fa_qi_biao">委托发起人</text>
+						<view class="wt_guan_zhu" @click="提示('关注功能还没上线，先用委托会话和发起人沟通')">
+							<image class="wt_tu_16" src="/static/wei_tuo/icons/person_add.svg" mode="aspectFit"></image>
+							<text class="wt_guan_zhu_zi">关注</text>
+						</view>
+					</view>
+					<view class="wt_fa_qi_ren">
+						<view class="wt_fa_qi_tou_xiang">
+							<image class="wt_tou_56" :src="视图.发起人头像" mode="aspectFill"></image>
+							<view class="wt_zai_xian"></view>
+						</view>
+						<view class="wt_fa_qi_xin_xi">
+							<view class="wt_fa_qi_ming_hang">
+								<text class="wt_fa_qi_ming">{{ 视图.发起人 }}</text>
+							</view>
+							<text class="wt_fa_qi_fu">{{ 视图.发起人副标题 }}</text>
+						</view>
+					</view>
+					<!-- 后端没有信用分/履约率/发单数，这三格换成能算的真实信息 -->
+					<view class="wt_tong_ji">
+						<view class="wt_tong_ji_xiang">
+							<text class="wt_tong_ji_biao">委托编号</text>
+							<text class="wt_tong_ji_shu_zi">{{ 视图.编号短 }}</text>
+						</view>
+						<view class="wt_tong_ji_xiang">
+							<text class="wt_tong_ji_biao">发布日期</text>
+							<text class="wt_tong_ji_shu_bai">{{ 视图.发布日 }}</text>
+						</view>
+						<view class="wt_tong_ji_xiang">
+							<text class="wt_tong_ji_biao">竞标人数</text>
+							<text class="wt_tong_ji_shu_lv">{{ 视图.竞标人 }}</text>
+						</view>
+					</view>
+				</view>
+
+				<!-- 接单竞标候选池 -->
+				<view class="wt_ka wt_jing_biao_ka">
+					<view class="wt_jing_biao_tou">
+						<view class="wt_jing_biao_zuo">
+							<text class="wt_jing_biao_ti">接单竞标候选池</text>
+							<text class="wt_jing_ren_shu">{{ 视图.竞标池说明 }}</text>
+						</view>
+						<view class="wt_quan_bu" @click="提示('候选池已经全部展开')">
+							<text class="wt_quan_bu_zi">全部方案</text>
+							<image class="wt_tu_14" src="/static/wei_tuo/icons/arrow_forward.svg" mode="aspectFit"></image>
+						</view>
+					</view>
+
+					<view v-if="视图.候选人.length == 0" class="wt_jing_kong">
+						<text class="wt_jing_kong_zi">{{ 池空文案 }}</text>
+						<view v-if="投标列表错误 != ''" class="wt_chong_shi" @click="加载">
+							<text class="wt_chong_shi_zi">重试</text>
+						</view>
+					</view>
+
+					<view
+						v-for="人 in 视图.候选人"
+						:key="人.键"
+						:data-bid="人.键"
+						class="wt_jing_ka"
+						:class="按下键 == 人.键 ? 'wt_jing_ka_an' : ''"
+						@click="点候选人"
+					>
+						<view class="wt_jing_shou_hang">
+							<view class="wt_jing_zuo">
+								<view class="wt_jing_tou_kuang">
+									<image class="wt_tou_40" :src="人.头像" mode="aspectFill"></image>
+									<view class="wt_zai_xian_xiao"></view>
+								</view>
+								<view class="wt_jing_xin_xi">
+									<view class="wt_jing_ming_hang">
+										<text class="wt_jing_ming">{{ 人.名称 }}</text>
+										<text :class="人.状态样式">{{ 人.状态 }}</text>
+									</view>
+									<text class="wt_jing_fu">{{ 人.简介 }}</text>
+								</view>
+							</view>
+							<view class="wt_jing_you">
+								<text class="wt_jing_jia">{{ 人.报价 }}</text>
+								<text class="wt_jing_tian">{{ 人.周期 }}</text>
+							</view>
+						</view>
+					</view>
+				</view>
+
+				<view class="wt_di_zhan_wei"></view>
+			</view>
+		</view>
+
+		<!-- 底部固定操作栏：CTA 按角色 / 状态切换，和旧版按钮矩阵一致 -->
+		<view v-if="委托 != null" class="wt_di_lan">
+			<view class="wt_di_nei">
+				<view class="wt_di_zuo">
+					<view class="wt_di_an" @click="切换收藏">
+						<image
+							class="wt_di_an_tu"
+							:src="已收藏 ? '/static/wei_tuo/icons/bookmark.svg' : '/static/wei_tuo/icons/bookmark_border.svg'"
+							mode="aspectFit"
+						></image>
+					</view>
+					<view class="wt_di_an" @click="分享委托">
+						<image class="wt_di_an_tu" src="/static/wei_tuo/icons/share.svg" mode="aspectFit"></image>
+					</view>
+					<view class="wt_di_an" @click="打开委托会话">
+						<image class="wt_tu_20" src="/static/wei_tuo/icons/chat_bubble.svg" mode="aspectFit"></image>
+					</view>
+				</view>
+				<view class="wt_cta" :class="主按钮可用 ? '' : 'wt_cta_jin'" @click="主操作">
+					<image class="wt_tu_20" src="/static/wei_tuo/icons/bolt.svg" mode="aspectFit"></image>
+					<text class="wt_cta_zi">{{ 主按钮文案 }}</text>
+				</view>
+			</view>
+		</view>
+	</view>
 </template>
+
+<style>
+	/* 设计稿字体：Plus Jakarta Sans（正文/标题）、Space Grotesk（标签）。
+	   按字重落地为本地 ttf，web 与 App 都不依赖 Google Fonts 外链。 */
+@font-face { font-family: 'PJS400'; src: url('/static/hui_hua/fonts/PlusJakartaSans-400.ttf'); }
+@font-face { font-family: 'PJS600'; src: url('/static/hui_hua/fonts/PlusJakartaSans-600.ttf'); }
+@font-face { font-family: 'PJS700'; src: url('/static/hui_hua/fonts/PlusJakartaSans-700.ttf'); }
+@font-face { font-family: 'PJS800'; src: url('/static/hui_hua/fonts/PlusJakartaSans-800.ttf'); }
+@font-face { font-family: 'SG600'; src: url('/static/hui_hua/fonts/SpaceGrotesk-600.ttf'); }
+@font-face { font-family: 'SG700'; src: url('/static/hui_hua/fonts/SpaceGrotesk-700.ttf'); }
+
+	/* uni-app x 的 text 不继承父 view 字体，每个文字类都要单独指定 */
+	.wt_biao_ti, .wt_xiao_biao_ti, .wt_bao_biao, .wt_zheng_wen,
+	.wt_gui_ge_wen, .wt_gui_ge_qian, .wt_gui_ge_zheng, .wt_jin_e_shu,
+	.wt_fa_qi_ming, .wt_fa_qi_fu, .wt_jing_ming, .wt_jing_fu, .wt_cta_zi {
+		font-family: 'PJS400';
+	}
+	.wt_zhuang_tai_zi, .wt_ji_xu_zi, .wt_tuo_guan_zi,
+	.wt_jin_e_dan, .wt_jia_zhi, .wt_jia_zhi_lv, .wt_dao_ji_biao, .wt_dao_ji_shu,
+	.wt_bu_zi, .wt_bu_zi_te, .wt_bu_zi_hui, .wt_biao_qian_zhu, .wt_biao_qian_lv,
+	.wt_biao_qian_cheng, .wt_bao_zhang_ming, .wt_bao_zhang_fu, .wt_ban_quan_zi,
+	.wt_fa_qi_biao, .wt_guan_zhu_zi, .wt_ren_zheng, .wt_tong_ji_biao,
+	.wt_tong_ji_shu_lv, .wt_tong_ji_shu_zi, .wt_tong_ji_shu_bai,
+	.wt_jing_biao_ti, .wt_jing_ren_shu, .wt_quan_bu_zi, .wt_xin_yong_lv,
+	.wt_xin_yong_zi, .wt_jing_jia, .wt_jing_tian {
+		font-family: 'SG600';
+	}
+
+	.wt_ye {
+		display: flex;
+		flex-direction: column;
+		width: 100%;
+		/* 页面级滚动：不锁死高度，让内容撑开页面；min-height 保证内容不足一屏时背景铺满 */
+		min-height: 800px; /* uni-app x 不支持百分比，固定值近似一屏，保证背景铺满 */
+		background-color: #0b1326;
+	}
+	.wt_nei_rong {
+		display: flex;
+		flex-direction: column;
+		width: 100%;
+	}
+
+	/* ---------- 顶栏右侧插槽内容（顶栏本体样式在 components/ding_lan 里） ---------- */
+	.wt_ding_tou {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 32px;
+		height: 32px;
+		border-radius: 16px;
+		background-color: #c0c1ff;
+	}
+	.wt_ding_tou_tu { width: 18px; height: 18px; }
+
+	/* ---------- 光晕与 Hero ---------- */
+	.wt_guang_qu {
+		position: relative;
+		width: 100%;
+		overflow: hidden;
+	}
+	.wt_guang_zhu {
+		position: absolute;
+		top: -64px;
+		left: 55px;
+		width: 320px;
+		height: 128px;
+	}
+	.wt_guang_ci {
+		position: absolute;
+		top: 80px;
+		right: 0;
+		width: 176px;
+		height: 176px;
+	}
+	.wt_hero_qu {
+		position: relative;
+		padding-top: 8px;
+		padding-left: 16px;
+		padding-right: 16px;
+		padding-bottom: 16px;
+	}
+	.wt_hero {
+		position: relative;
+		overflow: hidden;
+		padding-top: 16px;
+		padding-left: 16px;
+		padding-right: 16px;
+		padding-bottom: 16px;
+		border-radius: 12px;
+		background-color: #222a3d;
+		box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+	}
+	.wt_hero_tiao {
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		height: 4px;
+		background: linear-gradient(to right, #8083ff, #4edea3);
+	}
+	.wt_hui_zhang_hang {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+		margin-bottom: 8px;
+	}
+	.wt_hui_zhang_zuo {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+	}
+	.wt_zhuang_tai {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		padding-top: 4px;
+		padding-bottom: 4px;
+		padding-left: 10px;
+		padding-right: 10px;
+		border-radius: 999px;
+		background-color: rgba(192, 193, 255, 0.1);
+	}
+	.wt_zhuang_tai_dian {
+		width: 6px;
+		height: 6px;
+		margin-right: 4px;
+		border-radius: 3px;
+		background-color: #c0c1ff;
+	}
+	.wt_zhuang_tai_zi {
+		font-size: 10px;
+		line-height: 14px;
+		font-weight: 700;
+		letter-spacing: 0.5px;
+		color: #c0c1ff;
+	}
+	.wt_ji_xu {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		margin-left: 4px;
+		padding-top: 4px;
+		padding-bottom: 4px;
+		padding-left: 8px;
+		padding-right: 8px;
+		border-radius: 999px;
+		background-color: rgba(147, 0, 10, 0.4);
+	}
+	.wt_tu_13 { width: 13px; height: 13px; }
+	.wt_tu_14 { width: 14px; height: 14px; }
+	.wt_tu_16 { width: 16px; height: 16px; }
+	.wt_tu_18 { width: 18px; height: 18px; }
+	.wt_tu_20 { width: 20px; height: 20px; }
+	.wt_ji_xu_zi {
+		margin-left: 4px;
+		font-size: 10px;
+		line-height: 14px;
+		font-weight: 700;
+		color: #ffb4ab;
+	}
+	.wt_tuo_guan {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		padding-top: 4px;
+		padding-bottom: 4px;
+		padding-left: 8px;
+		padding-right: 8px;
+		border-radius: 999px;
+		background-color: rgba(0, 165, 114, 0.2);
+	}
+	.wt_tuo_guan_zi {
+		margin-left: 4px;
+		font-size: 10px;
+		line-height: 14px;
+		font-weight: 700;
+		color: #4edea3;
+	}
+	.wt_jin_e_hang {
+		display: flex;
+		flex-direction: row;
+		align-items: flex-start;
+		justify-content: space-between;
+	}
+	.wt_jin_e_zuo { display: flex; flex-direction: column; }
+	.wt_jin_e_tou {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+	}
+	.wt_qian_bi { width: 26px; height: 26px; margin-right: 4px; }
+	.wt_jin_e_shu {
+		font-size: 30px;
+		line-height: 36px;
+		font-weight: 800;
+		letter-spacing: -0.75px;
+		color: #4edea3;
+	}
+	.wt_jin_e_dan {
+		margin-left: 4px;
+		font-size: 12px;
+		line-height: 16px;
+		font-weight: 600;
+		color: #4edea3;
+	}
+	.wt_jia_zhi_hang {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		margin-top: 2px;
+	}
+	.wt_jia_zhi {
+		font-size: 12px;
+		line-height: 16px;
+		font-weight: 400;
+		color: #c7c4d7;
+	}
+	.wt_jia_zhi_dian {
+		width: 4px;
+		height: 4px;
+		margin-left: 6px;
+		margin-right: 6px;
+		border-radius: 2px;
+		background-color: #464554;
+	}
+	.wt_jia_zhi_lv {
+		font-size: 10px;
+		line-height: 14px;
+		font-weight: 700;
+		color: #4edea3;
+	}
+	.wt_dao_ji_shi {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-end;
+		margin-top: 15px;
+		padding-top: 6px;
+		padding-bottom: 6px;
+		padding-left: 12px;
+		padding-right: 12px;
+		border-radius: 8px;
+		background-color: #171f33;
+	}
+	.wt_dao_ji_biao {
+		font-size: 10px;
+		line-height: 14px;
+		font-weight: 700;
+		color: #c7c4d7;
+	}
+	.wt_dao_ji_hang {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		margin-top: 2px;
+	}
+	.wt_dao_ji_shu {
+		margin-left: 4px;
+		font-size: 12px;
+		line-height: 16px;
+		font-weight: 700;
+		color: #ffb95f;
+	}
+	.wt_bu_jin {
+		display: flex;
+		flex-direction: row;
+		align-items: flex-start;
+		margin-top: 16px;
+		padding-top: 8px;
+		padding-bottom: 8px;
+		padding-left: 8px;
+		padding-right: 8px;
+		border-radius: 8px;
+		background-color: rgba(19, 27, 46, 0.6);
+	}
+	.wt_bu {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		width: 56px;
+	}
+	.wt_bu_yuan_yi, .wt_bu_yuan_te, .wt_bu_yuan_hui {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 20px;
+		height: 20px;
+		border-radius: 10px;
+	}
+	.wt_bu_yuan_yi { background-color: #4edea3; }
+	.wt_bu_yuan_te { background-color: #8083ff; }
+	.wt_bu_yuan_hui { background-color: #2d3449; }
+	.wt_bu_yuan_bai { width: 8px; height: 8px; border-radius: 4px; background-color: #ffffff; }
+	.wt_bu_yuan_xiao { width: 6px; height: 6px; border-radius: 3px; background-color: #908fa0; }
+	.wt_bu_zi, .wt_bu_zi_te, .wt_bu_zi_hui {
+		margin-top: 4px;
+		font-size: 10px;
+		line-height: 14px;
+		font-weight: 700;
+		white-space: nowrap;
+	}
+	.wt_bu_zi { color: #dae2fd; }
+	.wt_bu_zi_te { color: #c0c1ff; }
+	.wt_bu_zi_hui { color: #c7c4d7; }
+	.wt_bu_xian, .wt_bu_xian_yi {
+		flex: 1;
+		height: 2px;
+		margin-top: 9px;
+		margin-left: 4px;
+		margin-right: 4px;
+	}
+	.wt_bu_xian_yi { background-color: #4edea3; }
+	.wt_bu_xian { background-color: #2d3449; }
+
+	/* ---------- 通用卡片 ---------- */
+	.wt_ka {
+		margin-left: 16px;
+		margin-right: 16px;
+		margin-bottom: 16px;
+		padding: 16px;
+		border-radius: 12px;
+		background-color: #171f33;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+	}
+	.wt_biao_ti {
+		width: 100%;
+		font-size: 22px;
+		line-height: 28px;
+		font-weight: 700;
+		letter-spacing: -0.3px;
+		color: #dae2fd;
+	}
+	.wt_biao_qian_hang {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		margin-top: 8px;
+	}
+	.wt_biao_qian_zhu, .wt_biao_qian_lv, .wt_biao_qian_cheng {
+		margin-right: 6px;
+		padding-top: 4px;
+		padding-bottom: 4px;
+		padding-left: 10px;
+		padding-right: 10px;
+		border-radius: 6px;
+		font-size: 10px;
+		line-height: 14px;
+		font-weight: 700;
+		background-color: #222a3d;
+	}
+	.wt_biao_qian_zhu { color: #c0c1ff; }
+	.wt_biao_qian_lv { color: #4edea3; }
+	.wt_biao_qian_cheng { color: #ffb95f; }
+	.wt_xiang_shu {
+		margin-top: 16px;
+		padding-top: 8px;
+	}
+	.wt_xiao_biao_ti_hang {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		margin-bottom: 8px;
+	}
+	.wt_xiao_biao_ti {
+		margin-left: 6px;
+		font-size: 18px;
+		line-height: 24px;
+		font-weight: 600;
+		color: #dae2fd;
+	}
+	.wt_bao_biao { margin-left: 8px; }
+	.wt_zheng_wen {
+		width: 100%;
+		font-size: 14px;
+		line-height: 23px;
+		font-weight: 400;
+		color: #c7c4d7;
+		/* uvue 的 text 默认 pre-line（行尾空格占位），会和设计稿的 normal 差一个字才换行 */
+		white-space: normal;
+	}
+	.wt_gui_ge_ka {
+		margin-top: 8px;
+		padding: 8px;
+		border-radius: 8px;
+		background-color: #131b2e;
+	}
+	.wt_gui_ge_hang {
+		display: flex;
+		flex-direction: row;
+		align-items: flex-start;
+		margin-bottom: 8px;
+	}
+	.wt_gui_ge_mo { margin-bottom: 0; }
+	.wt_ka_wei { height: 10px; }
+	.wt_gui_ge_tu { width: 18px; height: 18px; margin-top: 2px; margin-right: 8px; }
+	.wt_gui_ge_wen {
+		flex: 1;
+		font-size: 12px;
+		line-height: 16px;
+		font-weight: 400;
+		color: #dae2fd;
+		white-space: normal;
+	}
+	.wt_gui_ge_qian { font-size: 12px; line-height: 16px; font-weight: 700; color: #4edea3; white-space: normal; }
+	.wt_gui_ge_zheng { font-size: 12px; line-height: 16px; font-weight: 400; color: #dae2fd; white-space: normal; }
+
+	/* ---------- 履约保障 ---------- */
+	.wt_bao_zhang_ge {
+		display: flex;
+		flex-direction: row;
+		justify-content: space-between;
+	}
+	.wt_bao_zhang_xiang {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		flex: 1;
+		margin-right: 8px;
+		padding-top: 4px;
+		padding-bottom: 4px;
+		border-radius: 8px;
+		background-color: #131b2e;
+	}
+	.wt_bao_zhang_mo { margin-right: 0; }
+	.wt_bao_zhang_ming {
+		margin-top: 4px;
+		font-size: 12px;
+		line-height: 16px;
+		font-weight: 700;
+		color: #dae2fd;
+	}
+	.wt_bao_zhang_fu {
+		margin-top: 2px;
+		font-size: 10px;
+		line-height: 14px;
+		font-weight: 600;
+		color: #c7c4d7;
+	}
+	.wt_ban_quan {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+		margin-top: 8px;
+		padding: 10px;
+		border-radius: 8px;
+		background-color: rgba(34, 42, 61, 0.6);
+	}
+	.wt_ban_quan_zuo { display: flex; flex-direction: row; align-items: center; }
+	.wt_ban_quan_zi {
+		margin-left: 6px;
+		font-size: 12px;
+		line-height: 16px;
+		font-weight: 600;
+		color: #c7c4d7;
+	}
+
+	/* ---------- 委托发起人 ---------- */
+	.wt_fa_qi_tou {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+		margin-bottom: 8px;
+	}
+	.wt_fa_qi_biao {
+		font-size: 12px;
+		line-height: 16px;
+		font-weight: 600;
+		letter-spacing: 0.4px;
+		color: #c7c4d7;
+	}
+	.wt_guan_zhu {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		padding-top: 4px;
+		padding-bottom: 4px;
+		padding-left: 12px;
+		padding-right: 12px;
+		border-radius: 999px;
+		background-color: #222a3d;
+	}
+	.wt_guan_zhu_zi {
+		margin-left: 4px;
+		font-size: 12px;
+		line-height: 16px;
+		font-weight: 600;
+		color: #c0c1ff;
+	}
+	.wt_fa_qi_ren { display: flex; flex-direction: row; align-items: center; }
+	.wt_fa_qi_tou_xiang { position: relative; width: 56px; height: 56px; }
+	.wt_tou_56 { width: 56px; height: 56px; border-radius: 28px; }
+	.wt_tou_40 { width: 40px; height: 40px; border-radius: 20px; }
+	.wt_zai_xian {
+		position: absolute;
+		bottom: 0;
+		right: 0;
+		width: 14px;
+		height: 14px;
+		border-radius: 7px;
+		background-color: #4edea3;
+		border-width: 2px;
+		border-style: solid;
+		border-color: #171f33;
+	}
+	.wt_fa_qi_xin_xi { flex: 1; margin-left: 8px; }
+	.wt_fa_qi_ming_hang { display: flex; flex-direction: row; align-items: center; }
+	.wt_fa_qi_ming {
+		font-size: 18px;
+		line-height: 24px;
+		font-weight: 600;
+		color: #dae2fd;
+	}
+	.wt_ren_zheng {
+		margin-left: 6px;
+		padding-top: 2px;
+		padding-bottom: 2px;
+		padding-left: 6px;
+		padding-right: 6px;
+		border-radius: 3px;
+		font-size: 10px;
+		line-height: 14px;
+		font-weight: 700;
+		color: #0d0096;
+		background-color: #8083ff;
+	}
+	.wt_fa_qi_fu {
+		margin-top: 2px;
+		font-size: 12px;
+		line-height: 16px;
+		font-weight: 400;
+		color: #c7c4d7;
+	}
+	.wt_tong_ji {
+		display: flex;
+		flex-direction: row;
+		justify-content: space-between;
+		margin-top: 16px;
+		padding-top: 6px;
+		padding-bottom: 6px;
+		padding-left: 4px;
+		padding-right: 4px;
+		border-radius: 8px;
+		background-color: #131b2e;
+	}
+	.wt_tong_ji_xiang { flex: 1; display: flex; flex-direction: column; align-items: center; }
+	.wt_tong_ji_biao { font-size: 10px; line-height: 14px; font-weight: 700; color: #c7c4d7; }
+	.wt_tong_ji_shu_lv, .wt_tong_ji_shu_zi, .wt_tong_ji_shu_bai {
+		margin-top: 2px;
+		font-size: 14px;
+		line-height: 18px;
+		font-weight: 700;
+	}
+	.wt_tong_ji_shu_lv { color: #4edea3; }
+	.wt_tong_ji_shu_zi { color: #c0c1ff; }
+	.wt_tong_ji_shu_bai { color: #dae2fd; }
+
+	/* ---------- 竞标候选池 ---------- */
+	.wt_jing_biao_tou {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+		margin-bottom: 8px;
+	}
+	.wt_jing_biao_zuo { display: flex; flex-direction: row; align-items: center; }
+	.wt_jing_biao_ti { font-size: 18px; line-height: 24px; font-weight: 600; color: #dae2fd; }
+	.wt_jing_ren_shu {
+		margin-left: 8px;
+		padding-top: 2px;
+		padding-bottom: 2px;
+		padding-left: 8px;
+		padding-right: 8px;
+		border-radius: 999px;
+		font-size: 10px;
+		line-height: 14px;
+		font-weight: 700;
+		color: #c0c1ff;
+		background-color: rgba(192, 193, 255, 0.2);
+	}
+	.wt_quan_bu { display: flex; flex-direction: row; align-items: center; }
+	.wt_quan_bu_zi { font-size: 10px; line-height: 14px; font-weight: 700; color: #c7c4d7; }
+	.wt_jing_ka {
+		margin-bottom: 4px;
+		padding: 8px;
+		border-radius: 12px;
+		background-color: #222a3d;
+	}
+	.wt_jing_ka_an { background-color: #31394d; }
+	.wt_jing_shou_hang {
+		display: flex;
+		flex-direction: row;
+		align-items: flex-start;
+		justify-content: space-between;
+	}
+	.wt_jing_zuo { display: flex; flex-direction: row; align-items: center; flex: 1; }
+	.wt_jing_tou_kuang { position: relative; width: 40px; height: 40px; }
+	.wt_zai_xian_xiao {
+		position: absolute;
+		bottom: 0;
+		right: 0;
+		width: 10px;
+		height: 10px;
+		border-radius: 5px;
+		background-color: #4edea3;
+	}
+	.wt_jing_xin_xi { flex: 1; margin-left: 4px; }
+	.wt_jing_ming_hang { display: flex; flex-direction: row; align-items: center; }
+	.wt_jing_ming { font-size: 14px; line-height: 18px; font-weight: 700; color: #dae2fd; }
+	.wt_xin_yong_lv, .wt_xin_yong_zi {
+		margin-left: 6px;
+		padding-top: 1px;
+		padding-bottom: 1px;
+		padding-left: 6px;
+		padding-right: 6px;
+		border-radius: 3px;
+		font-size: 10px;
+		line-height: 14px;
+		font-weight: 700;
+	}
+	.wt_xin_yong_lv { color: #4edea3; background-color: rgba(0, 165, 114, 0.2); }
+	.wt_xin_yong_zi { color: #c0c1ff; background-color: rgba(192, 193, 255, 0.2); }
+	.wt_jing_fu { font-size: 12px; line-height: 16px; font-weight: 400; color: #c7c4d7; }
+	.wt_jing_you { display: flex; flex-direction: column; align-items: flex-end; }
+	.wt_jing_jia { font-size: 12px; line-height: 16px; font-weight: 700; color: #4edea3; }
+	.wt_jing_tian { font-size: 10px; line-height: 14px; font-weight: 700; color: #c7c4d7; }
+
+	/* ---------- 底部固定操作栏 ---------- */
+	.wt_di_zhan_wei { height: 76px; }
+	.wt_di_lan {
+		position: fixed;
+		bottom: 0;
+		left: 0;
+		right: 0;
+		z-index: 40;
+		background-color: #060e20;
+		box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.4);
+	}
+	.wt_di_nei {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+		height: 64px;
+		padding-left: 16px;
+		padding-right: 16px;
+	}
+	.wt_di_zuo { display: flex; flex-direction: row; align-items: center; }
+	.wt_di_an {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 44px;
+		height: 44px;
+		margin-right: 4px;
+		border-radius: 12px;
+		background-color: #171f33;
+	}
+	.wt_di_an_tu { width: 22px; height: 22px; }
+	.wt_cta {
+		display: flex;
+		flex: 1;
+		flex-direction: row;
+		align-items: center;
+		justify-content: center;
+		height: 44px;
+		border-radius: 12px;
+		background: linear-gradient(to right, #8083ff, #494bd6);
+		box-shadow: 0 8px 20px rgba(128, 131, 255, 0.3);
+	}
+	.wt_cta_zi {
+		margin-left: 8px;
+		font-size: 14px;
+		line-height: 18px;
+		font-weight: 700;
+		color: #ffffff;
+	}
+
+	/* 按字重指向对应 ttf：uni-app x 的自定义字体规则不支持字重属性，Android 单字重字体也不响应数值字重 */
+	.wt_biao_ti { font-family: 'PJS700'; }
+	.wt_xiao_biao_ti { font-family: 'PJS600'; }
+	.wt_gui_ge_qian { font-family: 'PJS700'; }
+	.wt_jin_e_shu { font-family: 'PJS800'; }
+	.wt_fa_qi_ming { font-family: 'PJS600'; }
+	.wt_jing_ming { font-family: 'PJS700'; }
+	.wt_cta_zi { font-family: 'PJS700'; }
+	.wt_zhuang_tai_zi { font-family: 'SG700'; }
+	.wt_ji_xu_zi { font-family: 'SG700'; }
+	.wt_tuo_guan_zi { font-family: 'SG700'; }
+	.wt_jia_zhi_lv { font-family: 'SG700'; }
+	.wt_dao_ji_biao { font-family: 'SG700'; }
+	.wt_dao_ji_shu { font-family: 'SG700'; }
+	.wt_bu_zi { font-family: 'SG700'; }
+	.wt_bu_zi_te { font-family: 'SG700'; }
+	.wt_bu_zi_hui { font-family: 'SG700'; }
+	.wt_biao_qian_zhu { font-family: 'SG700'; }
+	.wt_biao_qian_lv { font-family: 'SG700'; }
+	.wt_biao_qian_cheng { font-family: 'SG700'; }
+	.wt_bao_zhang_ming { font-family: 'SG700'; }
+	.wt_ren_zheng { font-family: 'SG700'; }
+	.wt_tong_ji_biao { font-family: 'SG700'; }
+	.wt_tong_ji_shu_lv { font-family: 'SG700'; }
+	.wt_tong_ji_shu_zi { font-family: 'SG700'; }
+	.wt_tong_ji_shu_bai { font-family: 'SG700'; }
+	.wt_jing_ren_shu { font-family: 'SG700'; }
+	.wt_quan_bu_zi { font-family: 'SG700'; }
+	.wt_xin_yong_lv { font-family: 'SG700'; }
+	.wt_xin_yong_zi { font-family: 'SG700'; }
+	.wt_jing_jia { font-family: 'SG700'; }
+	.wt_jing_tian { font-family: 'SG700'; }
+
+	/* ---------- 加载 / 错误 / 空态（沿用深色卡片同一套语言） ---------- */
+	.wt_zhuang_tai_ka {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		margin: 16px;
+		padding-top: 32px;
+		padding-bottom: 32px;
+		padding-left: 16px;
+		padding-right: 16px;
+		border-radius: 12px;
+		background-color: #171f33;
+	}
+	.wt_deng_dai {
+		width: 24px;
+		height: 24px;
+		margin-bottom: 12px;
+		border-radius: 12px;
+		background-color: #c0c1ff;
+	}
+	.wt_zhuang_tai_wen {
+		font-size: 13px;
+		line-height: 18px;
+		font-weight: 400;
+		color: #c7c4d7;
+		text-align: center;
+	}
+	.wt_chong_shi {
+		margin-top: 12px;
+		padding-top: 8px;
+		padding-bottom: 8px;
+		padding-left: 20px;
+		padding-right: 20px;
+		border-radius: 8px;
+		background-color: #c0c1ff;
+	}
+	.wt_chong_shi_zi {
+		font-size: 12px;
+		line-height: 16px;
+		font-weight: 700;
+		color: #1000a9;
+		font-family: 'SG700';
+	}
+
+	/* ---------- 投标 / 交付截止（设计稿只有倒计时，这里补明确日期） ---------- */
+	.wt_qi_xian {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		margin-top: 12px;
+		padding-top: 8px;
+		padding-bottom: 8px;
+		padding-left: 10px;
+		padding-right: 10px;
+		border-radius: 8px;
+		background-color: #131b2e;
+	}
+	.wt_qi_xian_zi {
+		margin-left: 4px;
+		font-size: 10px;
+		line-height: 14px;
+		font-weight: 700;
+		color: #c7c4d7;
+		font-family: 'SG700';
+	}
+	.wt_qi_xian_dian {
+		width: 3px;
+		height: 3px;
+		margin-left: 8px;
+		margin-right: 8px;
+		border-radius: 2px;
+		background-color: #464554;
+	}
+	.wt_dao_ji_shu_jin { color: #ffb4ab; }
+
+	/* ---------- 竞标池空态 ---------- */
+	.wt_jing_kong {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		padding-top: 20px;
+		padding-bottom: 20px;
+	}
+	.wt_jing_kong_zi {
+		font-size: 12px;
+		line-height: 16px;
+		font-weight: 400;
+		color: #c7c4d7;
+		text-align: center;
+	}
+
+	/* ---------- 已撤回 / 历史投标的中性徽章 ---------- */
+	.wt_xin_yong_hui {
+		margin-left: 6px;
+		padding-top: 1px;
+		padding-bottom: 1px;
+		padding-left: 6px;
+		padding-right: 6px;
+		border-radius: 3px;
+		font-size: 10px;
+		line-height: 14px;
+		font-weight: 700;
+		font-family: 'SG700';
+		color: #c7c4d7;
+		background-color: rgba(199, 196, 215, 0.16);
+	}
+
+	/* 主按钮禁用态与不换行 */
+	.wt_cta_jin { opacity: 0.45; }
+	.wt_cta_zi { white-space: nowrap; }
+</style>

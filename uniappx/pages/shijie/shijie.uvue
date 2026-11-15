@@ -1,28 +1,904 @@
 <script setup lang="ts">
+import { computed, ref } from 'vue'
+
+/**
+ * 设计图/世界.html 的迁移版（深色 World 发现页）。
+ *
+ * 界面按设计稿 1:1 落地：快速搜索 → 同城互助雷达 HUD → 快捷探索矩阵 6 卡 →
+ * 委托广场精选横滑 3 卡 → 圈子热帖（关注/推荐/同城 + 2 帖）→ 右下悬浮发布按钮。
+ * 顶栏 / 底栏不在本页渲染：本页由首页 pages/shou_ye/shou_ye 当组件用 v-if 挂载，
+ * 顶栏统一由首页那份 ding_lan 渲染（世界页标题 World），底栏统一由首页 di_lan 渲染；
+ * 本页只留顶部 / 底部占位做内容避让。页面级滚动：根容器不锁死高度，内容自然撑开。
+ *
+ * 设计稿里的运营位（雷达人数、精选委托、圈子热帖）都是静态展示内容，后端没有对应
+ * 接口，按原样落地而不编造数据。图标本地化为 static/shijie/icons/*.svg，
+ * 头像与配图落地为 static/shijie/img/*.jpg；模糊光晕用预烘焙的径向渐隐 PNG
+ * （uvue 没有 blur 滤镜，App 端也不支持 radial-gradient）。
+ *
+ * 交互照设计稿 JS 还原：分段切换、点赞、打赏、报名、雷达按压、发布提示。
+ * 「委托广场」「发布委托」是 pages.json 注册的独立页面：矩阵第一卡、精选「全部 320+」
+ * 与精选卡用 uni.navigateTo 打开委托广场页，右下悬浮按钮打开发布委托页。
+ * 不再通过 change-tab 在首页内用 v-if 切换（设计稿 FAB 只弹 toast，这里接真实发布页）。
+ */
+
+type 矩阵项 = {
+	键 : string
+	标题 : string
+	副标题 : string
+	图标 : string
+	图底类 : string
+	徽章 : string
+	徽章底类 : string
+	徽章字类 : string
+	光晕 : string
+}
+type 精选项 = {
+	键 : string
+	分类 : string
+	分类底类 : string
+	分类字类 : string
+	右上图标 : string
+	右上文 : string
+	右上类 : string
+	标题 : string
+	两行 : boolean
+	描述 : string
+	价 : string
+	按钮 : string
+	按钮底类 : string
+	按钮字类 : string
+}
+
+// 组件的 onLoad 不触发，窗口信息在 setup 期间同步取值
+const 系统信息 : any = uni.getSystemInfoSync()
+const 状态栏高 = ref(系统信息.statusBarHeight ?? 0)
+const 窗口底高 = ref(系统信息.windowBottom ?? 0)
+
+// 顶部 = 顶栏 64 + 状态栏；底部照设计稿 main pb-20(80) + 容器 pb-6(24) = 104
+const 顶部占位 = computed(() : number => 64 + 状态栏高.value)
+const 底部占位 = computed(() : number => 104 + 窗口底高.value)
+const 悬浮底距 = computed(() : number => 96 + 窗口底高.value)
+
+const 图标 = '/static/shijie/icons/'
+const 配图 = '/static/shijie/img/'
+const 光斑 = '/static/guang/'
+
+/* ---------------- 交互状态 ---------------- */
+const 搜索词 = ref('')
+const 当前分段 = ref('推荐')
+const 已点赞 = ref(false)
+const 点赞数 = ref(48)
+const 已打赏 = ref(false)
+const 已报名 = ref(false)
+const 雷达按下 = ref(false)
+const 提示可见 = ref(false)
+const 提示文字 = ref('')
+let 提示计时器 : any = null
+
+const 赞图标 = computed(() => 已点赞.value ? 图标 + 'favorite.svg' : 图标 + 'favorite_border.svg')
+const 打赏文字 = computed(() => 已打赏.value ? '已打赏!' : '赏花 5 PTS')
+const 报名文字 = computed(() => 已报名.value ? '已报名 (19)' : '报名想去 (18)')
+
+function 显示提示(文字 : string) {
+	提示文字.value = 文字
+	提示可见.value = true
+	if (提示计时器 != null) clearTimeout(提示计时器)
+	提示计时器 = setTimeout(() => { 提示可见.value = false }, 2200)
+}
+
+function 通用提示(事件 : any) {
+	const 文案 = 事件.currentTarget.dataset['msg']
+	显示提示(文案 == null ? '功能即将上线' : String(文案))
+}
+
+function 切换分段(事件 : any) {
+	const 键 = 事件.currentTarget.dataset['key']
+	当前分段.value = 键 == null ? '推荐' : String(键)
+}
+
+function 点赞() {
+	if (已点赞.value) 点赞数.value = 点赞数.value - 1
+	else 点赞数.value = 点赞数.value + 1
+	已点赞.value = !已点赞.value
+}
+
+function 打赏() {
+	已打赏.value = true
+}
+
+function 报名() {
+	已报名.value = !已报名.value
+}
+
+function 开雷达() {
+	雷达按下.value = !雷达按下.value
+}
+
+/** 页面级跳转：委托广场是独立页面，不在首页内用 v-if 切换 */
+function 去委托广场() {
+	uni.navigateTo({ url: '/pages/weituo/wei_tuo_guang_chang' })
+}
+
+/** 页面级跳转：发布委托同样是独立页面 */
+function 去发布() {
+	uni.navigateTo({ url: '/pages/fabuweituo/fa_bu_w_t' })
+}
+
+function 矩阵点击(事件 : any) {
+	const 键 = 事件.currentTarget.dataset['key']
+	if (键 == '委托广场') {
+		去委托广场()
+		return
+	}
+	const 找到 = 矩阵列表.find((项) => 项.键 == 键)
+	显示提示((找到 == null ? '该服务' : 找到.标题) + ' 即将上线')
+}
+
+/* ---------------- 静态内容 ---------------- */
+const 矩阵列表 : 矩阵项[] = [
+	{
+		键: '委托广场', 标题: '委托广场', 副标题: '海量任务 积分变现',
+		图标: 图标 + 'fire.svg', 图底类: 'sj_ju_tu_cheng',
+		徽章: '99+新悬赏', 徽章底类: 'sj_hui_hong', 徽章字类: 'sj_hui_hong_zi',
+		光晕: 光斑 + 'cheng_15.png',
+	},
+	{
+		键: '圈子动态', 标题: '圈子动态', 副标题: '伙伴生活与接单日常',
+		图标: 图标 + 'auto_awesome.svg', 图底类: 'sj_ju_tu_zi',
+		徽章: '好友更新', 徽章底类: 'sj_hui_zi', 徽章字类: 'sj_hui_zi_zi',
+		光晕: 光斑 + 'zi_20.png',
+	},
+	{
+		键: '互助公会', 标题: '互助公会', 副标题: '组队开黑与协同攻坚',
+		图标: 图标 + 'shield.svg', 图底类: 'sj_ju_tu_lv',
+		徽章: '公会争霸', 徽章底类: 'sj_hui_lv', 徽章字类: 'sj_hui_lv_zi',
+		光晕: '',
+	},
+	{
+		键: '技能集市', 标题: '技能集市', 副标题: '认证专家 随时呼叫',
+		图标: 图标 + 'terminal.svg', 图底类: 'sj_ju_tu_liang',
+		徽章: '达人推荐', 徽章底类: 'sj_hui_gao', 徽章字类: 'sj_hui_gao_zi',
+		光晕: '',
+	},
+	{
+		键: '积分商城', 标题: '积分商城', 副标题: '兑换周边与专属徽章',
+		图标: 图标 + 'toll.svg', 图底类: 'sj_ju_tu_huang',
+		徽章: '限时换礼', 徽章底类: 'sj_hui_gao', 徽章字类: 'sj_hui_cheng_zi',
+		光晕: '',
+	},
+	{
+		键: '信用法庭', 标题: '信用法庭', 副标题: '公平仲裁与纠纷裁决',
+		图标: 图标 + 'balance.svg', 图底类: 'sj_ju_tu_liang',
+		徽章: '评审陪审', 徽章底类: 'sj_hui_gao', 徽章字类: 'sj_hui_gao_zi',
+		光晕: '',
+	},
+]
+
+const 精选列表 : 精选项[] = [
+	{
+		键: 'figma', 分类: 'UI/UX 设计', 分类底类: 'sj_biao_zi', 分类字类: 'sj_biao_zi_zi',
+		右上图标: 图标 + 'schedule.svg', 右上文: '剩 4h', 右上类: 'sj_you_cheng',
+		标题: 'Figma 移动端设计规范重构', 两行: false,
+		描述: '重构暗黑主题组件库与 Token 映射', 价: '1,200',
+		按钮: '立即竞标', 按钮底类: 'sj_an_zhu', 按钮字类: 'sj_an_zhu_zi',
+	},
+	{
+		键: 'song', 分类: '同城速递', 分类底类: 'sj_biao_cheng', 分类字类: 'sj_biao_cheng_zi',
+		右上图标: 图标 + 'near_me.svg', 右上文: '距你 1.2km', 右上类: 'sj_you_lv',
+		标题: '同城极速取送 · 展会紧急物料', 两行: true,
+		描述: '静安大悦城至博览中心，今日14点前送达', 价: '350',
+		按钮: '抢单接下', 按钮底类: 'sj_an_lv', 按钮字类: 'sj_an_lv_zi',
+	},
+	{
+		键: 'heyue', 分类: '区块链安全', 分类底类: 'sj_biao_liang', 分类字类: 'sj_biao_liang_zi',
+		右上图标: 图标 + 'group.svg', 右上文: '招募中', 右上类: 'sj_you_hui',
+		标题: '智能合约安全审计与复核', 两行: false,
+		描述: 'ERC-4337 抽象账户钱包逻辑白盒渗透测试', 价: '2,500',
+		按钮: '了解详情', 按钮底类: 'sj_an_liang', 按钮字类: 'sj_an_liang_zi',
+	},
+]
 </script>
 
 <template>
-  <view class="ye_mian">
-    <view class="ye_mian_biao_ti"><text class="fu_biao_ti">探索与发现</text><text class="biao_ti">世界</text></view>
-    <view class="ka_pian ke_dian_ji" @click="uni.navigateTo({ url: '/pages/zhuye/zhuye' })">
-      <text class="ka_pian_biao_ti">委托广场</text>
-      <text class="fu_zhu_wen_ben">浏览正在招募的委托，发现可以参与的机会。</text>
-    </view>
-        <view class="ka_pian ke_dian_ji" @click="uni.navigateTo({ url: '/pages/weituo/di_tu' })">
-      <text class="ka_pian_biao_ti">地图委托</text>
-      <text class="fu_zhu_wen_ben">浏览正在招募的委托，发现可以参与的机会。</text>
-    </view>
-    <view class="ka_pian ke_dian_ji" @click="uni.navigateTo({ url: '/pages/rong_he_di_tu/rong_he_di_tu' })">
-      <text class="ka_pian_biao_ti">融合地图</text>
-      <text class="fu_zhu_wen_ben">游戏化委托地图，像接冒险任务一样接单。</text>
-    </view>
-    <view class="ka_pian ke_dian_ji" @click="uni.navigateTo({ url: '/pages/woderenwu/woderenwu' })">
-      <text class="ka_pian_biao_ti">我的委托</text>
-      <text class="fu_zhu_wen_ben">查看发布和接单的委托及处理进度。</text>
-    </view>
-    <view class="ka_pian ke_dian_ji" @click="uni.navigateTo({ url: '/pages/fabuweituo/fabuweituo' })">
-      <text class="ka_pian_biao_ti">发布委托</text>
-      <text class="fu_zhu_wen_ben">发布需求，寻找协作伙伴。</text>
-    </view>
-  </view>
+	<view class="sj_ye">
+		<view class="sj_nei" :style="{ paddingTop: 顶部占位 + 'px', paddingBottom: 底部占位 + 'px' }">
+
+			<!-- ① 搜索 + 同城互助雷达 -->
+			<view class="sj_duan1">
+				<view class="sj_sou_suo">
+					<image class="sj_sou_tu" :src="图标 + 'search.svg'" mode="aspectFit"></image>
+					<input
+						class="sj_sou_kuang"
+						v-model="搜索词"
+						placeholder="探索圈子、互助热门、同城雷达..."
+						placeholder-class="sj_zhan_wei"
+					/>
+					<view class="sj_sou_you" data-msg="语音搜索即将上线" @click="通用提示">
+						<image class="sj_tu_18" :src="图标 + 'mic.svg'" mode="aspectFit"></image>
+					</view>
+				</view>
+
+				<view class="sj_lei_da">
+					<image class="sj_lei_guang" :src="光斑 + 'lv_20.png'" mode="scaleToFill"></image>
+					<view class="sj_lei_nei">
+						<view class="sj_lei_zuo">
+							<view class="sj_lei_tu_kuai">
+								<view class="sj_lei_bo"></view>
+								<image class="sj_tu_24" :src="图标 + 'radar.svg'" mode="aspectFit"></image>
+								<view class="sj_lei_dian"></view>
+							</view>
+							<view class="sj_lei_wen">
+								<view class="sj_lei_biao_hang">
+									<text class="sj_lei_biao">面对面互助雷达</text>
+									<view class="sj_live"><text class="sj_live_zi">LIVE</text></view>
+								</view>
+								<text class="sj_lei_fu">同城 128 位伙伴在线 · 3项急约发生中</text>
+							</view>
+						</view>
+						<view class="sj_lei_an" :class="雷达按下 ? 'sj_lei_an_ya' : ''" @click="开雷达">
+							<text class="sj_lei_an_zi">开启雷达</text>
+							<image class="sj_tu_16" :src="图标 + 'chevron_right.svg'" mode="aspectFit"></image>
+						</view>
+					</view>
+				</view>
+			</view>
+
+			<!-- ② 快捷探索矩阵 -->
+			<view class="sj_duan2">
+				<view class="sj_biao_hang">
+					<text class="sj_biao">快捷探索矩阵</text>
+					<text class="sj_biao_fu">HUB SERVICES</text>
+				</view>
+				<view class="sj_wang_ge">
+					<view
+						v-for="(项, 序) in 矩阵列表"
+						:key="项.键"
+						class="sj_ju_ka"
+						:class="序 + 2 >= 矩阵列表.length ? 'sj_ju_ka_wei' : ''"
+						:data-key="项.键"
+						@click="矩阵点击"
+					>
+						<image v-if="项.光晕 != ''" class="sj_ju_guang" :src="项.光晕" mode="scaleToFill"></image>
+						<view class="sj_ju_ding">
+							<view class="sj_ju_tu_kuai" :class="项.图底类">
+								<image class="sj_tu_22" :src="项.图标" mode="aspectFit"></image>
+							</view>
+							<view class="sj_ju_hui" :class="项.徽章底类">
+								<text class="sj_ju_hui_zi" :class="项.徽章字类">{{ 项.徽章 }}</text>
+							</view>
+						</view>
+						<text class="sj_ju_biao">{{ 项.标题 }}</text>
+						<text class="sj_ju_fu">{{ 项.副标题 }}</text>
+					</view>
+				</view>
+			</view>
+
+			<!-- ③ 委托广场精选（横向滚动） -->
+			<view class="sj_duan3">
+				<view class="sj_jing_biao_hang">
+					<view class="sj_jing_biao_zuo">
+						<image class="sj_tu_20" :src="图标 + 'fire.svg'" mode="aspectFit"></image>
+						<text class="sj_biao">委托广场精选</text>
+					</view>
+					<view class="sj_jing_geng" @click="去委托广场">
+						<text class="sj_jing_geng_zi">全部 320+</text>
+						<image class="sj_tu_16" :src="图标 + 'chevron_right_lan.svg'" mode="aspectFit"></image>
+					</view>
+				</view>
+				<scroll-view class="sj_jing_gui" direction="horizontal" :show-scrollbar="false">
+					<view class="sj_jing_hang">
+						<view
+							v-for="项 in 精选列表"
+							:key="项.键"
+							class="sj_jing_ka"
+							@click="去委托广场"
+						>
+							<view class="sj_jing_shang">
+								<view class="sj_jing_ding_hang">
+									<view class="sj_jing_biao_qian" :class="项.分类底类">
+										<text class="sj_jing_biao_qian_zi" :class="项.分类字类">{{ 项.分类 }}</text>
+									</view>
+									<view class="sj_jing_you_shang">
+										<image class="sj_tu_14" :src="项.右上图标" mode="aspectFit"></image>
+										<text class="sj_jing_you_zi" :class="项.右上类">{{ 项.右上文 }}</text>
+									</view>
+								</view>
+								<text class="sj_jing_biao_ti" :class="项.两行 ? 'sj_jing_biao_ti_2' : ''">{{ 项.标题 }}</text>
+								<text class="sj_jing_miao">{{ 项.描述 }}</text>
+							</view>
+							<view class="sj_jing_di">
+								<view class="sj_jing_jia_hang">
+									<text class="sj_jing_jia">{{ 项.价 }}</text>
+									<text class="sj_jing_pts">PTS</text>
+								</view>
+								<view class="sj_jing_an" :class="项.按钮底类">
+									<text class="sj_jing_an_zi" :class="项.按钮字类">{{ 项.按钮 }}</text>
+								</view>
+							</view>
+						</view>
+					</view>
+				</scroll-view>
+			</view>
+
+			<!-- ④ 圈子热帖 -->
+			<view class="sj_duan4">
+				<view class="sj_re_biao_hang">
+					<text class="sj_biao">圈子热帖</text>
+					<view class="sj_fen_duan">
+						<view class="sj_fen_an" :class="当前分段 == '关注' ? 'sj_fen_an_ji' : ''" data-key="关注" @click="切换分段">
+							<text class="sj_fen_zi" :class="当前分段 == '关注' ? 'sj_fen_zi_ji' : ''">关注</text>
+						</view>
+						<view class="sj_fen_an" :class="当前分段 == '推荐' ? 'sj_fen_an_ji' : ''" data-key="推荐" @click="切换分段">
+							<text class="sj_fen_zi" :class="当前分段 == '推荐' ? 'sj_fen_zi_ji' : ''">推荐</text>
+						</view>
+						<view class="sj_fen_an" :class="当前分段 == '同城' ? 'sj_fen_an_ji' : ''" data-key="同城" @click="切换分段">
+							<text class="sj_fen_zi" :class="当前分段 == '同城' ? 'sj_fen_zi_ji' : ''">同城</text>
+						</view>
+					</view>
+				</view>
+
+				<view class="sj_tie_lie">
+					<!-- 帖 1 -->
+					<view class="sj_tie">
+						<view class="sj_tie_tou_hang">
+							<view class="sj_tou_xiang_kuang">
+								<image class="sj_tou_xiang" :src="配图 + 'avatar_maya.jpg'" mode="aspectFill"></image>
+								<view class="sj_zai_xian"></view>
+							</view>
+							<view class="sj_tou_wen">
+								<view class="sj_tou_ming_hang">
+									<text class="sj_tou_ming">林栖 · Maya</text>
+									<image class="sj_tu_16" :src="图标 + 'verified.svg'" mode="aspectFit"></image>
+								</view>
+								<view class="sj_tou_fu_hang">
+									<text class="sj_tou_fu">资深设计专家</text>
+									<text class="sj_tou_fu">·</text>
+									<text class="sj_tou_xin">信用 99.8</text>
+								</view>
+							</view>
+							<text class="sj_tou_shi">10分钟前</text>
+						</view>
+
+						<text class="sj_zheng_wen"><text class="sj_zheng_zi">刚刚完成了第42单赛博像素表情包委托交付！感谢委托方的信任，结项秒到账 </text><text class="sj_zheng_pts">850 PTS</text><text class="sj_zheng_zi"> ✨ 附上最终切图与预览，下周开放新档期～</text></text>
+
+						<view class="sj_tu_wang">
+							<image class="sj_tu_ge" :src="配图 + 'pixel_cat.jpg'" mode="aspectFill"></image>
+							<image class="sj_tu_ge" :src="配图 + 'pixel_robot.jpg'" mode="aspectFill"></image>
+						</view>
+
+						<view class="sj_guan_lian">
+							<view class="sj_guan_zuo">
+								<image class="sj_tu_18" :src="图标 + 'link.svg'" mode="aspectFit"></image>
+								<text class="sj_guan_zi">关联委托：赛博像素猫咪表情包 (已圆满完结)</text>
+							</view>
+							<view class="sj_guan_hui"><text class="sj_guan_hui_zi">+850 PTS</text></view>
+						</view>
+
+						<view class="sj_cao_zuo">
+							<view class="sj_cao_an" @click="点赞">
+								<image class="sj_tu_18" :src="赞图标" mode="aspectFit"></image>
+								<text class="sj_cao_zi" :class="已点赞 ? 'sj_cao_zi_cuo' : ''">{{ 点赞数 }}</text>
+							</view>
+							<view class="sj_cao_an" data-msg="评论功能即将上线" @click="通用提示">
+								<image class="sj_tu_18" :src="图标 + 'chat_bubble_outline.svg'" mode="aspectFit"></image>
+								<text class="sj_cao_zi">12</text>
+							</view>
+							<view class="sj_cao_an" data-msg="转发功能即将上线" @click="通用提示">
+								<image class="sj_tu_18" :src="图标 + 'share.svg'" mode="aspectFit"></image>
+								<text class="sj_cao_zi">转发</text>
+							</view>
+							<view class="sj_shang_an" :class="已打赏 ? 'sj_shang_an_yi' : ''" @click="打赏">
+								<image v-if="已打赏" class="sj_tu_16" :src="图标 + 'check.svg'" mode="aspectFit"></image>
+								<image v-else class="sj_tu_16" :src="图标 + 'redeem.svg'" mode="aspectFit"></image>
+								<text class="sj_shang_zi" :class="已打赏 ? 'sj_shang_zi_yi' : ''">{{ 打赏文字 }}</text>
+							</view>
+						</view>
+					</view>
+
+					<!-- 帖 2 -->
+					<view class="sj_tie sj_tie_wei">
+						<view class="sj_tie_tou_hang">
+							<view class="sj_tou_xiang_kuang">
+								<image class="sj_tou_xiang" :src="配图 + 'avatar_arthur.jpg'" mode="aspectFill"></image>
+								<view class="sj_zai_xian"></view>
+							</view>
+							<view class="sj_tou_wen">
+								<view class="sj_tou_ming_hang">
+									<text class="sj_tou_ming">阿瑟 · Arthur</text>
+									<view class="sj_dev"><text class="sj_dev_zi">DEV</text></view>
+								</view>
+								<view class="sj_tou_fu_hang">
+									<text class="sj_tou_fu">全栈工程师</text>
+									<text class="sj_tou_fu">·</text>
+									<text class="sj_tou_xin">信用 98.4</text>
+								</view>
+							</view>
+							<text class="sj_tou_shi">1小时前</text>
+						</view>
+
+						<text class="sj_zheng_wen"><text class="sj_zheng_zi">有没有在静安创客空间附近的同学？下午组织一场线下 </text><text class="sj_zheng_zi_lan">FastAPI + WebSocket</text><text class="sj_zheng_zi"> 技术互助交流，现场提供免费手工咖啡 ☕ 欢迎自带难题组队攻坚！</text></text>
+
+						<view class="sj_biao_qian_hang">
+							<view class="sj_di_dian">
+								<image class="sj_tu_16" :src="图标 + 'location_on.svg'" mode="aspectFit"></image>
+								<text class="sj_di_dian_zi">静安创客空间 · 300m</text>
+							</view>
+							<view class="sj_hua_ti"><text class="sj_hua_ti_zi">#线下搭子</text></view>
+							<view class="sj_hua_ti"><text class="sj_hua_ti_zi">#技术交流</text></view>
+						</view>
+
+						<view class="sj_cao_zuo2">
+							<view class="sj_bao_an" :class="已报名 ? 'sj_bao_an_yi' : ''" @click="报名">
+								<image class="sj_tu_18" :src="图标 + 'how_to_reg.svg'" mode="aspectFit"></image>
+								<text class="sj_bao_zi" :class="已报名 ? 'sj_bao_zi_yi' : ''">{{ 报名文字 }}</text>
+							</view>
+							<view class="sj_you_cao">
+								<view class="sj_cao_an" data-msg="评论功能即将上线" @click="通用提示">
+									<image class="sj_tu_18" :src="图标 + 'chat_bubble_outline.svg'" mode="aspectFit"></image>
+									<text class="sj_cao_zi">7</text>
+								</view>
+								<view class="sj_cao_an sj_cao_an_jian" data-msg="分享功能即将上线" @click="通用提示">
+									<image class="sj_tu_18" :src="图标 + 'share.svg'" mode="aspectFit"></image>
+								</view>
+							</view>
+						</view>
+					</view>
+				</view>
+			</view>
+		</view>
+
+		<!-- 右下悬浮发布按钮（fixed，压在页面内容之上） -->
+		<view class="sj_fab" :style="{ bottom: 悬浮底距 + 'px' }" @click="去发布">
+			<image class="sj_tu_20" :src="图标 + 'add.svg'" mode="aspectFit"></image>
+			<text class="sj_fab_zi">发动态 / 悬赏</text>
+		</view>
+
+		<!-- 轻提示 -->
+		<view v-if="提示可见" class="sj_toast_lan">
+			<view class="sj_toast">
+				<image class="sj_tu_20" :src="图标 + 'edit_note.svg'" mode="aspectFit"></image>
+				<text class="sj_toast_zi">{{ 提示文字 }}</text>
+			</view>
+		</view>
+	</view>
 </template>
+
+<style>
+/* 设计稿字体：Plus Jakarta Sans（标题/正文）、Space Grotesk（标签/按钮） */
+@font-face { font-family: 'PJS400'; src: url('/static/hui_hua/fonts/PlusJakartaSans-400.ttf'); }
+@font-face { font-family: 'PJS600'; src: url('/static/hui_hua/fonts/PlusJakartaSans-600.ttf'); }
+@font-face { font-family: 'PJS700'; src: url('/static/hui_hua/fonts/PlusJakartaSans-700.ttf'); }
+@font-face { font-family: 'PJS800'; src: url('/static/hui_hua/fonts/PlusJakartaSans-800.ttf'); }
+@font-face { font-family: 'SG600'; src: url('/static/hui_hua/fonts/SpaceGrotesk-600.ttf'); }
+@font-face { font-family: 'SG700'; src: url('/static/hui_hua/fonts/SpaceGrotesk-700.ttf'); }
+
+.sj_biao, .sj_ju_biao, .sj_jing_biao_ti, .sj_tou_ming, .sj_lei_biao, .sj_fab_zi { font-family: 'PJS600'; }
+.sj_sou_kuang, .sj_zhan_wei, .sj_lei_fu, .sj_ju_fu, .sj_jing_miao, .sj_zheng_zi, .sj_zheng_wen, .sj_tou_fu { font-family: 'PJS400'; }
+.sj_jing_jia { font-family: 'PJS800'; }
+.sj_biao_fu, .sj_live_zi, .sj_lei_an_zi, .sj_ju_hui_zi, .sj_jing_biao_qian_zi,
+.sj_jing_you_zi, .sj_jing_pts, .sj_jing_an_zi, .sj_jing_geng_zi, .sj_fen_zi,
+.sj_tou_shi, .sj_zheng_pts, .sj_zheng_zi_lan, .sj_guan_zi, .sj_guan_hui_zi,
+.sj_cao_zi, .sj_shang_zi, .sj_bao_zi, .sj_di_dian_zi, .sj_hua_ti_zi, .sj_dev_zi,
+.sj_tou_xin, .sj_toast_zi { font-family: 'SG600'; }
+
+/* 通用图标尺寸 */
+.sj_tu_14 { width: 14px; height: 14px; }
+.sj_tu_16 { width: 16px; height: 16px; }
+.sj_tu_18 { width: 18px; height: 18px; }
+.sj_tu_20 { width: 20px; height: 20px; }
+.sj_tu_22 { width: 22px; height: 22px; }
+.sj_tu_24 { width: 24px; height: 24px; }
+
+/* ---------- 页面骨架（页面级滚动，不锁死高度） ---------- */
+.sj_ye {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	background-color: #0b1326;
+}
+.sj_nei {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+}
+/* 段间距 24px（设计稿 space-y-space-lg）。
+ * 四段统一靠 padding-left/right:16px 或子元素同值内边距做左右留白；
+ * 段内块级容器一律 width:100%，不写死 398px —— 否则非 430 宽屏下
+ * 内容只贴左边，右边距会随屏宽变化（甚至溢出），左右就不对称了。 */
+.sj_duan1, .sj_duan2, .sj_duan3 { margin-bottom: 24px; }
+.sj_duan1 { padding-top: 4px; padding-left: 16px; padding-right: 16px; }
+.sj_duan2 { padding-left: 16px; padding-right: 16px; }
+.sj_duan4 { padding-bottom: 0px; }
+.sj_biao { color: #dae2fd; font-size: 18px; line-height: 24px; font-weight: 600; letter-spacing: -0.1px; }
+.sj_biao_fu { color: #908fa0; font-size: 10px; line-height: 14px; font-weight: 700; letter-spacing: 0.9px; }
+.sj_biao_hang {
+	display: flex; flex-direction: row; align-items: center; justify-content: space-between;
+	height: 24px; margin-bottom: 8px;
+}
+
+/* ---------- ① 搜索框 ---------- */
+.sj_sou_suo {
+	position: relative;
+	display: flex; flex-direction: row; align-items: center;
+	width: 100%; height: 44px; margin-bottom: 8px;
+	border-radius: 12px;
+	background-color: rgba(34, 42, 61, 0.9);
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+.sj_sou_tu { position: absolute; left: 14px; top: 12px; width: 20px; height: 20px; }
+.sj_sou_kuang {
+	width: 100%; height: 44px;
+	padding-left: 40px; padding-right: 40px;
+	color: #dae2fd; font-size: 14px; line-height: 20px;
+	border-radius: 12px;
+	background-color: rgba(0, 0, 0, 0);
+}
+.sj_zhan_wei { color: #908fa0; font-size: 14px; line-height: 20px; }
+.sj_sou_you {
+	position: absolute; right: 12px; top: 13px;
+	display: flex; align-items: center; justify-content: center;
+	width: 18px; height: 18px;
+}
+
+/* ---------- ① 同城互助雷达 ---------- */
+.sj_lei_da {
+	position: relative;
+	display: flex; flex-direction: column;
+	width: 100%; height: 72px;
+	overflow: hidden;
+	border-radius: 16px;
+	background-image: linear-gradient(to right, #222a3d, #171f33, #222a3d);
+	box-shadow: 0 4px 10px rgba(0, 0, 0, 0.18);
+}
+.sj_lei_guang { position: absolute; right: -32px; top: -32px; width: 128px; height: 128px; }
+.sj_lei_nei {
+	position: relative; z-index: 1;
+	display: flex; flex-direction: row; align-items: center; justify-content: space-between;
+	width: 100%; height: 72px;
+	padding-left: 14px; padding-right: 14px;
+}
+.sj_lei_zuo { display: flex; flex-direction: row; align-items: center; flex-shrink: 1; }
+.sj_lei_tu_kuai {
+	position: relative;
+	display: flex; align-items: center; justify-content: center;
+	width: 44px; height: 44px; margin-right: 12px;
+	border-radius: 12px;
+	background-color: rgba(78, 222, 163, 0.1);
+}
+.sj_lei_bo {
+	position: absolute; left: 6px; top: 6px;
+	width: 32px; height: 32px; border-radius: 16px;
+	background-color: rgba(78, 222, 163, 0.25);
+}
+.sj_tu_24 { position: relative; z-index: 1; }
+.sj_lei_dian {
+	position: absolute; right: 4px; bottom: 4px;
+	width: 10px; height: 10px; border-radius: 5px;
+	background-color: #4edea3;
+	border-width: 2px; border-style: solid; border-color: #222a3d;
+}
+.sj_lei_wen { display: flex; flex-direction: column; width: 210px; flex-shrink: 1; }
+.sj_lei_biao_hang { display: flex; flex-direction: row; align-items: center; height: 24px; }
+.sj_lei_biao { color: #dae2fd; font-size: 18px; line-height: 24px; font-weight: 600; }
+.sj_live {
+	display: flex; align-items: center; justify-content: center;
+	height: 18px; margin-left: 8px;
+	padding-left: 6px; padding-right: 6px;
+	border-radius: 9999px;
+	background-color: rgba(0, 165, 114, 0.3);
+}
+.sj_live_zi { color: #4edea3; font-size: 10px; line-height: 14px; font-weight: 700; }
+.sj_lei_fu { color: #c7c4d7; font-size: 12px; line-height: 16px; }
+.sj_lei_an {
+	display: flex; flex-direction: row; align-items: center; justify-content: center;
+	flex-shrink: 0;
+	height: 28px; margin-left: 8px;
+	padding-left: 10px; padding-right: 10px;
+	border-radius: 12px;
+	background-color: #00a572;
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+	transition-property: transform; transition-duration: 150ms;
+}
+.sj_lei_an_ya { transform: scale(0.95); }
+.sj_lei_an_zi { color: #00311f; font-size: 12px; line-height: 16px; font-weight: 600; margin-right: 4px; }
+
+/* ---------- ② 快捷探索矩阵 ---------- */
+.sj_wang_ge {
+	display: flex; flex-direction: row; flex-wrap: wrap;
+	justify-content: space-between;
+	width: 100%;
+}
+.sj_ju_ka {
+	position: relative;
+	display: flex; flex-direction: column;
+	/* 两列按 49% 等分，余下 2%（430 下 ≈8px）由 space-between 作为列间距；
+	 * 不用固定 195px，也不加 flex-grow（wrap 下会把三张挤进一行），
+	 * 任何屏宽都保持两列且左右留白对称 */
+	width: 49%; height: 120px;
+	overflow: hidden;
+	margin-bottom: 8px;
+	padding: 14px;
+	border-radius: 16px;
+	background-color: #222a3d;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+/* App 端不支持 :nth-child，末行用模板 :class 打标去掉下边距 */
+.sj_ju_ka_wei { margin-bottom: 0px; }
+.sj_ju_guang { position: absolute; right: -8px; bottom: -8px; width: 64px; height: 64px; }
+.sj_ju_ding {
+	position: relative; z-index: 1;
+	display: flex; flex-direction: row; align-items: flex-start; justify-content: space-between;
+	width: 100%; height: 40px; margin-bottom: 10px;
+}
+.sj_ju_tu_kuai {
+	display: flex; align-items: center; justify-content: center;
+	width: 40px; height: 40px; border-radius: 12px;
+}
+.sj_ju_tu_cheng { background-color: rgba(202, 129, 0, 0.25); }
+.sj_ju_tu_zi { background-color: rgba(128, 131, 255, 0.25); }
+.sj_ju_tu_lv { background-color: rgba(0, 165, 114, 0.25); }
+.sj_ju_tu_liang { background-color: #31394d; }
+.sj_ju_tu_huang { background-color: rgba(255, 185, 95, 0.2); }
+.sj_ju_hui {
+	display: flex; align-items: center; justify-content: center;
+	height: 18px; padding-left: 8px; padding-right: 8px;
+	border-radius: 9999px;
+}
+.sj_hui_hong { background-color: #93000a; }
+.sj_hui_zi { background-color: rgba(192, 193, 255, 0.2); }
+.sj_hui_lv { background-color: rgba(0, 165, 114, 0.3); }
+.sj_hui_gao { background-color: #2d3449; padding-left: 6px; padding-right: 6px; }
+.sj_ju_hui_zi { font-size: 10px; line-height: 14px; font-weight: 700; }
+.sj_hui_hong_zi { color: #ffdad6; }
+.sj_hui_zi_zi { color: #e1e0ff; }
+.sj_hui_lv_zi { color: #6ffbbe; }
+.sj_hui_gao_zi { color: #c7c4d7; }
+.sj_hui_cheng_zi { color: #ffb95f; }
+.sj_ju_biao { position: relative; z-index: 1; color: #dae2fd; font-size: 18px; line-height: 24px; font-weight: 600; }
+.sj_ju_fu { position: relative; z-index: 1; color: #c7c4d7; font-size: 12px; line-height: 16px; margin-top: 2px; }
+
+/* ---------- ③ 委托广场精选 ---------- */
+.sj_jing_biao_hang {
+	display: flex; flex-direction: row; align-items: center; justify-content: space-between;
+	height: 24px; margin-bottom: 8px;
+	padding-left: 16px; padding-right: 16px;
+}
+.sj_jing_biao_zuo { display: flex; flex-direction: row; align-items: center; }
+.sj_tu_20 { margin-right: 6px; }
+.sj_jing_geng { display: flex; flex-direction: row; align-items: center; }
+.sj_jing_geng_zi { color: #c0c1ff; font-size: 12px; line-height: 16px; font-weight: 600; }
+.sj_jing_gui { width: 100%; height: 196px; }
+.sj_jing_hang {
+	display: flex; flex-direction: row; align-items: stretch;
+	padding-left: 16px; padding-right: 16px; padding-top: 4px; padding-bottom: 8px;
+}
+.sj_jing_ka {
+	display: flex; flex-direction: column; justify-content: space-between;
+	width: 270px; height: 184px;
+	flex-shrink: 0;
+	margin-right: 16px;
+	padding: 16px;
+	border-radius: 16px;
+	background-color: #222a3d;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+.sj_jing_shang { display: flex; flex-direction: column; }
+.sj_jing_ding_hang {
+	display: flex; flex-direction: row; align-items: center; justify-content: space-between;
+	height: 18px; margin-bottom: 8px;
+}
+.sj_jing_biao_qian {
+	display: flex; align-items: center; justify-content: center;
+	height: 18px; padding-left: 8px; padding-right: 8px;
+	border-radius: 9999px;
+}
+.sj_biao_zi { background-color: rgba(192, 193, 255, 0.2); }
+.sj_biao_cheng { background-color: rgba(202, 129, 0, 0.3); }
+.sj_biao_liang { background-color: #31394d; }
+.sj_jing_biao_qian_zi { font-size: 10px; line-height: 14px; font-weight: 600; }
+.sj_biao_zi_zi { color: #e1e0ff; }
+.sj_biao_cheng_zi { color: #ffddb8; }
+.sj_biao_liang_zi { color: #c0c1ff; }
+.sj_jing_you_shang { display: flex; flex-direction: row; align-items: center; }
+.sj_jing_you_zi { font-size: 10px; line-height: 14px; font-weight: 600; margin-left: 2px; }
+.sj_you_cheng { color: #ffb95f; }
+.sj_you_lv { color: #4edea3; }
+.sj_you_hui { color: #908fa0; }
+.sj_jing_biao_ti {
+	color: #dae2fd; font-size: 18px; line-height: 24px; font-weight: 600;
+	height: 24px; overflow: hidden;
+}
+.sj_jing_biao_ti_2 { height: 48px; }
+.sj_jing_miao {
+	color: #c7c4d7; font-size: 12px; line-height: 16px;
+	height: 16px; margin-top: 6px; overflow: hidden;
+}
+.sj_jing_di {
+	display: flex; flex-direction: row; align-items: center; justify-content: space-between;
+	height: 28px; padding-top: 12px; margin-top: 16px;
+}
+.sj_jing_jia_hang { display: flex; flex-direction: row; align-items: flex-end; }
+.sj_jing_jia { color: #4edea3; font-size: 22px; line-height: 28px; font-weight: 800; }
+.sj_jing_pts { color: #4edea3; font-size: 10px; line-height: 14px; font-weight: 700; margin-left: 4px; }
+.sj_jing_an {
+	display: flex; align-items: center; justify-content: center;
+	width: 73px; height: 28px; border-radius: 12px;
+}
+.sj_an_zhu { background-color: #c0c1ff; }
+.sj_an_lv { background-color: #00a572; }
+.sj_an_liang { background-color: #31394d; }
+.sj_jing_an_zi { font-size: 12px; line-height: 16px; font-weight: 600; }
+.sj_an_zhu_zi { color: #1000a9; }
+.sj_an_lv_zi { color: #00311f; }
+.sj_an_liang_zi { color: #dae2fd; }
+
+/* ---------- ④ 圈子热帖 ---------- */
+.sj_re_biao_hang {
+	display: flex; flex-direction: row; align-items: center; justify-content: space-between;
+	height: 32px; margin-bottom: 16px;
+	padding-left: 16px; padding-right: 16px;
+}
+.sj_fen_duan {
+	display: flex; flex-direction: row; align-items: center;
+	height: 32px; padding: 4px;
+	border-radius: 9999px;
+	background-color: #222a3d;
+}
+.sj_fen_an {
+	display: flex; align-items: center; justify-content: center;
+	width: 53px; height: 24px; border-radius: 9999px;
+}
+.sj_fen_an_ji { background-color: #c0c1ff; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08); }
+.sj_fen_zi { color: #c7c4d7; font-size: 12px; line-height: 16px; font-weight: 600; }
+.sj_fen_zi_ji { color: #1000a9; }
+.sj_tie_lie { padding-left: 16px; padding-right: 16px; }
+.sj_tie {
+	display: flex; flex-direction: column;
+	width: 100%;
+	padding: 16px; margin-bottom: 16px;
+	border-radius: 16px;
+	background-color: #222a3d;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+.sj_tie_wei { margin-bottom: 0px; }
+.sj_tie_tou_hang { display: flex; flex-direction: row; align-items: center; height: 44px; margin-bottom: 14px; }
+.sj_tou_xiang_kuang { position: relative; width: 44px; height: 44px; margin-right: 12px; }
+.sj_tou_xiang { width: 44px; height: 44px; border-radius: 22px; }
+.sj_zai_xian {
+	position: absolute; right: 0px; bottom: 0px;
+	width: 12px; height: 12px; border-radius: 6px;
+	background-color: #4edea3;
+	border-width: 2px; border-style: solid; border-color: #222a3d;
+}
+.sj_tou_wen { display: flex; flex-direction: column; width: 254px; flex-shrink: 1; }
+.sj_tou_ming_hang { display: flex; flex-direction: row; align-items: center; height: 24px; }
+.sj_tou_ming { color: #dae2fd; font-size: 18px; line-height: 24px; font-weight: 600; }
+.sj_tu_16 { margin-left: 6px; }
+.sj_dev {
+	display: flex; align-items: center; justify-content: center;
+	height: 14px; margin-left: 6px;
+	padding-left: 6px; padding-right: 6px; border-radius: 4px;
+	background-color: rgba(128, 131, 255, 0.3);
+}
+.sj_dev_zi { color: #e1e0ff; font-size: 10px; line-height: 14px; font-weight: 700; }
+.sj_tou_fu_hang { display: flex; flex-direction: row; align-items: center; height: 16px; }
+.sj_tou_fu { color: #c7c4d7; font-size: 12px; line-height: 16px; margin-right: 8px; }
+.sj_tou_xin { color: #4edea3; font-size: 10px; line-height: 14px; font-weight: 700; }
+.sj_tou_shi { color: #908fa0; font-size: 10px; line-height: 14px; font-weight: 700; margin-left: auto; }
+.sj_zheng_wen {
+	width: 100%; height: 68px;
+	color: #dae2fd; font-size: 14px; line-height: 22px;
+	margin-bottom: 14px; overflow: hidden;
+}
+.sj_zheng_zi { color: #dae2fd; font-size: 14px; line-height: 22px; }
+.sj_zheng_pts { color: #4edea3; font-size: 12px; line-height: 16px; font-weight: 700; }
+.sj_zheng_zi_lan { color: #c0c1ff; font-size: 14px; line-height: 22px; font-weight: 600; }
+.sj_tu_wang {
+	display: flex; flex-direction: row; justify-content: space-between;
+	width: 100%; height: 179px;
+	margin-bottom: 14px;
+}
+.sj_tu_ge {
+	/* 同理按 49% 等分，430 下 ≈179px，间距 ≈8px，随屏宽自适应 */
+	width: 49%; height: 179px;
+	border-radius: 8px;
+	background-color: #171f33;
+}
+.sj_guan_lian {
+	display: flex; flex-direction: row; align-items: center; justify-content: space-between;
+	width: 100%; height: 38px; margin-bottom: 14px;
+	padding: 10px;
+	border-radius: 12px;
+	background-color: #171f33;
+}
+.sj_guan_zuo { display: flex; flex-direction: row; align-items: center; width: 250px; flex-shrink: 1; }
+.sj_guan_zi { color: #dae2fd; font-size: 12px; line-height: 16px; font-weight: 600; margin-left: 8px; overflow: hidden; }
+.sj_guan_hui {
+	display: flex; align-items: center; justify-content: center;
+	height: 18px; padding-left: 8px; padding-right: 8px;
+	border-radius: 9999px;
+	background-color: rgba(0, 165, 114, 0.3);
+}
+.sj_guan_hui_zi { color: #4edea3; font-size: 10px; line-height: 14px; font-weight: 700; }
+.sj_cao_zuo {
+	display: flex; flex-direction: row; align-items: center; justify-content: space-between;
+	width: 100%; height: 32px; padding-top: 8px;
+}
+.sj_cao_an { display: flex; flex-direction: row; align-items: center; height: 24px; }
+.sj_cao_zi { color: #c7c4d7; font-size: 12px; line-height: 16px; font-weight: 600; margin-left: 4px; }
+.sj_cao_zi_cuo { color: #ffb4ab; }
+.sj_shang_an {
+	display: flex; flex-direction: row; align-items: center; justify-content: center;
+	width: 102px; height: 24px;
+	padding-left: 10px; padding-right: 10px;
+	border-radius: 9999px;
+	background-color: rgba(202, 129, 0, 0.2);
+}
+.sj_shang_an_yi { background-color: #00a572; }
+.sj_shang_zi { color: #ffb95f; font-size: 10px; line-height: 14px; font-weight: 700; margin-left: 4px; }
+.sj_shang_zi_yi { color: #00311f; }
+.sj_biao_qian_hang {
+	display: flex; flex-direction: row; align-items: center;
+	width: 100%; height: 28px; margin-bottom: 14px;
+}
+.sj_di_dian {
+	display: flex; flex-direction: row; align-items: center;
+	height: 24px; margin-right: 8px;
+	padding-left: 10px; padding-right: 10px;
+	border-radius: 9999px;
+	background-color: #171f33;
+}
+.sj_di_dian_zi { color: #dae2fd; font-size: 10px; line-height: 14px; font-weight: 600; margin-left: 4px; }
+.sj_hua_ti {
+	display: flex; align-items: center; justify-content: center;
+	height: 24px; margin-right: 8px;
+	padding-left: 8px; padding-right: 8px;
+	border-radius: 9999px;
+	background-color: #2d3449;
+}
+.sj_hua_ti_zi { color: #c0c1ff; font-size: 10px; line-height: 14px; font-weight: 600; }
+.sj_cao_zuo2 {
+	display: flex; flex-direction: row; align-items: center; justify-content: space-between;
+	width: 100%; height: 38px; padding-top: 8px;
+}
+.sj_bao_an {
+	display: flex; flex-direction: row; align-items: center; justify-content: center;
+	width: 123px; height: 30px;
+	padding-left: 12px; padding-right: 12px;
+	border-radius: 12px;
+	background-color: #00a572;
+}
+.sj_bao_an_yi { background-color: #31394d; }
+.sj_bao_zi { color: #00311f; font-size: 12px; line-height: 16px; font-weight: 600; margin-left: 4px; }
+.sj_bao_zi_yi { color: #4edea3; }
+.sj_you_cao { display: flex; flex-direction: row; align-items: center; }
+.sj_cao_an_jian { margin-left: 16px; }
+
+/* ---------- 右下悬浮发布按钮 ---------- */
+.sj_fab {
+	position: fixed;
+	right: 16px;
+	z-index: 40;
+	display: flex; flex-direction: row; align-items: center; justify-content: center;
+	width: 131px; height: 48px;
+	padding-left: 16px; padding-right: 16px;
+	border-radius: 9999px;
+	background-image: linear-gradient(to right, #8083ff, #494bd6);
+	box-shadow: 0 8px 24px -2px rgba(128, 131, 255, 0.4);
+}
+.sj_fab_zi { color: #1000a9; font-size: 12px; line-height: 16px; font-weight: 600; margin-left: 6px; }
+
+/* ---------- 轻提示 ---------- */
+.sj_toast_lan {
+	position: fixed; left: 0px; right: 0px; top: 80px; z-index: 200;
+	display: flex; flex-direction: row; align-items: center; justify-content: center;
+}
+.sj_toast {
+	display: flex; flex-direction: row; align-items: center;
+	height: 36px; padding-left: 16px; padding-right: 16px;
+	border-radius: 12px;
+	background-color: #2d3449;
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+.sj_toast_zi { color: #dae2fd; font-size: 14px; line-height: 20px; margin-left: 8px; }
+</style>

@@ -394,7 +394,7 @@ onReady(() => {
 
 			<text class="lie_biao_ti_shi">{{ 列表说明 }}</text>
 			<!-- 高度固定 4 行（见 .di_zhi_lie_biao），请求中只切换内容，卡片不会塌陷 -->
-			<scroll-view class="di_zhi_lie_biao" :scroll-y="true">
+			<scroll-view class="di_zhi_lie_biao" direction="vertical">
 				<view v-if="列表是否加载中" class="lie_biao_zhan_wei">
 					<text class="zhan_wei_wen_ben">加载中…</text>
 				</view>
@@ -565,13 +565,13 @@ onReady(() => {
 	margin-top: 12px;
 }
 
-.an_niu_hang .ci_yao_an_niu,
-.an_niu_hang .zhu_yao_an_niu {
+.ci_yao_an_niu,
+.zhu_yao_an_niu {
 	flex: 1;
 	margin: 0;
 }
 
-.an_niu_hang .ci_yao_an_niu {
+.ci_yao_an_niu {
 	margin-right: 10px;
 }
 </style>

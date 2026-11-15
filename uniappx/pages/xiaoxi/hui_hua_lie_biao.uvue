@@ -1,0 +1,1070 @@
+<script setup lang="ts">
+	import { onShow } from '@dcloudio/uni-app'
+	import { computed, onMounted, ref } from 'vue'
+	import { 读取当前用户, 发送请求 } from '../../common/wangluo'
+
+	// 本页由首页 pages/shou_ye/shou_ye 用 v-if 当组件挂载，自身不再渲染底栏。
+	// 委托广场 / 发布委托已改为独立页面，快捷入口直接页面级跳转，不再抛 change-tab。
+
+	import type { 用户, 消息会话 } from '../../common/leixing'
+	import { 格式化会话时间 } from './时间'
+	import {
+		会话列表 as 真实会话列表,
+		会话列表正在加载 as 正在加载,
+		会话列表加载错误 as 加载错误,
+		移除会话,
+		转换好友验证为好友会话,
+		清零会话新消息条数,
+	} from './会话列表'
+
+	// 设计稿「会话列表.html」的深色 UI 保留不变，会话数据由 xiaoxi.uvue（旧版消息列表）迁入：
+	// 不再使用写死的示例数据，改为消费 ./会话列表 里的响应式真实会话；排序、时间格式化、
+	// 打开聊天跳转、登录判断、加载/错误态、好友验证的同意拒绝全部沿用旧版逻辑，
+	// 只在最外层做一层「消息会话 -> 会话项」字段适配，模板与样式因此可原样保留。
+
+	type 会话项 = {
+		键 : string
+		头像类型 : '好友' | '群聊' | '系统'
+		头像 : string
+		头像文字 : string
+		在线 : boolean
+		名称 : string
+		徽章类型 : 'zhi_ye' | 'ren_shu' | 'guan_fang' | ''
+		徽章 : string
+		时间 : string
+		前缀类型 : 'zhu' | 'ming' | 'san' | ''
+		前缀 : string
+		摘要 : string
+		积分 : string
+		未读 : string
+		小绿点 : boolean
+		深色 : boolean
+		需验证 : boolean
+	}
+
+	// 本页既是独立页面，也会被首页当组件挂载；组件的 onLoad 不会触发，
+	// 所以窗口信息在 setup 期间同步取一次，两种挂载方式都能拿到正确的顶栏/底栏偏移。
+	const 系统信息 : any = uni.getSystemInfoSync()
+	const 状态栏高 = ref(系统信息.statusBarHeight ?? 0)
+	// di_lan 会抬到 windowBottom 之上，页面底部占位要同步加这段高度
+	const 窗口底高 = ref(系统信息.windowBottom ?? 0)
+	const 按下键 = ref('')
+	const 搜索词 = ref('')
+	const 当前用户 = ref<用户 | null>(null)
+	const 正在处理键 = ref('')
+
+	// 沿用旧版 xiaoxi.uvue「普通会话列表」的排序：按最近消息时间倒序，
+	// 时间解析不出来的项统一沉底，避免 NaN 让排序结果不稳定。
+	function 按时间倒序(左侧 : 消息会话, 右侧 : 消息会话) : number {
+		const 左侧时间 = new Date(左侧.最近消息时间).getTime()
+		const 右侧时间 = new Date(右侧.最近消息时间).getTime()
+		if (Number.isNaN(左侧时间)) return Number.isNaN(右侧时间) ? 0 : 1
+		if (Number.isNaN(右侧时间)) return -1
+		return 右侧时间 - 左侧时间
+	}
+
+	// 后端 消息会话 没有设计稿里的头像/徽章/前缀等字段，在这里补齐，
+	// 模板就能继续用原来的 会话.xxx 而不必感知后端结构。
+	function 转换会话项(会话 : 消息会话) : 会话项 {
+		const 类型 = 会话.会话类型
+		const 需验证 = 类型 == '好友验证' || 类型 == '群邀请'
+
+		let 头像类型 : '好友' | '群聊' | '系统' = '好友'
+		if (类型 == '群聊' || 类型 == '委托') 头像类型 = '群聊'
+		else if (需验证) 头像类型 = '系统'
+
+		let 头像文字 = 会话.会话名称.slice(0, 1)
+		if (类型 == '好友验证') 头像文字 = '验'
+		else if (类型 == '群邀请') 头像文字 = '群'
+
+		let 徽章类型 : 'zhi_ye' | 'ren_shu' | 'guan_fang' | '' = ''
+		let 徽章 = ''
+		if (类型 == '好友验证') { 徽章类型 = 'guan_fang'; 徽章 = '好友请求' }
+		else if (类型 == '群邀请') { 徽章类型 = 'guan_fang'; 徽章 = '群聊邀请' }
+		else if (类型 == '委托' && 会话.会话状态 != null) { 徽章类型 = 'zhi_ye'; 徽章 = 会话.会话状态 ?? '' }
+		else if (类型 == '群聊' && 会话.成员数 != null) { 徽章类型 = 'ren_shu'; 徽章 = '(' + String(会话.成员数 ?? 0) + ')' }
+
+		let 前缀类型 : 'zhu' | 'ming' | 'san' | '' = ''
+		let 前缀 = ''
+		if (类型 == '委托') { 前缀类型 = 'zhu'; 前缀 = '[委托]' }
+		else if (需验证) { 前缀类型 = 'san'; 前缀 = 类型 == '好友验证' ? '[好友请求]' : '[群聊邀请]' }
+
+		let 摘要 = 会话.最近消息 ?? ''
+		if (摘要 == '') {
+			if (类型 == '好友验证') 摘要 = 会话.申请附言 ?? '请求添加你为好友'
+			else if (类型 == '群邀请') 摘要 = '邀请你加入群聊'
+			else if (类型 == '好友') 摘要 = '开始聊天吧'
+			else 摘要 = '暂无消息'
+		}
+
+		const 条数 = 会话.新消息条数 ?? 0
+		const 未读 = 需验证 || 条数 <= 0 ? '' : (条数 > 99 ? '99+' : String(条数))
+
+		return {
+			键: `${类型}:${会话.会话编号}`,
+			头像类型: 头像类型,
+			头像: '',
+			头像文字: 头像文字,
+			在线: false,
+			名称: 会话.会话名称,
+			徽章类型: 徽章类型,
+			徽章: 徽章,
+			时间: 格式化会话时间(会话.最近消息时间),
+			前缀类型: 前缀类型,
+			前缀: 前缀,
+			摘要: 摘要,
+			积分: '',
+			未读: 未读,
+			小绿点: false,
+			深色: 需验证,
+			需验证: 需验证,
+		}
+	}
+
+	// 未登录时不展示任何会话（与旧版一致）；搜索框有输入时按名称/摘要/类型过滤。
+	const 会话列表 = computed<会话项[]>(() => {
+		if (当前用户.value == null) {
+			const 空列表 : 会话项[] = []
+			return 空列表
+		}
+		const 关键词 = 搜索词.value.trim().toLowerCase()
+		return 真实会话列表.value.slice()
+			.sort(按时间倒序)
+			.filter((会话) => {
+				if (关键词 == '') return true
+				return 会话.会话名称.toLowerCase().indexOf(关键词) >= 0 ||
+					(会话.最近消息 ?? '').toLowerCase().indexOf(关键词) >= 0 ||
+					String(会话.会话类型).indexOf(关键词) >= 0
+			})
+			.map((会话) => 转换会话项(会话))
+	})
+
+	// 底栏角标由首页从 会话列表 统一汇总，本页不再渲染 di_lan。
+
+	// 旧版 onShow 只读取当前用户；顺手触发一次刷新（模块内已有并发去重与未登录短路）。
+	// 首页 v-if 切换标签时组件会重新挂载但不触发页面 onShow，所以补一个 onMounted。
+	let 上次初始化 = 0
+	function 初始化页面() {
+		const 现在 = Date.now()
+		if (现在 - 上次初始化 < 400) return
+		上次初始化 = 现在
+		当前用户.value = 读取当前用户()
+	}
+	onShow(初始化页面)
+	onMounted(初始化页面)
+
+	// 迁移自旧版 xiaoxi.uvue 的「打开会话」：按会话类型拼 liaotian 页面参数。
+	function 打开会话(会话 : 消息会话) {
+		const 类型 = 会话.会话类型
+		const 会话编号 = 会话.会话编号
+		const 关联编号 = 会话.关联编号
+		const 会话名称 = 会话.会话名称
+
+		if (类型 == '好友验证' || 类型 == '群邀请') return
+
+		if (类型 == '好友') {
+			uni.navigateTo({
+				url: `/pages/liaotian/dui_hua?hui_hua=${encodeURIComponent(会话编号)}&ming_cheng=${encodeURIComponent(会话名称)}&lei_xing=好友&bian_hao=${encodeURIComponent(关联编号)}`,
+			})
+			return
+		}
+
+		if (类型 == '群聊') {
+			uni.navigateTo({
+				url: `/pages/liaotian/dui_hua?hui_hua=${encodeURIComponent(会话编号)}&ming_cheng=${encodeURIComponent(会话名称)}&lei_xing=群聊&bian_hao=${encodeURIComponent(会话编号)}`,
+			})
+			return
+		}
+
+		if (类型 == '委托') {
+			const 任务编号 = 会话.任务编号
+			if (!任务编号) {
+				uni.showToast({ title: '委托编号缺失，无法打开群聊', icon: 'none' })
+				return
+			}
+			uni.navigateTo({
+				url: `/pages/liaotian/dui_hua?hui_hua=${encodeURIComponent(会话编号)}&ming_cheng=${encodeURIComponent(会话名称)}&lei_xing=委托&bian_hao=${encodeURIComponent(任务编号)}`,
+			})
+		}
+	}
+
+	// v-for 里的点击不能写 @click="点击会话(会话.键)"：
+	// web 端会把带循环变量的处理器缓存成所有行共用的闭包，点哪行都是第一行。
+	// 统一用 data-key + dataset 取值；键沿用旧版的「会话类型:会话编号」。
+	function 点击会话(事件 : { currentTarget : { dataset : Record<string, unknown> } }) {
+		const 键 = 事件.currentTarget.dataset['key']
+		if (typeof 键 != 'string') return
+		按下键.value = 键
+		setTimeout(() => { 按下键.value = '' }, 180)
+
+		const 会话 = 真实会话列表.value.find((项目) =>
+			`${项目.会话类型}:${项目.会话编号}` == 键,
+		)
+		if (会话 == null) return
+		打开会话(会话)
+		// 未读清零由 liaotian.uvue 打开后自行调用，这里不重复处理。
+	}
+
+	// 迁移自旧版 tongyijuejue.uvue 的同意/拒绝逻辑。
+	// 不直接复用那个组件：它的浅色按钮不配深色卡片，且要把整个 消息会话 当 prop 传，
+	// uni-app x 对复杂类型 prop 更敏感；这里用 data-key + data-op 走同一套 dataset 约定。
+	async function 处理验证请求(事件 : { currentTarget : { dataset : Record<string, unknown> } }) : Promise<void> {
+		const 键 = 事件.currentTarget.dataset['key']
+		const 操作原始 = 事件.currentTarget.dataset['op']
+		if (typeof 键 != 'string' || typeof 操作原始 != 'string') return
+		if (操作原始 != 'accept' && 操作原始 != 'reject') return
+		const 操作 : string = 操作原始
+		if (正在处理键.value != '') return
+
+		const 会话 = 真实会话列表.value.find((项目) =>
+			`${项目.会话类型}:${项目.会话编号}` == 键,
+		)
+		if (会话 == null) return
+		const 类型 = 会话.会话类型
+		if (类型 != '好友验证' && 类型 != '群邀请') return
+
+		正在处理键.value = 键
+		try {
+			if (类型 == '好友验证') {
+				await 发送请求(`/my/friend-requests/${encodeURIComponent(会话.会话编号)}/${操作}`, {
+					method: 'POST',
+				})
+			} else {
+				await 发送请求(`/group-invitations/${encodeURIComponent(会话.会话编号)}/${操作}`, {
+					method: 'POST',
+				})
+			}
+			if (类型 == '好友验证' && 操作 == 'accept') 转换好友验证为好友会话(会话.会话编号)
+			if (类型 == '好友验证' && 操作 == 'reject') 移除会话(会话.会话编号, '好友验证')
+
+
+			if (操作 == 'accept' && 类型 == '群邀请') {
+				uni.navigateTo({
+					url: `/pages/liaotian/liaotian?hui_hua=${encodeURIComponent(会话.关联编号)}&ming_cheng=${encodeURIComponent(会话.会话名称)}&lei_xing=群聊&bian_hao=${encodeURIComponent(会话.关联编号)}`,
+				})
+			}
+		} catch (原因) {
+			uni.showToast({
+				title: 原因 instanceof Error ? 原因.message : '处理请求失败',
+				icon: 'none',
+			})
+		} finally {
+			正在处理键.value = ''
+		}
+	}
+
+	// 「全部已读」按钮原本只是弹 toast，接上真实数据后真正清零未读。
+	function 全部标记已读() {
+		真实会话列表.value.forEach((会话) => 清零会话新消息条数(会话.会话编号))
+		uni.showToast({ title: '已全部标记为已读', icon: 'none' })
+	}
+
+	function 打开页面(路径 : string) {
+		// 设计稿里的两个旧路径映射到已注册的独立页面：委托广场 / 发布委托
+		if (路径 == '/pages/zhuye/zhuye') {
+			uni.navigateTo({ url: '/pages/weituo/wei_tuo_guang_chang' })
+			return
+		}
+		if (路径 == '/pages/fabuweituo/fabuweituo') {
+			uni.navigateTo({ url: '/pages/fabuweituo/fa_bu_w_t' })
+			return
+		}
+		uni.navigateTo({ url: 路径 })
+	}
+
+	function 切换标签页(路径 : string) {
+		uni.switchTab({ url: 路径 })
+	}
+</script>
+
+<template>
+	<view class="hh_ye">
+		<!-- 顶栏由首页 pages/shou_ye/shou_ye 统一渲染，本页不再引入 ding_lan -->
+		<!-- 页面级滚动：内容由页面自身撑开，顶栏/底栏仍为 fixed -->
+		<view class="hh_nei_rong">
+			<!-- 顶栏占位：为首页那份 fixed 顶栏留出 64px 内容高度 + 状态栏高度 -->
+			<view :style="{ height: (64 + 状态栏高) + 'px' }"></view>
+
+			<!-- 快捷操作条 -->
+			<view class="hh_qu hh_kuai_jie">
+				<scroll-view class="hh_kuai_jie_tiao" direction="horizontal" :show-scrollbar="false">
+					<view class="hh_kuai_jie_hang">
+						<view class="hh_kuai_jie_an" @click="打开页面('/pages/tianjiahaoyou/tianjiahaoyou')">
+							<image class="hh_kuai_jie_tu" src="/static/hui_hua/icons/i_person_add.svg" mode="aspectFit"></image>
+							<text class="hh_kuai_jie_zi">添加好友</text>
+						</view>
+						<view class="hh_kuai_jie_an" @click="打开页面('/pages/chuanjianqun/chuanjianqun')">
+							<image class="hh_kuai_jie_tu" src="/static/hui_hua/icons/i_groups.svg" mode="aspectFit"></image>
+							<text class="hh_kuai_jie_zi">创建群聊</text>
+						</view>
+						<view class="hh_kuai_jie_an hh_kuai_jie_an_te" @click="打开页面('/pages/fabuweituo/fabuweituo')">
+							<image class="hh_kuai_jie_tu" src="/static/hui_hua/icons/i_bolt.svg" mode="aspectFit"></image>
+							<text class="hh_kuai_jie_zi hh_kuai_jie_zi_te">快速发布委托</text>
+						</view>
+					</view>
+				</scroll-view>
+			</view>
+
+			<!-- 搜索栏 -->
+			<view class="hh_qu hh_sou_suo_qu">
+				<view class="hh_sou_suo_lan">
+					<image class="hh_sou_suo_tu" src="/static/hui_hua/icons/i_search_outline.svg" mode="aspectFit"></image>
+					<input v-model="搜索词" class="hh_sou_suo_kuang" placeholder="搜索联系人、群聊或委托记录..." placeholder-class="hh_zhan_wei" />
+					<image class="hh_mic_an" src="/static/hui_hua/icons/i_mic.svg" mode="aspectFit"></image>
+				</view>
+			</view>
+
+			<!-- 进行中委托 HUD -->
+			<view class="hh_qu hh_hud_qu">
+				<view class="hh_hud_ka">
+					<view class="hh_hud_guang"></view>
+					<view class="hh_hud_shang">
+						<view class="hh_hud_zuo">
+							<view class="hh_hud_tu_kuang">
+								<image class="hh_hud_tu" src="/static/hui_hua/icons/i_snooze.svg" mode="aspectFit"></image>
+								<view class="hh_hud_dian_guang"></view>
+								<view class="hh_hud_dian"></view>
+							</view>
+							<view class="hh_hud_wen">
+								<view class="hh_hud_biao_qian_hang">
+									<text class="hh_hud_biao_qian">进行中委托</text>
+									<text class="hh_hud_sheng_yu">剩余 2 小时</text>
+								</view>
+								<text class="hh_hud_ming">帮学弟调试 Python 爬虫代码</text>
+							</view>
+						</view>
+						<view class="hh_hud_an_niu" @click="打开页面('/pages/woderenwu/woderenwu')">
+							<text class="hh_hud_an_niu_zi">查看</text>
+							<image class="hh_hud_jian_tou" src="/static/hui_hua/icons/i_chevron_right.svg" mode="aspectFit"></image>
+						</view>
+					</view>
+					<view class="hh_jin_du_di">
+						<view class="hh_jin_du_tiao"></view>
+					</view>
+				</view>
+			</view>
+
+			<!-- 会话列表 -->
+			<view class="hh_qu hh_lie_biao_qu">
+				<view class="hh_lie_biao_tou">
+					<text class="hh_lie_biao_biao_ti">会话列表 ({{ 会话列表.length }})</text>
+					<view class="hh_yi_du" @click="全部标记已读">
+						<image class="hh_yi_du_tu" src="/static/hui_hua/icons/i_done_all.svg" mode="aspectFit"></image>
+						<text class="hh_yi_du_zi">全部已读</text>
+					</view>
+				</view>
+
+				<!-- 沿用旧版的加载错误提示：错误不淹没已有列表 -->
+				<view v-if="加载错误" class="hh_cuo_wu_tiao">
+					<text class="hh_cuo_wu_zi">{{ 加载错误 }}</text>
+				</view>
+
+				<!-- 沿用旧版的登录判断 / 加载中 / 空状态 -->
+				<view v-if="当前用户 == null" class="hh_kong_zhuang_tai">
+					<text class="hh_kong_zi">登录后查看消息</text>
+					<view class="hh_deng_lu_an" @click="切换标签页('/pages/wode/wode')">
+						<text class="hh_deng_lu_zi">前往登录</text>
+					</view>
+				</view>
+				<view v-else-if="会话列表.length == 0" class="hh_kong_zhuang_tai">
+					<text class="hh_kong_zi">{{ 正在加载 ? '正在同步会话…' : (搜索词 != '' ? '没有匹配的会话' : '还没有会话') }}</text>
+				</view>
+
+				<view
+					v-for="会话 in 会话列表"
+					:key="会话.键"
+					:data-key="会话.键"
+					class="hh_ka"
+					:class="[会话.深色 ? 'hh_ka_di' : '', 按下键 == 会话.键 ? 'hh_ka_an_xia' : '']"
+					@click="点击会话"
+				>
+					<!-- 真实会话没有头像 URL：有图用图，没图降级成「名称首字」文字头像 -->
+					<view v-if="会话.头像类型 == '好友'" class="hh_tou_48">
+						<image v-if="会话.头像 != ''" class="hh_tou_48_tu" :src="会话.头像" mode="aspectFill"></image>
+						<view v-else class="hh_tou_48_wen">
+							<text class="hh_tou_wen">{{ 会话.头像文字 }}</text>
+						</view>
+						<view v-if="会话.在线" class="hh_zai_xian_da"></view>
+					</view>
+					<view v-else-if="会话.头像类型 == '群聊'" class="hh_tou_48_qun">
+						<image v-if="会话.头像 != ''" class="hh_tou_48_tu" :src="会话.头像" mode="aspectFill"></image>
+						<view v-else class="hh_tou_48_wen_qun">
+							<text class="hh_tou_wen">{{ 会话.头像文字 }}</text>
+						</view>
+					</view>
+					<view v-else class="hh_tou_48_xi_tong">
+						<text class="hh_tou_wen_bai">{{ 会话.头像文字 }}</text>
+					</view>
+
+					<view class="hh_ka_wen">
+						<view class="hh_ka_shou_hang">
+							<view class="hh_ka_zuo">
+								<text class="hh_ming">{{ 会话.名称 }}</text>
+								<text v-if="会话.徽章类型 == 'zhi_ye'" class="hh_biao_qian_zhi_ye">{{ 会话.徽章 }}</text>
+								<text v-else-if="会话.徽章类型 == 'ren_shu'" class="hh_biao_qian_ren_shu">{{ 会话.徽章 }}</text>
+								<text v-else-if="会话.徽章类型 == 'guan_fang'" class="hh_biao_qian_guan_fang">{{ 会话.徽章 }}</text>
+							</view>
+							<text class="hh_shi_jian">{{ 会话.时间 }}</text>
+						</view>
+						<view class="hh_ka_ci_hang">
+							<view class="hh_zhai_yao_hang">
+								<text v-if="会话.前缀类型 == 'zhu'" class="hh_qian_zhui_zhu">{{ 会话.前缀 }}</text>
+								<text v-else-if="会话.前缀类型 == 'ming'" class="hh_qian_zhui_ming">{{ 会话.前缀 }}</text>
+								<text v-else-if="会话.前缀类型 == 'san'" class="hh_qian_zhui_san">{{ 会话.前缀 }}</text>
+								<text class="hh_zhai_yao">{{ 会话.摘要 }}</text>
+							</view>
+							<view v-if="会话.积分 != '' || 会话.未读 != '' || 会话.小绿点" class="hh_ka_you">
+								<text v-if="会话.积分 != ''" class="hh_ji_fen">{{ 会话.积分 }}</text>
+								<text v-if="会话.未读 != ''" class="hh_wei_du">{{ 会话.未读 }}</text>
+								<view v-if="会话.小绿点" class="hh_lv_dian"></view>
+							</view>
+						</view>
+					</view>
+
+					<!-- 好友验证 / 群邀请：迁移旧版同意拒绝逻辑，改用深色主题按钮 -->
+					<view v-if="会话.需验证" class="hh_yan_zheng_cao_zuo">
+						<view
+							class="hh_yan_zheng_an hh_tong_yi"
+							:class="正在处理键 == 会话.键 ? 'hh_yan_zheng_jin' : ''"
+							:data-key="会话.键"
+							:data-op="'accept'"
+							@click.stop="处理验证请求"
+						>
+							<text class="hh_yan_zheng_zi">同意</text>
+						</view>
+						<view
+							class="hh_yan_zheng_an hh_ju_jue"
+							:class="正在处理键 == 会话.键 ? 'hh_yan_zheng_jin' : ''"
+							:data-key="会话.键"
+							:data-op="'reject'"
+							@click.stop="处理验证请求"
+						>
+							<text class="hh_yan_zheng_zi hh_yan_zheng_zi_hui">拒绝</text>
+						</view>
+					</view>
+				</view>
+			</view>
+
+			<!-- 底部手势提示 -->
+			<view class="hh_jiao_zhu">
+				<image class="hh_jiao_zhu_tu" src="/static/hui_hua/icons/i_swipe_left.svg" mode="aspectFit"></image>
+				<text class="hh_jiao_zhu_zi">左滑置顶或标记已读</text>
+			</view>
+
+			<!-- 底部导航占位：58 底栏 + 16 余量 + windowBottom -->
+			<view class="hh_di_zhan_wei" :style="{ height: (74 + 窗口底高) + 'px' }"></view>
+		</view>
+
+		<!-- 底栏由首页统一渲染，本页不自带 di_lan；下方占位为 58px 底栏留白 -->
+	</view>
+</template>
+
+<style>
+	/* 设计稿字体：Plus Jakarta Sans（正文/标题）、Space Grotesk（标签）。
+	   按字重分别落地为本地 ttf，web 与 App 都能用，不依赖 Google Fonts 外链。 */
+@font-face { font-family: 'PJS400'; src: url('/static/hui_hua/fonts/PlusJakartaSans-400.ttf'); }
+@font-face { font-family: 'PJS600'; src: url('/static/hui_hua/fonts/PlusJakartaSans-600.ttf'); }
+@font-face { font-family: 'PJS700'; src: url('/static/hui_hua/fonts/PlusJakartaSans-700.ttf'); }
+@font-face { font-family: 'PJS800'; src: url('/static/hui_hua/fonts/PlusJakartaSans-800.ttf'); }
+@font-face { font-family: 'SG600'; src: url('/static/hui_hua/fonts/SpaceGrotesk-600.ttf'); }
+@font-face { font-family: 'SG700'; src: url('/static/hui_hua/fonts/SpaceGrotesk-700.ttf'); }
+
+	/* 文本样式必须写在 text 自身（uni-app x 不继承父 view 的字体），按设计稿逐类指定 */
+	.hh_hud_ming, .hh_ming, .hh_zhai_yao,
+	.hh_qian_zhui_zhu, .hh_qian_zhui_ming, .hh_qian_zhui_san,
+	.hh_sou_suo_kuang, .hh_zhan_wei {
+		font-family: 'PJS400';
+	}
+	.hh_kuai_jie_zi, .hh_kuai_jie_zi_te,
+	.hh_hud_biao_qian, .hh_hud_sheng_yu, .hh_hud_an_niu_zi,
+	.hh_lie_biao_biao_ti, .hh_yi_du_zi, .hh_biao_qian_zhi_ye,
+	.hh_biao_qian_ren_shu, .hh_biao_qian_guan_fang, .hh_shi_jian,
+	.hh_ji_fen, .hh_wei_du, .hh_jiao_zhu_zi {
+		font-family: 'SG600';
+	}
+
+	.hh_ye {
+		display: flex;
+		flex-direction: column;
+		width: 100%;
+		/* 页面级滚动：不锁死高度，让内容撑开页面；min-height 保证内容不足一屏时背景铺满 */
+		min-height: 800px; /* uni-app x 不支持百分比，固定值近似一屏，保证背景铺满 */
+		background-color: #0b1326;
+	}
+
+	/* 顶栏右侧插槽样式已随顶栏一并移到 pages/shou_ye/shou_ye.uvue */
+
+	/* ---------- 页面级滚动内容 ---------- */
+	.hh_nei_rong {
+		display: flex;
+		flex-direction: column;
+		width: 100%;
+	}
+	.hh_qu {
+		padding-left: 16px;
+		padding-right: 16px;
+	}
+	.hh_di_zhan_wei {
+		/* 与 di_lan 的 58px 固定底栏配套（58 + 16 余量） */
+		height: 74px;
+	}
+
+	/* ---------- 快捷操作 ---------- */
+	.hh_kuai_jie {
+		padding-top: 4px;
+		padding-bottom: 8px;
+	}
+	.hh_kuai_jie_tiao {
+		flex-direction: row;
+		white-space: nowrap;
+	}
+	.hh_kuai_jie_hang {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		padding-top: 4px;
+		padding-bottom: 4px;
+	}
+	.hh_kuai_jie_an {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		padding: 4px 16px;
+		margin-right: 8px;
+		border-radius: 9999px;
+		background-color: #222a3d;
+		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+	}
+	.hh_kuai_jie_an_te {
+		background-color: #2d3449;
+		box-shadow: 0 4px 16px rgba(128, 131, 255, 0.18);
+	}
+	.hh_kuai_jie_tu {
+		width: 18px;
+		height: 18px;
+	}
+	.hh_kuai_jie_zi {
+		margin-left: 4px;
+		color: #dae2fd;
+		font-size: 12px;
+		font-weight: 600;
+	}
+	.hh_kuai_jie_zi_te {
+		color: #ffddb8;
+		font-weight: 700;
+	}
+
+	/* ---------- 搜索栏 ---------- */
+	.hh_sou_suo_qu {
+		padding-bottom: 8px;
+	}
+	.hh_sou_suo_lan {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		padding: 8px 16px;
+		border-radius: 12px;
+		background-color: #131b2e;
+	}
+	.hh_sou_suo_tu {
+		width: 20px;
+		height: 20px;
+		margin-right: 8px;
+	}
+	.hh_sou_suo_kuang {
+		flex: 1;
+		min-width: 0;
+		height: 20px;
+		padding: 0;
+		border: 0;
+		background-color: transparent;
+		color: #dae2fd;
+		font-size: 12px;
+	}
+	.hh_zhan_wei {
+		color: #908fa0;
+		font-size: 12px;
+	}
+	.hh_mic_an {
+		width: 18px;
+		height: 18px;
+		margin-left: 4px;
+	}
+
+	/* ---------- 进行中委托 HUD ---------- */
+	.hh_hud_qu {
+		padding-bottom: 16px;
+	}
+	.hh_hud_ka {
+		position: relative;
+		overflow: hidden;
+		padding: 16px;
+		border-radius: 12px;
+		background-color: #222a3d;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+	}
+	.hh_hud_guang {
+		position: absolute;
+		top: -24px;
+		right: -16px;
+		width: 96px;
+		height: 96px;
+		border-radius: 48px;
+		background-color: rgba(128, 131, 255, 0.10);
+	}
+	.hh_hud_shang {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+	}
+	.hh_hud_zuo {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		flex: 1;
+		min-width: 0;
+	}
+	.hh_hud_tu_kuang {
+		position: relative;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 40px;
+		height: 40px;
+		border-radius: 12px;
+		background-color: #2d3449;
+	}
+	.hh_hud_tu {
+		width: 24px;
+		height: 24px;
+	}
+	.hh_hud_dian_guang,
+	.hh_hud_dian {
+		position: absolute;
+		top: -2px;
+		right: -2px;
+		width: 10px;
+		height: 10px;
+		border-radius: 5px;
+		background-color: #ffb95f;
+	}
+	.hh_hud_dian_guang {
+		opacity: 0.75;
+	}
+	.hh_hud_wen {
+		display: flex;
+		flex-direction: column;
+		flex: 1;
+		min-width: 0;
+		margin-left: 8px;
+	}
+	.hh_hud_biao_qian_hang {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+	}
+	.hh_hud_biao_qian {
+		padding: 2px 6px;
+		margin-right: 4px;
+		border-radius: 4px;
+		background-color: rgba(202, 129, 0, 0.3);
+		color: #ffb95f;
+		font-size: 10px;
+		font-weight: 700;
+		letter-spacing: 0.5px;
+	}
+	.hh_hud_sheng_yu {
+		color: #908fa0;
+		font-size: 10px;
+	}
+	.hh_hud_ming {
+		margin-top: 2px;
+		color: #dae2fd;
+		font-size: 12px;
+		font-weight: 600;
+		white-space: nowrap;
+		text-overflow: ellipsis;
+	}
+	.hh_hud_an_niu {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		margin-left: 8px;
+		padding: 6px 8px;
+		border-radius: 8px;
+		background-color: #c0c1ff;
+	}
+	.hh_hud_an_niu_zi {
+		color: #1000a9;
+		font-size: 12px;
+		font-weight: 600;
+	}
+	.hh_hud_jian_tou {
+		width: 16px;
+		height: 16px;
+	}
+	.hh_jin_du_di {
+		width: 100%;
+		height: 6px;
+		margin-top: 8px;
+		border-radius: 3px;
+		background-color: #060e20;
+		overflow: hidden;
+	}
+	.hh_jin_du_tiao {
+		width: 72%;
+		height: 6px;
+		border-radius: 3px;
+		background: linear-gradient(to right, #c0c1ff, #4edea3);
+	}
+
+	/* ---------- 会话列表 ---------- */
+	.hh_lie_biao_qu {
+		padding-bottom: 24px;
+	}
+	.hh_lie_biao_tou {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+		padding-left: 4px;
+		padding-right: 4px;
+		margin-bottom: 2px;
+	}
+	.hh_lie_biao_biao_ti {
+		color: #908fa0;
+		font-size: 10px;
+		font-weight: 700;
+		letter-spacing: 0.5px;
+	}
+	.hh_yi_du {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+	}
+	.hh_yi_du_tu {
+		width: 14px;
+		height: 14px;
+		margin-right: 2px;
+	}
+	.hh_yi_du_zi {
+		color: #c0c1ff;
+		font-size: 10px;
+	}
+	.hh_ka {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		padding: 16px;
+		margin-bottom: 8px;
+		border-radius: 12px;
+		background-color: #171f33;
+		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+	}
+	.hh_ka_di {
+		background-color: #131b2e;
+	}
+	.hh_ka_an_xia {
+		background-color: #2d3449;
+	}
+	.hh_tou_48 {
+		position: relative;
+		width: 48px;
+		height: 48px;
+	}
+	.hh_tou_48_tu {
+		width: 48px;
+		height: 48px;
+		border-radius: 24px;
+	}
+	.hh_tou_48_qun {
+		overflow: hidden;
+		width: 48px;
+		height: 48px;
+		border-radius: 24px;
+		background-color: #2d3449;
+	}
+	.hh_zai_xian_da {
+		position: absolute;
+		right: 0;
+		bottom: 0;
+		width: 12px;
+		height: 12px;
+		border: 2px solid #171f33;
+		border-radius: 6px;
+		background-color: #4edea3;
+	}
+	.hh_tou_48_xi_tong {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 48px;
+		height: 48px;
+		border-radius: 24px;
+		background: linear-gradient(to top right, #c0c1ff, #8083ff);
+	}
+	.hh_tou_xi_tong {
+		width: 26px;
+		height: 26px;
+	}
+	.hh_ka_wen {
+		display: flex;
+		flex-direction: column;
+		flex: 1;
+		min-width: 0;
+		margin-left: 16px;
+	}
+	.hh_ka_shou_hang {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+		margin-bottom: 2px;
+	}
+	.hh_ka_zuo {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		flex: 1;
+		min-width: 0;
+	}
+	.hh_ming {
+		color: #dae2fd;
+		font-size: 18px;
+		font-weight: 600;
+		white-space: nowrap;
+		text-overflow: ellipsis;
+	}
+	.hh_biao_qian_zhi_ye {
+		margin-left: 4px;
+		padding-left: 4px;
+		padding-right: 4px;
+		border-radius: 4px;
+		background-color: #2d3449;
+		color: #464554;
+		font-size: 10px;
+	}
+	.hh_biao_qian_ren_shu {
+		margin-left: 4px;
+		color: #908fa0;
+		font-size: 10px;
+	}
+	.hh_biao_qian_guan_fang {
+		margin-left: 4px;
+		padding: 2px 6px;
+		border-radius: 9999px;
+		background-color: rgba(192, 193, 255, 0.2);
+		color: #c0c1ff;
+		font-size: 10px;
+		font-weight: 700;
+	}
+	.hh_shi_jian {
+		margin-left: 4px;
+		color: #908fa0;
+		font-size: 10px;
+	}
+	.hh_ka_ci_hang {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+		margin-top: 2px;
+	}
+	.hh_zhai_yao_hang {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		flex: 1;
+		min-width: 0;
+	}
+	.hh_zhai_yao {
+		flex: 1;
+		min-width: 0;
+		color: #c7c4d7;
+		font-size: 12px;
+		white-space: nowrap;
+		text-overflow: ellipsis;
+	}
+	.hh_qian_zhui_zhu {
+		margin-right: 2px;
+		color: #c0c1ff;
+		font-size: 12px;
+		font-weight: 600;
+	}
+	.hh_qian_zhui_ming {
+		margin-right: 2px;
+		color: #dae2fd;
+		font-size: 12px;
+		font-weight: 600;
+	}
+	.hh_qian_zhui_san {
+		margin-right: 2px;
+		color: #ffb95f;
+		font-size: 12px;
+	}
+	.hh_ka_you {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		margin-left: 8px;
+	}
+	.hh_ji_fen {
+		padding: 2px 8px;
+		margin-right: 4px;
+		border-radius: 9999px;
+		background-color: rgba(0, 165, 114, 0.2);
+		color: #4edea3;
+		font-size: 10px;
+		font-weight: 700;
+	}
+	.hh_wei_du {
+		min-width: 18px;
+		height: 18px;
+		padding-left: 4px;
+		padding-right: 4px;
+		border-radius: 9px;
+		background-color: #8083ff;
+		color: #1000a9;
+		font-size: 10px;
+		line-height: 18px;
+		text-align: center;
+	}
+	.hh_lv_dian {
+		width: 10px;
+		height: 10px;
+		border-radius: 5px;
+		background-color: #4edea3;
+	}
+
+	/* ---------- 底部提示 ---------- */
+	.hh_jiao_zhu {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: center;
+		padding-bottom: 8px;
+		opacity: 0.5;
+	}
+	.hh_jiao_zhu_tu {
+		width: 14px;
+		height: 14px;
+		margin-right: 4px;
+	}
+	.hh_jiao_zhu_zi {
+		color: #908fa0;
+		font-size: 10px;
+	}
+
+	/* 底栏样式已移入 components/di_lan/di_lan.uvue */
+
+	/* ---------- 接入真实会话数据后的补充样式（沿用深色设计稿配色） ---------- */
+	/* 后端会话没有头像 URL：用名称首字做文字头像，避免出现空白图片 */
+	.hh_tou_48_wen,
+	.hh_tou_48_wen_qun {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 48px;
+		height: 48px;
+		border-radius: 24px;
+		background-color: #2d3449;
+	}
+	.hh_tou_48_wen_qun {
+		background: linear-gradient(to bottom right, #3a4a6b, #25304a);
+	}
+	.hh_tou_wen {
+		color: #dae2fd;
+		font-size: 18px;
+		font-weight: 700;
+	}
+	.hh_tou_wen_bai {
+		color: #1000a9;
+		font-size: 18px;
+		font-weight: 700;
+	}
+
+	/* 加载错误提示条 */
+	.hh_cuo_wu_tiao {
+		padding: 10px 12px;
+		margin-bottom: 8px;
+		border-radius: 8px;
+		background-color: rgba(240, 45, 45, 0.16);
+	}
+	.hh_cuo_wu_zi {
+		color: #ff9a9a;
+		font-size: 12px;
+	}
+
+	/* 未登录 / 空列表 / 加载中 */
+	.hh_kong_zhuang_tai {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		padding-top: 48px;
+		padding-bottom: 48px;
+	}
+	.hh_kong_zi {
+		color: #908fa0;
+		font-size: 13px;
+	}
+	.hh_deng_lu_an {
+		margin-top: 16px;
+		padding: 8px 24px;
+		border-radius: 9999px;
+		background-color: #c0c1ff;
+	}
+	.hh_deng_lu_zi {
+		color: #1000a9;
+		font-size: 13px;
+		font-weight: 700;
+	}
+
+	/* 好友验证 / 群邀请：同意与拒绝 */
+	.hh_yan_zheng_cao_zuo {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		margin-left: 8px;
+	}
+	.hh_yan_zheng_an {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		min-width: 44px;
+		height: 28px;
+		padding-left: 10px;
+		padding-right: 10px;
+		margin-left: 6px;
+		border-radius: 14px;
+	}
+	.hh_tong_yi {
+		background-color: #4edea3;
+	}
+	.hh_ju_jue {
+		background-color: #2d3449;
+	}
+	.hh_yan_zheng_zi {
+		color: #0b1326;
+		font-size: 12px;
+		font-weight: 700;
+	}
+	.hh_yan_zheng_zi_hui {
+		color: #c7c4d7;
+	}
+	.hh_yan_zheng_jin {
+		opacity: 0.5;
+	}
+
+	/* 按字重指向对应 ttf：uni-app x 的自定义字体规则不支持字重属性，Android 单字重字体也不响应数值字重 */
+	.hh_hud_ming { font-family: 'PJS600'; }
+	.hh_ming { font-family: 'PJS600'; }
+	.hh_qian_zhui_zhu { font-family: 'PJS600'; }
+	.hh_qian_zhui_ming { font-family: 'PJS600'; }
+	.hh_kuai_jie_zi_te { font-family: 'SG700'; }
+	.hh_hud_biao_qian { font-family: 'SG700'; }
+	.hh_lie_biao_biao_ti { font-family: 'SG700'; }
+	.hh_biao_qian_guan_fang { font-family: 'SG700'; }
+	.hh_ji_fen { font-family: 'SG700'; }
+</style>

@@ -1,0 +1,317 @@
+<script setup lang="ts">
+import { ref } from 'vue'
+
+/**
+ * 会话页顶部钉住的「委托进度卡」。
+ * 对应设计稿 对话.html 中 id="questCard" 的那一块：
+ * 标题 + 托管徽章 + 可折叠的（状态摘要 / 四步进度 / 查看详情·申请提前验收）。
+ * 折叠状态收在组件内，页面只管传文案。
+ */
+const 属性 = defineProps({
+	标题: { type: String, default: '【委托中】3D插画渲染源文件制作' },
+	托管文案: { type: String, default: '500 积分平台托管' },
+	状态说明: { type: String, default: '进行中 · 待对方提交验收成果' },
+	编号: { type: String, default: '托管编号 #QK-8821' },
+	默认展开: { type: Boolean, default: true },
+})
+
+const 发出 = defineEmits(['查看详情', '申请验收'])
+
+const 展开 = ref(属性.默认展开)
+
+function 切换() {
+	展开.value = !展开.value
+}
+</script>
+
+<template>
+	<view class="wtj">
+		<view class="wtj_tou" @click="切换">
+			<view class="wtj_tou_zuo">
+				<view class="wtj_dian"></view>
+				<text class="wtj_biao_ti">{{ 属性.标题 }}</text>
+			</view>
+			<view class="wtj_tou_you">
+				<view class="wtj_tuo_guan">
+					<text class="wtj_tuo_guan_zi">{{ 属性.托管文案 }}</text>
+				</view>
+				<view class="wtj_jian_tou" :style="展开 ? '' : 'transform: rotate(180deg)'">
+					<image class="wtj_jian_tou_tu" src="/static/liaotian/icons/expand_less.svg" mode="aspectFit"></image>
+				</view>
+			</view>
+		</view>
+
+		<view v-if="展开" class="wtj_ti">
+			<!-- 状态摘要 + 托管编号 -->
+			<view class="wtj_zhai_yao_hang">
+				<view class="wtj_zhai_yao_zuo">
+					<image class="wtj_tu_16" src="/static/liaotian/icons/sync.svg" mode="aspectFit"></image>
+					<text class="wtj_zhai_yao_zi">{{ 属性.状态说明 }}</text>
+				</view>
+				<text class="wtj_bian_hao">{{ 属性.编号 }}</text>
+			</view>
+
+			<!-- 四步进度 -->
+			<view class="wtj_bu_kuang">
+				<view class="wtj_bu_hang">
+					<view class="wtj_bu_xiang">
+						<view class="wtj_bu_quan wtj_bu_quan_wancheng">
+							<image class="wtj_bu_tu" src="/static/liaotian/icons/check.svg" mode="aspectFit"></image>
+						</view>
+						<text class="wtj_bu_zi wtj_bu_zi_wancheng">已接单</text>
+					</view>
+					<view class="wtj_bu_xiang">
+						<view class="wtj_bu_quan wtj_bu_quan_zhizuo">
+							<image class="wtj_bu_tu" src="/static/liaotian/icons/brush.svg" mode="aspectFit"></image>
+						</view>
+						<text class="wtj_bu_zi wtj_bu_zi_zhizuo">制作中</text>
+					</view>
+					<view class="wtj_bu_xiang">
+						<view class="wtj_bu_quan wtj_bu_quan_yanshou">
+							<image class="wtj_bu_tu" src="/static/liaotian/icons/hourglass_top.svg" mode="aspectFit"></image>
+						</view>
+						<text class="wtj_bu_zi wtj_bu_zi_yanshou">待验收</text>
+					</view>
+					<view class="wtj_bu_xiang">
+						<view class="wtj_bu_quan wtj_bu_quan_wei">
+							<image class="wtj_bu_tu" src="/static/liaotian/icons/lock.svg" mode="aspectFit"></image>
+						</view>
+						<text class="wtj_bu_zi wtj_bu_zi_wei">结算完成</text>
+					</view>
+				</view>
+			</view>
+
+			<!-- 快捷操作 -->
+			<view class="wtj_an_niu_hang">
+				<view class="wtj_an_niu" @click="发出('查看详情')">
+					<image class="wtj_tu_16" src="/static/liaotian/icons/visibility.svg" mode="aspectFit"></image>
+					<text class="wtj_an_niu_zi_zhu">查看委托详情</text>
+				</view>
+				<view class="wtj_an_niu" @click="发出('申请验收')">
+					<image class="wtj_tu_16" src="/static/liaotian/icons/bolt.svg" mode="aspectFit"></image>
+					<text class="wtj_an_niu_zi_huang">申请提前验收</text>
+				</view>
+			</view>
+		</view>
+	</view>
+</template>
+
+<style>
+/* 组件内也有 text，uni-app x 不继承父 view 字体，字体得在组件内再注册一次 */
+@font-face { font-family: 'PJS400'; src: url('/static/hui_hua/fonts/PlusJakartaSans-400.ttf'); }
+@font-face { font-family: 'PJS500'; src: url('/static/hui_hua/fonts/PlusJakartaSans-500.ttf'); }
+@font-face { font-family: 'PJS600'; src: url('/static/hui_hua/fonts/PlusJakartaSans-600.ttf'); }
+@font-face { font-family: 'SG600'; src: url('/static/hui_hua/fonts/SpaceGrotesk-600.ttf'); }
+@font-face { font-family: 'SG700'; src: url('/static/hui_hua/fonts/SpaceGrotesk-700.ttf'); }
+
+/* ---------- 卡片：bg-surface-container-low rounded-xl p-space-md shadow-md ---------- */
+.wtj {
+	width: 100%;
+	padding: 16px;
+	border-radius: 12px;
+	background-color: #131b2e;
+	box-shadow: 0 4px 6px rgba(0, 0, 0, 0.28);
+}
+
+/* ---------- 卡片头 ---------- */
+.wtj_tou {
+	display: flex;
+	flex-direction: row;
+	align-items: flex-start;
+	justify-content: space-between;
+}
+.wtj_tou_zuo {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	flex: 1;
+	min-width: 0;
+}
+.wtj_dian {
+	width: 8px;
+	height: 8px;
+	flex-shrink: 0;
+	border-radius: 4px;
+	background-color: #ffb95f;
+	box-shadow: 0 0 0 4px rgba(255, 185, 95, 0.18);
+}
+.wtj_biao_ti {
+	margin-left: 8px;
+	flex-shrink: 1;
+	font-family: 'PJS400';
+	font-size: 18px;
+	line-height: 24px;
+	font-weight: 600;
+	letter-spacing: -0.18px;
+	color: #dae2fd;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+.wtj_tou_you {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	flex-shrink: 0;
+	margin-left: 4px;
+}
+.wtj_tuo_guan {
+	padding: 2px 8px;
+	border-radius: 999px;
+	background-color: #2d3449;
+}
+.wtj_tuo_guan_zi {
+	font-family: 'SG600';
+	font-size: 12px;
+	line-height: 16px;
+	font-weight: 600;
+	letter-spacing: 0.36px;
+	color: #4edea3;
+}
+.wtj_jian_tou {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 20px;
+	height: 20px;
+	margin-left: 4px;
+}
+.wtj_jian_tou_tu { width: 20px; height: 20px; }
+
+/* ---------- 折叠区 ---------- */
+.wtj_ti {
+	display: flex;
+	flex-direction: column;
+	margin-top: 8px;
+}
+
+.wtj_zhai_yao_hang {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+}
+.wtj_zhai_yao_zuo {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	flex-shrink: 1;
+	min-width: 0;
+}
+.wtj_tu_16 { width: 16px; height: 16px; }
+.wtj_zhai_yao_zi {
+	margin-left: 4px;
+	font-family: 'PJS400';
+	font-size: 12px;
+	line-height: 16px;
+	letter-spacing: 0.12px;
+	color: #c7c4d7;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+.wtj_bian_hao {
+	margin-left: 8px;
+	flex-shrink: 0;
+	font-family: 'SG600';
+	font-size: 10px;
+	line-height: 14px;
+	font-weight: 700;
+	letter-spacing: 0.5px;
+	color: #908fa0;
+}
+
+/* ---------- 四步进度 ---------- */
+.wtj_bu_kuang {
+	margin-top: 8px;
+	padding: 8px;
+	border-radius: 8px;
+	background-color: #060e20;
+}
+.wtj_bu_hang {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+}
+.wtj_bu_xiang {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	flex: 1;
+}
+.wtj_bu_quan {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	margin-bottom: 4px;
+	border-radius: 12px;
+}
+.wtj_bu_quan_wancheng { background-color: #4edea3; }
+/* 制作中：实心紫 + 外发光 */
+.wtj_bu_quan_zhizuo {
+	background-color: #8083ff;
+	box-shadow: 0 0 8px rgba(128, 131, 255, 0.7);
+}
+/* 待验收：琥珀色 + 呼吸光（design 的 animate-pulse 用静态光晕代替） */
+.wtj_bu_quan_yanshou {
+	background-color: #ca8100;
+	box-shadow: 0 0 0 3px rgba(202, 129, 0, 0.22);
+}
+.wtj_bu_quan_wei { background-color: #2d3449; }
+.wtj_bu_tu { width: 14px; height: 14px; }
+
+.wtj_bu_zi {
+	font-family: 'SG600';
+	font-size: 10px;
+	line-height: 14px;
+	font-weight: 700;
+	letter-spacing: 0.5px;
+}
+.wtj_bu_zi_wancheng { color: #4edea3; }
+.wtj_bu_zi_zhizuo { color: #c0c1ff; }
+.wtj_bu_zi_yanshou { color: #ffb95f; }
+.wtj_bu_zi_wei { color: #908fa0; font-weight: 600; }
+
+/* ---------- 快捷操作 ---------- */
+.wtj_an_niu_hang {
+	display: flex;
+	flex-direction: row;
+	margin-top: 8px;
+	padding-top: 4px;
+}
+.wtj_an_niu {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+	flex: 1;
+	padding: 6px 12px;
+	border-radius: 8px;
+	background-color: #222a3d;
+}
+.wtj_an_niu_zi_zhu {
+	margin-left: 4px;
+	font-family: 'SG600';
+	font-size: 12px;
+	line-height: 16px;
+	font-weight: 600;
+	letter-spacing: 0.36px;
+	color: #c0c1ff;
+}
+.wtj_an_niu_zi_huang {
+	margin-left: 4px;
+	font-family: 'SG600';
+	font-size: 12px;
+	line-height: 16px;
+	font-weight: 600;
+	letter-spacing: 0.36px;
+	color: #ffb95f;
+}
+
+	/* 按字重指向对应 ttf：uni-app x 的自定义字体规则不支持字重属性，Android 单字重字体也不响应数值字重 */
+	.wtj_biao_ti { font-family: 'PJS600'; }
+	.wtj_bian_hao { font-family: 'SG700'; }
+	.wtj_bu_zi { font-family: 'SG700'; }
+</style>

@@ -1,0 +1,399 @@
+<!DOCTYPE html><html class="dark" lang="en"><head><meta charset="utf-8"><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"><meta content="mobile_stack" name="shell-type"><link href="https://fonts.googleapis.com" rel="preconnect"><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"><link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&amp;family=Space+Grotesk:wght@600;700&amp;display=swap" rel="stylesheet"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"><style>@layer base{html,body{width:100vw;margin:0;padding:0;background-color:#0b1326;color:#dae2fd;}body{overscroll-behavior-y:none;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { colors: { "secondary-fixed-dim": "#4edea3", "surface-container-lowest": "#060e20", "primary": "#c0c1ff", "inverse-primary": "#494bd6", "on-primary-fixed": "#07006c", "on-tertiary-container": "#3e2400", "primary-container": "#8083ff", "on-secondary-fixed-variant": "#005236", "primary-fixed-dim": "#c0c1ff", "on-surface-variant": "#c7c4d7", "on-surface": "#dae2fd", "on-tertiary-fixed-variant": "#653e00", "inverse-on-surface": "#283044", "on-error-container": "#ffdad6", "surface-container": "#171f33", "error-container": "#93000a", "secondary": "#4edea3", "tertiary-fixed": "#ffddb8", "surface-variant": "#2d3449", "surface-tint": "#c0c1ff", "surface-container-highest": "#2d3449", "secondary-container": "#00a572", "background": "#0b1326", "tertiary-fixed-dim": "#ffb95f", "on-tertiary-fixed": "#2a1700", "primary-fixed": "#e1e0ff", "surface-container-high": "#222a3d", "on-primary-container": "#0d0096", "surface-container-low": "#131b2e", "outline-variant": "#464554", "on-primary-fixed-variant": "#2f2ebe", "inverse-surface": "#dae2fd", "tertiary": "#ffb95f", "on-error": "#690005", "secondary-fixed": "#6ffbbe", "outline": "#908fa0", "on-background": "#dae2fd", "on-tertiary": "#472a00", "surface-bright": "#31394d", "on-primary": "#1000a9", "tertiary-container": "#ca8100", "surface": "#0b1326", "on-secondary-container": "#00311f", "on-secondary-fixed": "#002113", "on-secondary": "#003824", "error": "#ffb4ab", "surface-dim": "#0b1326" }, borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, spacing: { "space-md": "1rem", "margin-desktop": "2.5rem", "space-sm": "0.5rem", "space-xs": "0.25rem", "space-xl": "2rem", "gutter-desktop": "1.5rem", "margin": "1rem", "gutter": "1rem", "space-lg": "1.5rem" }, fontFamily: { "headline-md": ["Plus Jakarta Sans"], "label-sm": ["Space Grotesk"], "headline-sm": ["Plus Jakarta Sans"], "label-md": ["Space Grotesk"], "display-lg-mobile": ["Plus Jakarta Sans"], "display-lg": ["Plus Jakarta Sans"], "body-lg": ["Plus Jakarta Sans"], "label-lg": ["Space Grotesk"], "body-md": ["Plus Jakarta Sans"], "body-sm": ["Plus Jakarta Sans"], "headline-lg": ["Plus Jakarta Sans"] }, fontSize: { "headline-md": ["22px", { "lineHeight": "28px", "letterSpacing": "-0.015em", "fontWeight": "700" }], "label-sm": ["10px", { "lineHeight": "14px", "letterSpacing": "0.05em", "fontWeight": "700" }], "headline-sm": ["18px", { "lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "600" }], "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.03em", "fontWeight": "600" }], "display-lg-mobile": ["30px", { "lineHeight": "36px", "letterSpacing": "-0.025em", "fontWeight": "800" }], "display-lg": ["40px", { "lineHeight": "48px", "letterSpacing": "-0.03em", "fontWeight": "800" }], "body-lg": ["16px", { "lineHeight": "24px", "letterSpacing": "0", "fontWeight": "400" }], "label-lg": ["14px", { "lineHeight": "18px", "letterSpacing": "0.02em", "fontWeight": "600" }], "body-md": ["14px", { "lineHeight": "20px", "letterSpacing": "0", "fontWeight": "400" }], "body-sm": ["12px", { "lineHeight": "16px", "letterSpacing": "0.01em", "fontWeight": "400" }], "headline-lg": ["28px", { "lineHeight": "36px", "letterSpacing": "-0.02em", "fontWeight": "700" }] } } } }</script><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface font-body-md text-on-surface flex flex-col min-h-screen antialiased selection:bg-primary-container selection:text-on-primary-container"><header class="fixed top-0 w-full z-50 pt-safe bg-surface/80 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-16 px-margin flex items-center justify-between gap-space-sm"><div class="flex items-center gap-space-xs"><button aria-label="Go back" class="min-w-[44px] min-h-[44px] -ml-2 rounded-full flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors" onclick="history.back()" type="button"><span class="material-symbols-outlined text-[24px]">arrow_back</span></button><img alt="App favicon icon for LinkQuest, an instant messaging and quest bounty mutual aid app. Clean minimalist vector-style symbol representing a glowing chat speech bubble interwoven with a quest compass star / lightning link emblem. Vibrant indigo (#6366f1) and neon emerald green (#10b981) glowing accents on a deep dark navy (#0b1326) edge-to-edge full-bleed gradient background. CRITICAL: Do NOT draw any rounded rectangle, border, frame, white outline, or squircle container. The entire square image is the icon with a continuous full-bleed dark navy background filling edge to edge. High contrast, iconic, sleek modern tech aesthetic." class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida/AEtjO1Wzs_KgLePVUIRbiSauQx7UWrIJkpm74ptpBxE_AJSjWKKtsy6745pK10UE7kqOoY9fs8e8unSDSCe1_mF9WsfZt_DH84arbSOID50mpHpssyDzVvoJIhHkurdHn4I4C9HceDAcZIkPMD-j8rYFPNQ2owlXTnpXy_eFamgX3zr-cZDxermgR4YX65gFfLFe1ruV-J71r2QvwnOPKqx5Xpf2rkWUMdkiSb_rf--qn5ZVnw"><div class="flex flex-col ml-space-xs"><span class="font-headline-sm text-headline-sm text-on-surface truncate">Connect &amp; Create</span><span class="font-label-sm text-label-sm text-secondary tracking-widest uppercase">LinkQuest Net</span></div></div><div class="flex items-center gap-space-xs"><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center shrink-0"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="flex flex-col relative w-full pt-16 pb-safe bg-surface min-h-screen"><div class="flex flex-col w-full pb-24">
+<!-- Top Ambient Glow -->
+<div class="relative w-full overflow-hidden">
+<div class="absolute -top-16 left-1/2 -translate-x-1/2 w-80 h-32 bg-primary-container/20 blur-3xl pointer-events-none rounded-full"></div>
+<div class="absolute top-20 right-0 w-44 h-44 bg-secondary/15 blur-2xl pointer-events-none rounded-full"></div>
+<!-- Bounty Header Hero Card -->
+<div class="px-margin pt-space-sm pb-space-md">
+<div class="bg-surface-container-high rounded-xl p-space-md shadow-xl backdrop-blur-md relative overflow-hidden">
+<!-- Accent Top Light Strip -->
+<div class="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-primary-container via-secondary to-primary"></div>
+<!-- Status Badges & Escrow Guard -->
+<div class="flex items-center justify-between gap-space-xs mb-space-sm">
+<div class="flex items-center gap-space-xs">
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-primary/10 text-primary font-label-sm text-label-sm uppercase tracking-wider">
+<span class="w-1.5 h-1.5 rounded-full bg-primary animate-ping"></span>
+              招募中 · 竞标模式
+            </span>
+<span class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-error-container/40 text-error font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[13px]">local_fire_department</span>
+              急需
+            </span>
+</div>
+<div class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary-container/20 text-secondary font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[13px]" style="font-variation-settings: &quot;FILL&quot; 1;">verified_user</span>
+<span class="">平台托管存管</span>
+</div>
+</div>
+<!-- Bounty Amount Display -->
+<div class="flex items-baseline justify-between mt-space-xs">
+<div>
+<div class="flex items-center gap-1 text-secondary-fixed">
+<span class="material-symbols-outlined text-[26px]" style="font-variation-settings: &quot;FILL&quot; 1;">monetization_on</span>
+<span class="font-display-lg-mobile text-display-lg-mobile tracking-tight font-extrabold text-secondary">+850</span>
+<span class="font-label-md text-label-md text-secondary ml-1">PTS</span>
+</div>
+<div class="text-on-surface-variant font-body-sm text-body-sm flex items-center gap-1 mt-0.5">
+<span class="">预估价值约合 ¥85.00</span>
+<span class="inline-block w-1 h-1 rounded-full bg-outline-variant"></span>
+<span class="text-secondary font-label-sm text-label-sm">验收满意后解冻划转</span>
+</div>
+</div>
+<!-- Countdown Pill -->
+<div class="flex flex-col items-end">
+<div class="px-2.5 py-1.5 rounded-lg bg-surface-container text-right shadow-inner">
+<span class="font-label-sm text-label-sm text-on-surface-variant block">报名倒计时</span>
+<div class="flex items-center gap-1 text-tertiary font-label-md text-label-md font-bold mt-0.5">
+<span class="material-symbols-outlined text-[14px]">timer</span>
+<span class="">1天 14:26:08</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Quest Lifecycle Stepper -->
+<div class="mt-space-md pt-space-sm bg-surface-container-low/60 rounded-lg p-space-sm">
+<div class="flex items-center justify-between text-center relative">
+<!-- Step 1 -->
+<div class="flex flex-col items-center z-10">
+<div class="w-5 h-5 rounded-full bg-secondary text-on-secondary flex items-center justify-center">
+<span class="material-symbols-outlined text-[13px] font-bold">check</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface mt-1">已发布</span>
+</div>
+<!-- Progress Line 1 -->
+<div class="flex-1 h-0.5 bg-secondary mx-1"></div>
+<!-- Step 2 (Active) -->
+<div class="flex flex-col items-center z-10">
+<div class="w-5 h-5 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center shadow-lg shadow-primary-container/40 animate-pulse">
+<span class="w-2 h-2 rounded-full bg-white"></span>
+</div>
+<span class="font-label-sm text-label-sm text-primary font-bold mt-1">选人竞标中</span>
+</div>
+<!-- Progress Line 2 -->
+<div class="flex-1 h-0.5 bg-surface-variant mx-1"></div>
+<!-- Step 3 -->
+<div class="flex flex-col items-center z-10">
+<div class="w-5 h-5 rounded-full bg-surface-variant text-on-surface-variant flex items-center justify-center">
+<span class="w-1.5 h-1.5 rounded-full bg-outline"></span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant mt-1">签约履约</span>
+</div>
+<!-- Progress Line 3 -->
+<div class="flex-1 h-0.5 bg-surface-variant mx-1"></div>
+<!-- Step 4 -->
+<div class="flex flex-col items-center z-10">
+<div class="w-5 h-5 rounded-full bg-surface-variant text-on-surface-variant flex items-center justify-center">
+<span class="w-1.5 h-1.5 rounded-full bg-outline"></span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant mt-1">验收打款</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Main Quest Content Block -->
+<div class="px-margin space-y-space-md">
+<!-- Title & Tag Matrix -->
+<div class="bg-surface-container rounded-xl p-space-md shadow-md">
+<h1 class="font-headline-md text-headline-md text-on-surface leading-tight">
+        设计一套赛博像素风的猫咪表情包 (6个静态表情)
+      </h1>
+<div class="flex flex-wrap gap-1.5 mt-space-sm">
+<span class="px-2.5 py-1 rounded-md bg-surface-container-high text-primary font-label-sm text-label-sm">#视觉设计</span>
+<span class="px-2.5 py-1 rounded-md bg-surface-container-high text-primary font-label-sm text-label-sm">#像素艺术定制</span>
+<span class="px-2.5 py-1 rounded-md bg-surface-container-high text-secondary font-label-sm text-label-sm">#竞标竞选</span>
+<span class="px-2.5 py-1 rounded-md bg-surface-container-high text-tertiary font-label-sm text-label-sm">#信誉分≥700</span>
+</div>
+<!-- Detail Briefing -->
+<div class="mt-space-md pt-space-sm space-y-space-sm">
+<div class="flex items-center gap-1.5 text-on-surface font-headline-sm text-headline-sm">
+<span class="material-symbols-outlined text-primary text-[20px]">assignment</span>
+<span class="">任务详述与交付标准</span>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant leading-relaxed">
+          我们需要一组用于社群 Discord 与 LinkQuest 聊天互动的赛博机械猫表情包。整体设计偏复古 8-bit / 16-bit 像素颗粒质感，搭配霓虹发光色彩。
+        </p>
+<!-- Requirements Specs Card -->
+<div class="bg-surface-container-low rounded-lg p-space-sm space-y-2">
+<div class="flex items-start gap-2">
+<span class="material-symbols-outlined text-secondary text-[18px] shrink-0 mt-0.5">check_circle</span>
+<div class="font-body-sm text-body-sm text-on-surface">
+<span class="font-bold text-secondary">格式规格：</span>
+              PNG 透明底 512×512 像素，需同时提供源工程文件 (Aseprite、PSD 或 Figma 矢量切片)。
+            </div>
+</div>
+<div class="flex items-start gap-2">
+<span class="material-symbols-outlined text-secondary text-[18px] shrink-0 mt-0.5">check_circle</span>
+<div class="font-body-sm text-body-sm text-on-surface">
+<span class="font-bold text-secondary">视觉特征：</span>
+              机械金属外耳、荧光薄荷绿发光瞳孔、赛博项圈接线细节。
+            </div>
+</div>
+<div class="flex items-start gap-2">
+<span class="material-symbols-outlined text-secondary text-[18px] shrink-0 mt-0.5">check_circle</span>
+<div class="font-body-sm text-body-sm text-on-surface">
+<span class="font-bold text-secondary">包含6种情绪：</span>
+              ① 摸鱼打瞌睡 (漏电特效) ② 电量告急/红灯警告 ③ 举杯碰杯 (Cheers) ④ 问号加载中 ⑤ 赛博比心 ⑥ 头顶冒烟石化。
+            </div>
+</div>
+</div>
+<!-- Reference Material & Attachments -->
+<div class="pt-space-xs">
+
+
+</div>
+</div>
+</div>
+<!-- Assurance & Agreement Rules -->
+<div class="bg-surface-container rounded-xl p-space-md shadow-md">
+<div class="flex items-center gap-2 mb-space-sm">
+<span class="material-symbols-outlined text-secondary text-[20px]">gavel</span>
+<h2 class="font-headline-sm text-headline-sm text-on-surface">履约保障与合作约定</h2>
+</div>
+<div class="grid grid-cols-3 gap-2">
+<div class="bg-surface-container-low p-space-xs rounded-lg text-center flex flex-col items-center">
+<span class="material-symbols-outlined text-secondary text-[20px] mb-1">security</span>
+<span class="font-label-md text-label-md text-on-surface font-bold">平台质保</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant mt-0.5">先行赔付机制</span>
+</div>
+<div class="bg-surface-container-low p-space-xs rounded-lg text-center flex flex-col items-center">
+<span class="material-symbols-outlined text-primary text-[20px] mb-1">published_with_changes</span>
+<span class="font-label-md text-label-md text-on-surface font-bold">修改权益</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant mt-0.5">免费细节改动2次</span>
+</div>
+<div class="bg-surface-container-low p-space-xs rounded-lg text-center flex flex-col items-center">
+<span class="material-symbols-outlined text-tertiary text-[20px] mb-1">alarm_on</span>
+<span class="font-label-md text-label-md text-on-surface font-bold">超时赔偿</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant mt-0.5">无故延期全额退款</span>
+</div>
+</div>
+<div class="mt-space-sm p-2.5 rounded-lg bg-surface-container-high/60 flex items-center justify-between text-on-surface-variant">
+<div class="flex items-center gap-1.5 font-body-sm text-body-sm">
+<span class="material-symbols-outlined text-primary text-[18px]">lock</span>
+<span class="">交付物版权归委托方所有；设计师享署名权</span>
+</div>
+<span class="material-symbols-outlined text-[16px]">chevron_right</span>
+</div>
+</div>
+<!-- Employer Profile Card -->
+<div class="bg-surface-container rounded-xl p-space-md shadow-md">
+<div class="flex items-center justify-between mb-space-sm">
+<span class="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">委托发起人</span>
+<button class="px-3 py-1 rounded-full bg-surface-container-high text-primary hover:bg-surface-bright font-label-md text-label-md transition-colors flex items-center gap-1" type="button">
+<span class="material-symbols-outlined text-[16px]">person_add</span>
+<span class="">关注</span>
+</button>
+</div>
+<div class="flex items-center gap-space-sm">
+<div class="relative">
+<div class="w-14 h-14 rounded-full overflow-hidden ring-2 ring-primary/40 bg-surface-variant">
+<img class="w-full h-full object-cover" data-alt="Futuristic neon avatar portrait of a creative director girl named Momo, glowing cyberpunk glasses, styled hair, artistic creator lighting in indigo and cyan palette, high quality digital illustration." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCutEs_4CdG1Ad1ZsOU2sGv8CZHZzztdrSiGF56J5Co_cTSho_lcPLJtdiO4wXN1LR-aOaF1UlqdufIExf_O2FB0iC4EhVej2tHHMNtWDgjcC1A_dqw8i5Gzsf0cYTnV1goHaUKFfi1OIwCHvQc7XWQRyQwrrdvM6ncTKGbZUXDS69KEGyLljoayDhDGPY6FINfTOBdG3sqm9xOWTst-L89qwyVSaoqUS9JVPoAlN7_">
+</div>
+<span class="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full bg-secondary ring-2 ring-surface-container"></span>
+</div>
+<div class="flex-1 min-w-0">
+<div class="flex items-center gap-1.5">
+<h3 class="font-headline-sm text-headline-sm text-on-surface truncate">Momo · 墨喵</h3>
+<span class="px-1.5 py-0.5 rounded bg-primary-container text-on-primary-container font-label-sm text-label-sm shrink-0">
+              V认证创作者
+            </span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant truncate mt-0.5">
+            独立游戏制作人 / LinkQuest 资深委托官
+          </p>
+</div>
+</div>
+<!-- Employer Stats Strip -->
+<div class="grid grid-cols-3 gap-2 mt-space-md pt-space-xs bg-surface-container-low rounded-lg p-space-xs text-center">
+<div>
+<span class="font-label-sm text-label-sm text-on-surface-variant block">信用评价</span>
+<span class="font-label-lg text-label-lg text-secondary font-bold">99.2 (极佳)</span>
+</div>
+<div>
+<span class="font-label-sm text-label-sm text-on-surface-variant block">历史履约率</span>
+<span class="font-label-lg text-label-lg text-primary font-bold">100%</span>
+</div>
+<div>
+<span class="font-label-sm text-label-sm text-on-surface-variant block">已发单结项</span>
+<span class="font-label-lg text-label-lg text-on-surface font-bold">19 次</span>
+</div>
+</div>
+</div>
+<!-- Applicants / Bidding Workspace Section -->
+<div class="bg-surface-container rounded-xl p-space-md shadow-md">
+<div class="flex items-center justify-between mb-space-sm">
+<div class="flex items-center gap-2">
+<h2 class="font-headline-sm text-headline-sm text-on-surface">接单竞标候选池</h2>
+<span class="px-2 py-0.5 rounded-full bg-primary/20 text-primary font-label-sm text-label-sm">
+            已报 3 人 · 审核中
+          </span>
+</div>
+<button class="text-on-surface-variant font-label-sm text-label-sm hover:text-on-surface flex items-center" type="button">
+<span class="">全部方案</span>
+<span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+</button>
+</div>
+<!-- Applicant Card 1 -->
+<div class="space-y-space-xs">
+<div class="bg-surface-container-high rounded-xl p-space-sm relative overflow-hidden group hover:bg-surface-bright transition-colors">
+<div class="flex items-start justify-between">
+<div class="flex items-center gap-space-xs">
+<div class="relative">
+<div class="w-10 h-10 rounded-full overflow-hidden bg-surface-variant">
+<img class="w-full h-full object-cover" data-alt="Close-up portrait of Maya, an elite digital illustrator, short cyan hair, cyber street style jacket, neon ambient light, confident friendly expression, vector anime concept art portrait." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBNHl8iA-YGOWf1UB9xLo1zfC0xt629eCDr0vbsz0cVvoAmnd6QvziLythjehwwh7Ukymt5NxTwnuzmT0_4M1GrPJqfOulKxgD6pNXWyAnd8xAHlz3QweH_gsSzTJcX4beMdv10yLK--FCVUvbHPWfOxcE-kCbzAacWeCix-rW78PPTvhlkTZomPxLj67Kdh1HIeXjbREfDh-S4DY2EwTeXOmnICvYO-rmHtxnUmIMr">
+</div>
+<span class="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-secondary"></span>
+</div>
+<div>
+<div class="flex items-center gap-1.5">
+<span class="font-label-lg text-label-lg text-on-surface font-bold">林栖 · Maya</span>
+<span class="px-1.5 py-0.2 rounded bg-secondary-container/20 text-secondary font-label-sm text-label-sm">信用 99.8</span>
+</div>
+<span class="font-body-sm text-body-sm text-on-surface-variant">像素/UI插画达人 · 已交付42单</span>
+</div>
+</div>
+<!-- Proposed Bounty Pill -->
+<div class="text-right">
+<span class="font-label-md text-label-md text-secondary font-bold block">850 PTS</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">预估 2 天交付</span>
+</div>
+</div>
+<!-- Proposal Pitch Snippet -->
+
+</div>
+<!-- Applicant Card 2 -->
+<div class="bg-surface-container-high rounded-xl p-space-sm relative overflow-hidden group hover:bg-surface-bright transition-colors">
+<div class="flex items-start justify-between">
+<div class="flex items-center gap-space-xs">
+<div class="relative">
+<div class="w-10 h-10 rounded-full overflow-hidden bg-surface-variant">
+<img class="w-full h-full object-cover" data-alt="Portrait of Alex, a tech-savvy 2D game concept designer, wearing glasses with purple rim light reflection, creative studio backdrop, dark moody aesthetics." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAzs8O3z3vV-nHWrTvdqjsU6JUXRaP7Li4kZPKiM3W7s6hpBj-_uV_SwFPILuJaq1uo5oPG93_SBeKvkbUcUUhDoxqkVT9FYByPp_04cr2YeGpnbWlZSggoMpHZovUNVfXLOdM6gPsRLVGpd9NZVHEikJy3fVmRTekLlcwjWBF3c_r9tLDnJnpISJA8AZiIb8jhg3eYbePhAch1GZrle1yhfDExMI1_C9Tj8BpCRjZl">
+</div>
+<span class="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-secondary"></span>
+</div>
+<div>
+<div class="flex items-center gap-1.5">
+<span class="font-label-lg text-label-lg text-on-surface font-bold">Alex 晨风</span>
+<span class="px-1.5 py-0.2 rounded bg-primary/20 text-primary font-label-sm text-label-sm">信用 97.4</span>
+</div>
+<span class="font-body-sm text-body-sm text-on-surface-variant">独立独立游戏原画 · Aseprite重度用户</span>
+</div>
+</div>
+<div class="text-right">
+<span class="font-label-md text-label-md text-secondary font-bold block">800 PTS</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">预估 3 天交付</span>
+</div>
+</div>
+
+</div>
+</div>
+</div>
+</div>
+<!-- Bottom Fixed Interaction Dock -->
+<div class="fixed bottom-0 left-0 right-0 z-40 bg-surface-container-lowest/90 backdrop-blur-xl pb-safe shadow-[0_-4px_24px_rgba(0,0,0,0.4)]">
+<div class="px-margin py-2.5 flex items-center justify-between gap-space-xs max-w-lg mx-auto">
+<!-- Quick Action Utilities -->
+<div class="flex items-center gap-1 shrink-0">
+<!-- Bookmark Button -->
+<button aria-label="收藏委托" class="w-11 h-11 rounded-xl bg-surface-container flex items-center justify-center text-on-surface-variant hover:text-secondary hover:bg-surface-container-high transition-colors" id="bookmark-btn" type="button">
+<span class="material-symbols-outlined text-[22px]">bookmark_border</span>
+</button>
+<!-- Share Button -->
+<button aria-label="分享委托" class="w-11 h-11 rounded-xl bg-surface-container flex items-center justify-center text-on-surface-variant hover:text-primary hover:bg-surface-container-high transition-colors" id="share-btn" type="button">
+<span class="material-symbols-outlined text-[22px]">share</span>
+</button>
+<!-- Chat with Employer Button -->
+<button aria-label="私聊发布者" class="px-3 h-11 rounded-xl bg-surface-container flex items-center justify-center gap-1.5 text-on-surface hover:bg-surface-container-high transition-colors font-label-md text-label-md" id="im-chat-btn" type="button">
+<span class="material-symbols-outlined text-primary text-[20px]">chat_bubble</span>
+<span class="hidden sm:inline">微聊</span>
+</button>
+</div>
+<!-- Main Action CTA Button (Apply / Submit Bid) -->
+<button class="flex-1 h-11 px-4 rounded-xl bg-gradient-to-r from-primary-container via-inverse-primary to-primary text-white font-label-lg text-label-lg font-bold flex items-center justify-center gap-2 shadow-lg shadow-primary-container/30 active:scale-95 transition-all" id="submit-bid-cta" type="button">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: &quot;FILL&quot; 1;">bolt</span>
+<span class="truncate">立即申请接单 / 提交方案</span>
+</button>
+</div>
+</div>
+<!-- Client-side Interactive Logic -->
+<script>
+    (function () {
+      const bookmarkBtn = document.getElementById('bookmark-btn');
+      const shareBtn = document.getElementById('share-btn');
+      const submitBidCta = document.getElementById('submit-bid-cta');
+      const imChatBtn = document.getElementById('im-chat-btn');
+
+      let isBookmarked = false;
+
+      if (bookmarkBtn) {
+        bookmarkBtn.addEventListener('click', () => {
+          isBookmarked = !isBookmarked;
+          const icon = bookmarkBtn.querySelector('.material-symbols-outlined');
+          if (icon) {
+            if (isBookmarked) {
+              icon.textContent = 'bookmark';
+              icon.style.fontVariationSettings = "'FILL' 1";
+              bookmarkBtn.classList.add('text-secondary');
+            } else {
+              icon.textContent = 'bookmark_border';
+              icon.style.fontVariationSettings = "'FILL' 0";
+              bookmarkBtn.classList.remove('text-secondary');
+            }
+          }
+        });
+      }
+
+      if (shareBtn) {
+        shareBtn.addEventListener('click', () => {
+          if (navigator.share) {
+            navigator.share({
+              title: 'LinkQuest 悬赏委托: 赛博像素风猫咪表情包',
+              text: '850 PTS 悬赏招募！平台托管存管保障，快来接单竞标！',
+              url: window.location.href,
+            }).catch(() => {});
+          } else {
+            alert('委托链接已复制到剪贴板，快分享给好友组队吧！');
+          }
+        });
+      }
+
+      if (submitBidCta) {
+        submitBidCta.addEventListener('click', () => {
+          // Provide instant kinetic feedback
+          submitBidCta.classList.add('scale-95');
+          setTimeout(() => {
+            submitBidCta.classList.remove('scale-95');
+            alert('已打开「竞标方案提案面板」：请输入您的交付周期、报价PTS与过往案例作品！');
+          }, 150);
+        });
+      }
+
+      if (imChatBtn) {
+        imChatBtn.addEventListener('click', () => {
+          alert('正在为您接入与委托人 [Momo · 墨喵] 的加密直聊通道...');
+        });
+      }
+    })();
+  </script>
+</div></main>
+
+</body></html>

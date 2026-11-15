@@ -1,0 +1,178 @@
+<script setup lang="ts">
+import { onLoad, onShow } from '@dcloudio/uni-app'
+import { computed, ref } from 'vue'
+import HuiHuaLieBiao from '../xiaoxi/hui_hua_lie_biao.uvue'
+import TongXuLu from '../lianxiren/tong_xu_lu.uvue'
+import ShiJie from '../shijie/shijie.uvue'
+import YongHu from '../wode/yong_hu.uvue'
+import { 会话列表 as 真实会话列表 } from '../xiaoxi/会话列表'
+import { 读取当前用户 } from '../../common/wangluo'
+
+/**
+ * 首页（pages.json 第一项，应用默认打开页）。
+ *
+ * 四个标签页在这里被当作组件用 v-if 切换，它们自身都不再渲染顶栏/底栏：
+ * 整页只在这里渲染一份 ding_lan 与一份 di_lan。
+ * 「世界」是启动默认标签（设计稿 世界.html 的当前页就是 world）。
+ * 底栏固定 消息 / 联系人 / 世界 / 我的 四项。
+ *
+ * 「委托广场」与「发布委托」是 pages.json 注册的独立页面，不再作为首页 v-if 分支：
+ * 世界页的快捷矩阵首卡 / 精选「全部 320+」/ 精选卡 / 右下悬浮按钮，以及会话列表的
+ * 快捷入口，统一用 uni.navigateTo 页面级跳转打开它们；委托广场「去发布委托」、
+ * 发布成功弹窗「进入委托管理频道」同样走页面级跳转。
+ * 独立页面回首页指定标签用 reLaunch + ?tab= 参数（见下面 onLoad）。
+ *
+ * 顶栏在深色设计稿标签上始终显示，标题按标签切换，外观统一为会话列表。
+ * 底栏点击抛 change-tab，首页改 当前标签 即可；第二位是「联系人」→ 通讯录页。
+ * 子页面窗口信息在 setup 同步初始化，数据加载同时挂 onShow（返回时刷新）
+ * 与 onMounted（切标签重新挂载时刷新）。
+ *
+ * 页面级滚动：根容器不锁死 height，内容由当前标签页撑开；顶栏/底栏仍是 fixed。
+ */
+type 标签名 = '消息' | '联系人' | '世界' | '我的'
+
+const 当前标签 = ref<标签名>('世界')
+
+// setup 同步取一次，避免 onLoad 之后才赋值导致首帧顶栏 padding / 底栏偏移不对
+const 系统信息 : any = uni.getSystemInfoSync()
+const 状态栏高 = ref(系统信息.statusBarHeight ?? 0)
+const 窗口底高 = ref(系统信息.windowBottom ?? 0)
+
+// 根容器最小高度：写死兜底 1200px（超过主流手机视口），避免页面容器（浅色）在深色页底部露出来。
+// 用 screenHeight 而非 windowHeight，因为页面从屏幕顶绘制，windowHeight 不含状态栏。
+const 默认最小高度 = 1200
+const 页面最小高度 = ref(Math.max(系统信息.screenHeight ?? 0, 系统信息.windowHeight ?? 0, 默认最小高度))
+
+const 已登录 = ref(读取当前用户() != null)
+const 未读总数 = computed(() : number => {
+	if (!已登录.value) return 0
+	let 合计 = 0
+	真实会话列表.value.forEach((会话) => { 合计 += (会话.新消息条数 ?? 0) })
+	return 合计
+})
+
+// 「我的」页设计稿用不透明底 + 自己的图标，其余标签沿用会话列表外观
+const 底栏外观 = computed(() => 当前标签.value == '我的' ? '我的' : '会话列表')
+
+// 整页唯一一份顶栏：四个深色设计稿标签都显示，外观统一为会话列表。
+const 显示顶栏 = computed(() => true)
+const 顶栏外观 = computed(() : string => '会话列表')
+const 顶栏标题 = computed(() => {
+	if (当前标签.value == '我的') return 'Profile'
+	if (当前标签.value == '联系人') return '联系人与群聊 (Contacts)'
+	if (当前标签.value == '世界') return 'World'
+	return ''
+})
+
+/** 顶栏右侧三个图标按钮：深色页图标一致，点击行为按标签保留 */
+function 顶栏加好友() {
+	uni.navigateTo({ url: '/pages/tianjiahaoyou/tianjiahaoyou' })
+}
+function 顶栏搜索() {
+	uni.showToast({ title: '搜索', icon: 'none' })
+}
+function 顶栏头像() {
+	if (当前标签.value == '我的') uni.switchTab({ url: '/pages/wode/wode' })
+}
+
+function 切换标签(名称 : any) {
+	const 目标 = String(名称)
+	if (目标 != '消息' && 目标 != '联系人' && 目标 != '世界' && 目标 != '我的') return
+	当前标签.value = 目标 as 标签名
+	// v-if 会重建整块内容，等下一帧再把页面滚回顶部
+	setTimeout(() => { uni.pageScrollTo({ scrollTop: 0, duration: 0 }) }, 0)
+}
+
+// 独立页面用 reLaunch('/pages/shou_ye/shou_ye?tab=我的') 之类回首页并停在指定标签
+onLoad((参数) => {
+	const 标签 = typeof 参数['tab'] == 'string' ? 参数['tab'] as string : ''
+	if (标签 == '消息' || 标签 == '联系人' || 标签 == '世界' || 标签 == '我的') {
+		当前标签.value = 标签 as 标签名
+	}
+})
+
+onShow(() => {
+	已登录.value = 读取当前用户() != null
+	const 信息 : any = uni.getSystemInfoSync()
+	状态栏高.value = 信息.statusBarHeight ?? 0
+	窗口底高.value = 信息.windowBottom ?? 0
+})
+</script>
+
+<template>
+	<view class="sy_ye" :style="{ minHeight: 页面最小高度 + 'px' }">
+		<!-- 整页唯一一份顶栏：深色设计稿标签都显示，外观按标签切换 -->
+		<ding_lan v-if="显示顶栏" :外观="顶栏外观" :标题="顶栏标题" :状态栏高="状态栏高">
+			<view class="sy_ding_an_niu" @click="顶栏加好友">
+				<image class="sy_ding_tu_22" src="/static/hui_hua/icons/i_group_add.svg" mode="aspectFit"></image>
+			</view>
+			<view class="sy_ding_an_niu" @click="顶栏搜索">
+				<image class="sy_ding_tu_22" src="/static/hui_hua/icons/i_search.svg" mode="aspectFit"></image>
+			</view>
+			<view class="sy_ding_tou_xiang" @click="顶栏头像">
+				<image class="sy_ding_tou_xiang_32" src="/static/hui_hua/profile.jpg" mode="aspectFill"></image>
+				<view class="sy_ding_zai_xian"></view>
+			</view>
+		</ding_lan>
+
+		<HuiHuaLieBiao v-if="当前标签 == '消息'" />
+		<TongXuLu v-else-if="当前标签 == '联系人'" @change-tab="切换标签" />
+		<!-- 世界页为默认首页；委托广场 / 发布委托已改为独立页面，由世界页 navigateTo 打开 -->
+		<ShiJie v-else-if="当前标签 == '世界'" />
+		<YongHu v-else />
+
+		<!-- 整页唯一一份底栏；点击只抛 change-tab，不跳页面 -->
+		<di_lan
+			:外观="底栏外观"
+			:当前页="当前标签"
+			:未读数="未读总数"
+			:窗口底高="窗口底高"
+			@change-tab="切换标签"
+		></di_lan>
+	</view>
+</template>
+
+<style>
+.sy_ye {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	/* 页面级滚动：不锁死高度，由当前标签页内容撑开；
+	   min-height 由模板绑定（设备高与 1200 取大），固定 800px 会在高屏底部露出浅色页面容器 */
+	background-color: #0b1326;
+}
+.sy_rong_qi {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	width: 100%;
+}
+
+/* ---------- 顶栏右侧插槽（原两个深色页各自的 .hh_tu_an_niu / .yh_tu_an_niu） ----------
+   插槽内容属于首页作用域，类名必须定义在首页；顶栏本体样式仍在 components/ding_lan 里。 */
+.sy_ding_an_niu {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 44px;
+	height: 44px;
+	margin-right: 4px;
+}
+.sy_ding_tu_22 { width: 22px; height: 22px; }
+.sy_ding_tou_xiang {
+	position: relative;
+	width: 32px;
+	height: 32px;
+	margin-left: 4px;
+}
+.sy_ding_tou_xiang_32 { width: 32px; height: 32px; border-radius: 16px; }
+.sy_ding_zai_xian {
+	position: absolute;
+	right: 0;
+	bottom: 0;
+	width: 10px;
+	height: 10px;
+	border-radius: 5px;
+	background-color: #4edea3;
+}
+</style>

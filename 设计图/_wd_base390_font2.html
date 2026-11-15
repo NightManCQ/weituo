@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="zh-CN"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_tab" name="shell-type"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&amp;family=Space+Grotesk:wght@600;700&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{width:100%;margin:0;padding:0;min-height:100vh;}body{overscroll-behavior-y:none;-webkit-tap-highlight-color:transparent;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { colors: { "surface-variant": "#2d3449", "surface-dim": "#0b1326", "on-secondary-container": "#00311f", "primary-container": "#8083ff", "surface-container-high": "#222a3d", "outline": "#908fa0", "tertiary-fixed": "#ffddb8", "error-container": "#93000a", "inverse-surface": "#dae2fd", "on-surface": "#dae2fd", "on-secondary-fixed-variant": "#005236", "inverse-primary": "#494bd6", "on-primary": "#1000a9", "on-tertiary-container": "#3e2400", "on-tertiary": "#472a00", "secondary": "#4edea3", "primary-fixed-dim": "#c0c1ff", "secondary-fixed-dim": "#4edea3", "error": "#ffb4ab", "inverse-on-surface": "#283044", "surface": "#0b1326", "secondary-container": "#00a572", "on-error-container": "#ffdad6", "surface-container": "#171f33", "tertiary": "#ffb95f", "on-tertiary-fixed-variant": "#653e00", "surface-container-lowest": "#060e20", "on-primary-container": "#0d0096", "surface-bright": "#31394d", "primary-fixed": "#e1e0ff", "surface-container-low": "#131b2e", "on-error": "#690005", "on-tertiary-fixed": "#2a1700", "surface-container-highest": "#2d3449", "outline-variant": "#464554", "on-primary-fixed-variant": "#2f2ebe", "surface-tint": "#c0c1ff", "on-background": "#dae2fd", "secondary-fixed": "#6ffbbe", "on-secondary-fixed": "#002113", "background": "#0b1326", "on-surface-variant": "#c7c4d7", "tertiary-container": "#ca8100", "primary": "#c0c1ff", "tertiary-fixed-dim": "#ffb95f", "on-secondary": "#003824", "on-primary-fixed": "#07006c" }, borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, spacing: { "space-xs": "0.25rem", "gutter": "1rem", "space-sm": "0.5rem", "space-lg": "1.5rem", "gutter-desktop": "1.5rem", "margin-desktop": "2.5rem", "space-xl": "2rem", "space-md": "1rem", "margin": "1rem" }, fontFamily: { "body-sm": ["Plus Jakarta Sans"], "label-sm": ["Space Grotesk"], "headline-md": ["Plus Jakarta Sans"], "display-lg": ["Plus Jakarta Sans"], "headline-sm": ["Plus Jakarta Sans"], "label-md": ["Space Grotesk"], "headline-lg": ["Plus Jakarta Sans"], "body-lg": ["Plus Jakarta Sans"], "label-lg": ["Space Grotesk"], "body-md": ["Plus Jakarta Sans"], "display-lg-mobile": ["Plus Jakarta Sans"] }, fontSize: { "body-sm": ["12px", { "lineHeight": "16px", "letterSpacing": "0.01em", "fontWeight": "400" }], "label-sm": ["10px", { "lineHeight": "14px", "letterSpacing": "0.05em", "fontWeight": "700" }], "headline-md": ["22px", { "lineHeight": "28px", "letterSpacing": "-0.015em", "fontWeight": "700" }], "display-lg": ["40px", { "lineHeight": "48px", "letterSpacing": "-0.03em", "fontWeight": "800" }], "headline-sm": ["18px", { "lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "600" }], "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.03em", "fontWeight": "600" }], "headline-lg": ["28px", { "lineHeight": "36px", "letterSpacing": "-0.02em", "fontWeight": "700" }], "body-lg": ["16px", { "lineHeight": "24px", "letterSpacing": "0", "fontWeight": "400" }], "label-lg": ["14px", { "lineHeight": "18px", "letterSpacing": "0.02em", "fontWeight": "600" }], "body-md": ["14px", { "lineHeight": "20px", "letterSpacing": "0", "fontWeight": "400" }], "display-lg-mobile": ["30px", { "lineHeight": "36px", "letterSpacing": "-0.025em", "fontWeight": "800" }] } } } };</script><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  <style>
+html,body{width:390px!important;min-width:390px!important;max-width:390px!important;overflow-x:hidden!important;}
+header{position:absolute!important;top:0!important;left:0!important;right:auto!important;width:390px!important;}
+main{width:390px!important;}
+nav{display:none!important;}
+</style><style>
+@font-face{font-family:'Plus Jakarta Sans';font-weight:400;src:url('file:///C:/Users/cq/Documents/gong_zuo/jiaz_kz/renwu_xitong/uniappx/static/hui_hua/fonts/PlusJakartaSans-400.ttf');}
+@font-face{font-family:'Plus Jakarta Sans';font-weight:600;src:url('file:///C:/Users/cq/Documents/gong_zuo/jiaz_kz/renwu_xitong/uniappx/static/hui_hua/fonts/PlusJakartaSans-600.ttf');}
+@font-face{font-family:'Plus Jakarta Sans';font-weight:700;src:url('file:///C:/Users/cq/Documents/gong_zuo/jiaz_kz/renwu_xitong/uniappx/static/hui_hua/fonts/PlusJakartaSans-700.ttf');}
+@font-face{font-family:'Plus Jakarta Sans';font-weight:800;src:url('file:///C:/Users/cq/Documents/gong_zuo/jiaz_kz/renwu_xitong/uniappx/static/hui_hua/fonts/PlusJakartaSans-800.ttf');}
+@font-face{font-family:'Space Grotesk';font-weight:600;src:url('file:///C:/Users/cq/Documents/gong_zuo/jiaz_kz/renwu_xitong/uniappx/static/hui_hua/fonts/SpaceGrotesk-600.ttf');}
+@font-face{font-family:'Space Grotesk';font-weight:700;src:url('file:///C:/Users/cq/Documents/gong_zuo/jiaz_kz/renwu_xitong/uniappx/static/hui_hua/fonts/SpaceGrotesk-700.ttf');}
+</style></head><body class="bg-surface text-on-surface antialiased flex flex-col min-h-screen"><header class="fixed top-0 w-full z-50 pt-safe bg-surface/80 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.15)]"><div class="h-16 px-gutter flex items-center justify-between"><div class="flex items-center gap-space-sm"><h1 class="text-headline-sm font-headline-sm text-on-surface tracking-tight font-bold">My Delegations</h1></div><div class="flex items-center gap-space-sm"><button aria-label="Notifications" class="w-11 h-11 flex items-center justify-center rounded-full text-on-surface-variant hover:text-on-surface transition-colors"><span class="material-symbols-outlined text-[22px]">notifications</span></button><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="flex-1 flex flex-col relative w-full pt-16 pb-20 bg-surface"><div class="flex flex-col w-full pb-10">
+<!-- Role Segmented Switcher & Top Glow Hub -->
+<div class="px-margin pt-space-md pb-space-sm flex flex-col gap-space-md">
+<!-- Role Capsule Tabs -->
+<div class="p-1 rounded-full bg-surface-container-low flex items-center shadow-inner relative">
+<button class="flex-1 flex items-center justify-center gap-space-xs py-2 px-3 rounded-full bg-surface-bright text-on-surface shadow-md transition-all duration-300" id="tab-published" onclick="switchRole('published')">
+<span class="material-symbols-outlined text-[18px] text-primary">campaign</span>
+<span class="text-label-md font-label-md font-semibold tracking-wide">我发布的委托</span>
+<span class="px-1.5 py-0.2 rounded-full text-label-sm font-label-sm bg-primary-container/25 text-primary" id="badge-published">5</span>
+</button>
+<button class="flex-1 flex items-center justify-center gap-space-xs py-2 px-3 rounded-full text-on-surface-variant hover:text-on-surface transition-all duration-300" id="tab-accepted" onclick="switchRole('accepted')">
+<span class="material-symbols-outlined text-[18px]">handshake</span>
+<span class="text-label-md font-label-md font-semibold tracking-wide">我接到的委托</span>
+<span class="px-1.5 py-0.2 rounded-full text-label-sm font-label-sm bg-surface-variant text-on-surface-variant" id="badge-accepted">8</span>
+</button>
+</div>
+<!-- Escrow & Summary Dynamic Stats Card -->
+<div class="relative overflow-hidden rounded-xl bg-surface-container p-space-md shadow-lg">
+<div class="absolute -right-8 -top-8 w-32 h-32 rounded-full bg-primary/10 blur-2xl pointer-events-none"></div>
+<div class="absolute -left-8 -bottom-8 w-28 h-28 rounded-full bg-secondary/10 blur-xl pointer-events-none"></div>
+<div class="flex items-center justify-between relative z-10 mb-space-sm">
+<div class="flex items-center gap-2">
+<div class="w-7 h-7 rounded-lg bg-surface-container-high flex items-center justify-center">
+<span class="material-symbols-outlined text-[16px] text-secondary">token</span>
+</div>
+<span class="text-label-md font-label-md text-on-surface-variant" id="stat-main-label">平台托管中赏金</span>
+</div>
+<button class="flex items-center gap-1 px-3 py-1.5 rounded-full bg-primary-container text-on-primary-container shadow-md active:scale-95 transition-transform" id="btn-create-bounty">
+<span class="material-symbols-outlined text-[16px] font-bold">add</span>
+<span class="text-label-sm font-label-sm font-bold">发布新委托</span>
+</button>
+</div>
+<div class="flex items-baseline gap-2 relative z-10">
+<span class="text-display-lg-mobile font-display-lg-mobile tracking-tight text-on-surface font-extrabold" id="stat-main-val">1,850</span>
+<span class="text-label-md font-label-md text-secondary font-bold">PTS</span>
+</div>
+<div class="grid grid-cols-2 gap-space-sm mt-space-md pt-space-sm bg-surface-container-low/70 rounded-lg p-2.5">
+<div class="flex flex-col">
+<span class="text-label-sm font-label-sm text-on-surface-variant" id="stat-sub1-label">正在履约中</span>
+<span class="text-headline-sm font-headline-sm text-primary font-bold" id="stat-sub1-val">2 <span class="text-body-sm font-body-sm font-normal text-on-surface-variant">单</span></span>
+</div>
+<div class="flex flex-col">
+<span class="text-label-sm font-label-sm text-on-surface-variant" id="stat-sub2-label">历史履约完成</span>
+<span class="text-headline-sm font-headline-sm text-on-surface font-bold" id="stat-sub2-val">14 <span class="text-body-sm font-body-sm font-normal text-on-surface-variant">单</span></span>
+</div>
+</div>
+</div>
+<!-- Search & Quick Sort Ribbon -->
+<div class="flex items-center gap-space-sm">
+<div class="flex-1 flex items-center gap-2 px-3 py-2 rounded-xl bg-surface-container-high shadow-sm">
+<span class="material-symbols-outlined text-[18px] text-on-surface-variant">search</span>
+<input class="bg-transparent border-none outline-none text-body-sm font-body-sm text-on-surface placeholder:text-on-surface-variant/60 w-full" id="search-input" oninput="filterCards()" placeholder="搜索委托标题、协作方名称..." type="text"/>
+</div>
+<button class="flex items-center gap-1 px-3 py-2 rounded-xl bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-colors shrink-0" onclick="toggleSort()">
+<span class="material-symbols-outlined text-[16px]">swap_vert</span>
+<span class="text-label-sm font-label-sm" id="sort-label">最新更新</span>
+</button>
+</div>
+<!-- Status Tabs Scrolling Pills -->
+<div class="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
+<button class="status-tab-pill px-3 py-1.5 rounded-full text-label-sm font-label-sm bg-primary text-on-primary font-bold shadow-sm transition-all whitespace-nowrap flex items-center gap-1.5" data-status="all" onclick="setStatusFilter('all')">
+        全部 <span class="tab-count opacity-80">5</span>
+</button>
+<button class="status-tab-pill px-3 py-1.5 rounded-full text-label-sm font-label-sm bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all whitespace-nowrap flex items-center gap-1.5" data-status="pending" onclick="setStatusFilter('pending')">
+        待接单 <span class="tab-count opacity-80">2</span>
+</button>
+<button class="status-tab-pill px-3 py-1.5 rounded-full text-label-sm font-label-sm bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all whitespace-nowrap flex items-center gap-1.5" data-status="progress" onclick="setStatusFilter('progress')">
+        进行中 <span class="tab-count opacity-80">2</span>
+</button>
+<button class="status-tab-pill px-3 py-1.5 rounded-full text-label-sm font-label-sm bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all whitespace-nowrap flex items-center gap-1.5" data-status="completed" onclick="setStatusFilter('completed')">
+        已完成 <span class="tab-count opacity-80">1</span>
+</button>
+</div>
+</div>
+<!-- Cards Stack Container -->
+<div class="px-margin flex flex-col gap-space-md mt-space-xs" id="cards-container">
+<!-- Card 1: 正在进行 (表情包方案绘制中) -->
+<div class="bounty-card flex flex-col rounded-xl bg-surface-container p-space-md shadow-md gap-3" data-reward="850" data-role="published" data-status="progress" data-time="1">
+<div class="flex items-start justify-between gap-2">
+<div class="flex flex-wrap items-center gap-1.5">
+<span class="px-2 py-0.5 rounded-full text-label-sm font-label-sm bg-primary-container/20 text-primary flex items-center gap-1 font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+            履约中
+          </span>
+<span class="px-2 py-0.5 rounded-full text-label-sm font-label-sm bg-surface-container-high text-on-surface-variant">视觉设计</span>
+</div>
+<div class="flex items-baseline gap-1 bg-secondary/10 px-2.5 py-0.5 rounded-full">
+<span class="text-label-sm font-label-sm text-secondary font-bold">+850</span>
+<span class="text-label-sm font-label-sm text-secondary">PTS</span>
+</div>
+</div>
+<div class="flex flex-col gap-1">
+<h3 class="text-headline-sm font-headline-sm text-on-surface font-bold tracking-tight">设计一套赛博像素风的猫咪表情包 (6个静态表情)</h3>
+<p class="text-body-sm font-body-sm text-on-surface-variant">需输出 256x256 透明PNG与源工程。风格参考蒸汽波与赛博霓虹配色。</p>
+</div>
+<!-- Partner Snippet -->
+<div class="flex items-center justify-between p-2 rounded-lg bg-surface-container-low">
+<div class="flex items-center gap-2 min-w-0">
+<div class="w-8 h-8 rounded-full overflow-hidden shrink-0 bg-surface-bright flex items-center justify-center">
+<img class="w-full h-full object-cover" data-alt="Cyberpunk stylized illustrated digital portrait avatar of a female illustrator Maya wearing neon glasses and headphones, neon gradient ambient lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAo2oSUeRPw-ezIFDUUNwMy2VvXQWE_7AHpevZ_9RpzaWkS3dvhyIrG_YWSFtcPFzoEerUwh8W_3rv-GttlykC6uNKGoVtNYDtGbnKknFYRVl6JDWfr_zSUCT3RwIvereJw4KDnqm8DBXHs0fVA3ALv6w5eW0np3HzQ2aAkjvKMMjJUgzo1dc3DKQv3jqk7FCwu1reeLLz4dJqZc73Mzlxg0P816bL_PJbO83LVBU2C"/>
+</div>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-1.5">
+<span class="text-body-sm font-body-sm text-on-surface font-semibold truncate">林栖·Maya</span>
+<span class="px-1.5 rounded text-label-sm font-label-sm bg-secondary/15 text-secondary">信用 99.8</span>
+</div>
+<span class="text-label-sm font-label-sm text-on-surface-variant truncate">接单者 · 方案绘制中</span>
+</div>
+</div>
+<div class="text-right shrink-0">
+<span class="text-label-sm font-label-sm text-tertiary flex items-center gap-1 justify-end">
+<span class="material-symbols-outlined text-[13px]">timer</span>
+            余 1天 14时
+          </span>
+</div>
+</div>
+<!-- Milestone Micro-Tracker -->
+<div class="flex items-center gap-2 pt-1">
+<div class="flex-1 flex flex-col gap-1">
+<div class="w-full bg-surface-container-high h-1.5 rounded-full overflow-hidden">
+<div class="bg-primary h-full rounded-full w-2/3"></div>
+</div>
+<div class="flex justify-between text-label-sm font-label-sm text-on-surface-variant">
+<span>托管锁定</span>
+<span class="text-primary font-medium">线稿与试色 (进行中)</span>
+<span>成品验收</span>
+</div>
+</div>
+</div>
+<!-- Card Actions -->
+<div class="flex items-center justify-end gap-2 pt-1">
+<button class="px-3 py-1.5 rounded-lg bg-surface-container-high text-on-surface hover:bg-surface-bright text-label-sm font-label-sm transition-colors flex items-center gap-1">
+<span class="material-symbols-outlined text-[15px] text-primary">chat</span>
+          任务沟通
+        </button>
+<button class="px-3 py-1.5 rounded-lg bg-surface-container-high text-on-surface hover:bg-surface-bright text-label-sm font-label-sm transition-colors">
+          查看进度
+        </button>
+<button class="px-3 py-1.5 rounded-lg bg-primary-container text-on-primary-container text-label-sm font-label-sm font-bold shadow-sm active:scale-95 transition-transform">
+          验收交付
+        </button>
+</div>
+</div>
+<!-- Card 2: 待接单 (竞标模式中) -->
+<div class="bounty-card flex flex-col rounded-xl bg-surface-container p-space-md shadow-md gap-3" data-reward="1200" data-role="published" data-status="pending" data-time="2">
+<div class="flex items-start justify-between gap-2">
+<div class="flex flex-wrap items-center gap-1.5">
+<span class="px-2 py-0.5 rounded-full text-label-sm font-label-sm bg-tertiary-container/30 text-tertiary flex items-center gap-1 font-semibold">
+<span class="material-symbols-outlined text-[13px]">gavel</span>
+            竞标中 · 倒计6h
+          </span>
+<span class="px-2 py-0.5 rounded-full text-label-sm font-label-sm bg-error/15 text-error font-semibold">急需</span>
+</div>
+<div class="flex items-baseline gap-1 bg-secondary/10 px-2.5 py-0.5 rounded-full">
+<span class="text-label-sm font-label-sm text-secondary font-bold">+1,200</span>
+<span class="text-label-sm font-label-sm text-secondary">PTS</span>
+</div>
+</div>
+<div class="flex flex-col gap-1">
+<h3 class="text-headline-sm font-headline-sm text-on-surface font-bold tracking-tight">FastAPI 高并发微服务 WebSocket 掉线重连优化</h3>
+<p class="text-body-sm font-body-sm text-on-surface-variant">偶发心跳丢失导致连接池雪崩，需要有高并发生产环境经验的后端同学排查压测。</p>
+</div>
+<!-- Candidate Stack Peek -->
+<div class="p-2.5 rounded-lg bg-surface-container-low flex items-center justify-between">
+<div class="flex items-center gap-2">
+<div class="flex -space-x-2 overflow-hidden">
+<div class="inline-block h-6 w-6 rounded-full bg-surface-bright ring-2 ring-surface-container overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="Developer male avatar with round glasses in front of multi-monitor matrix terminal, high tech deep slate moody lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBWXVae0ggGygSfTfEJXYBsdfcmwINLIfVCowmvG2_ueHc_rKKXC70fx-fQqrrdVsnrsvHKGE1SgaaSEcj8SHv_HMHBFmSijU4x0UFjDbduSgP9EEa6dnJr6FcTL47qBhS0phWKH_S_jWALCSepbfFYX0zIZtR_xi0fbG9a4DqZKXzm6_c-vEIOqqIeiuEeRi2nhAACgAORKU94q5h_dSgfcuEGaaZh7WQoAjv8s0P9"/>
+</div>
+<div class="inline-block h-6 w-6 rounded-full bg-surface-bright ring-2 ring-surface-container overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="Male software architect avatar in dark hoodie with neon code reflection on face, cinematic tech art" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDPIogZkl3yLUTirxw6QdfDb2qg8icI-b5ztgQApy9keg6J1YMWgjFlVp2_0T9E1esMPrfdSzW4feBgY4y2ETjs83D9lhGr3OLVyjZg3JltfQg-a5qD5V806izERGM4cfBxFqp1yoffOm7AtDwpwow_Dku2tpJVgw-5vzIrsAk-oz4pjkFFVF0FYv8H6kIk8h7xlDlcWQoYOB_lyO0Z-Da6By-jAMuV8perhyaJkuzM"/>
+</div>
+<div class="inline-block h-6 w-6 rounded-full bg-primary flex items-center justify-center text-label-sm font-label-sm text-on-primary font-bold ring-2 ring-surface-container">
+              3
+            </div>
+</div>
+<span class="text-body-sm font-body-sm text-on-surface">已有 3 位专家竞标方案</span>
+</div>
+<span class="text-label-sm font-label-sm text-primary font-medium">查看方案 &gt;</span>
+</div>
+<!-- Card Actions -->
+<div class="flex items-center justify-end gap-2 pt-1">
+<button class="px-3 py-1.5 rounded-lg bg-surface-container-high text-error hover:bg-surface-bright text-label-sm font-label-sm transition-colors">
+          关闭悬赏
+        </button>
+<button class="px-3 py-1.5 rounded-lg bg-surface-container-high text-on-surface hover:bg-surface-bright text-label-sm font-label-sm transition-colors">
+          修改需求
+        </button>
+<button class="px-3 py-1.5 rounded-lg bg-primary text-on-primary text-label-sm font-label-sm font-bold shadow-md active:scale-95 transition-transform">
+          评选并签约
+        </button>
+</div>
+</div>
+<!-- Card 3: 待接单 (极速抢单模式) -->
+<div class="bounty-card flex flex-col rounded-xl bg-surface-container p-space-md shadow-md gap-3" data-reward="650" data-role="published" data-status="pending" data-time="3">
+<div class="flex items-start justify-between gap-2">
+<div class="flex flex-wrap items-center gap-1.5">
+<span class="px-2 py-0.5 rounded-full text-label-sm font-label-sm bg-secondary/15 text-secondary flex items-center gap-1 font-semibold">
+<span class="material-symbols-outlined text-[13px]">bolt</span>
+            极速抢单中
+          </span>
+<span class="px-2 py-0.5 rounded-full text-label-sm font-label-sm bg-surface-container-high text-on-surface-variant">3D建模</span>
+</div>
+<div class="flex items-baseline gap-1 bg-secondary/10 px-2.5 py-0.5 rounded-full">
+<span class="text-label-sm font-label-sm text-secondary font-bold">+650</span>
+<span class="text-label-sm font-label-sm text-secondary">PTS</span>
+</div>
+</div>
+<div class="flex flex-col gap-1">
+<h3 class="text-headline-sm font-headline-sm text-on-surface font-bold tracking-tight">Blender 3D 产品级机械手低模绑骨与渲染</h3>
+<p class="text-body-sm font-body-sm text-on-surface-variant">模型已有高模拓扑，需配合IK骨骼绑定及3套动态Pose展示渲染图。</p>
+</div>
+<div class="flex items-center justify-between text-label-sm font-label-sm text-on-surface-variant bg-surface-container-low p-2 rounded-lg">
+<span class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[15px] text-secondary">verified_user</span>
+          平台自动校验资格先到先得
+        </span>
+<span class="text-on-surface">浏览 48 次</span>
+</div>
+<div class="flex items-center justify-end gap-2 pt-1">
+<button class="px-3 py-1.5 rounded-lg bg-surface-container-high text-on-surface hover:bg-surface-bright text-label-sm font-label-sm transition-colors">
+          提升曝光
+        </button>
+<button class="px-3 py-1.5 rounded-lg bg-surface-container-high text-on-surface hover:bg-surface-bright text-label-sm font-label-sm transition-colors">
+          编辑详情
+        </button>
+</div>
+</div>
+<!-- Card 4: 进行中 - 待确认验收并打款 -->
+<div class="bounty-card flex flex-col rounded-xl bg-surface-container p-space-md shadow-md gap-3" data-reward="300" data-role="published" data-status="progress" data-time="4">
+<div class="flex items-start justify-between gap-2">
+<div class="flex flex-wrap items-center gap-1.5">
+<span class="px-2 py-0.5 rounded-full text-label-sm font-label-sm bg-tertiary-container/30 text-tertiary flex items-center gap-1 font-semibold">
+<span class="material-symbols-outlined text-[13px]">assignment_turned_in</span>
+            待你确认验收
+          </span>
+<span class="px-2 py-0.5 rounded-full text-label-sm font-label-sm bg-surface-container-high text-on-surface-variant">线下协助</span>
+</div>
+<div class="flex items-baseline gap-1 bg-secondary/10 px-2.5 py-0.5 rounded-full">
+<span class="text-label-sm font-label-sm text-secondary font-bold">+300</span>
+<span class="text-label-sm font-label-sm text-secondary">PTS</span>
+</div>
+</div>
+<div class="flex flex-col gap-1">
+<h3 class="text-headline-sm font-headline-sm text-on-surface font-bold tracking-tight">同城急送 · 静安寺商圈活动现场物料分发</h3>
+<p class="text-body-sm font-body-sm text-on-surface-variant">包含3箱宣讲手册及易拉宝物料，已准时送达并拍照上传签收单据。</p>
+</div>
+<!-- Deliverable Banner -->
+<div class="p-2.5 rounded-lg bg-surface-container-high flex items-center justify-between">
+<div class="flex items-center gap-2">
+<div class="w-7 h-7 rounded bg-secondary-container/20 text-secondary flex items-center justify-center">
+<span class="material-symbols-outlined text-[16px]">image</span>
+</div>
+<div class="flex flex-col">
+<span class="text-body-sm font-body-sm text-on-surface font-medium">已交付现场回执 (4张)</span>
+<span class="text-label-sm font-label-sm text-on-surface-variant">剩余自动释放时间: 21小时</span>
+</div>
+</div>
+<button class="text-label-sm font-label-sm text-primary font-semibold underline">查看附件</button>
+</div>
+<!-- Actions -->
+<div class="flex items-center justify-end gap-2 pt-1">
+<button class="px-3 py-1.5 rounded-lg bg-surface-container-high text-on-surface hover:bg-surface-bright text-label-sm font-label-sm transition-colors">
+          申请微调
+        </button>
+<button class="px-3 py-1.5 rounded-lg bg-secondary-container text-on-secondary-container font-bold text-label-sm font-label-sm shadow-md active:scale-95 transition-transform flex items-center gap-1">
+<span class="material-symbols-outlined text-[15px]">check_circle</span>
+          立即验收打款
+        </button>
+</div>
+</div>
+<!-- Card 5: 已完成 (白皮书校对) -->
+<div class="bounty-card flex flex-col rounded-xl bg-surface-container p-space-md shadow-md gap-3" data-reward="420" data-role="published" data-status="completed" data-time="5">
+<div class="flex items-start justify-between gap-2">
+<div class="flex flex-wrap items-center gap-1.5">
+<span class="px-2 py-0.5 rounded-full text-label-sm font-label-sm bg-surface-container-high text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px] text-secondary">check</span>
+            已结算完成
+          </span>
+<span class="px-2 py-0.5 rounded-full text-label-sm font-label-sm bg-surface-container-high text-on-surface-variant">文档协作</span>
+</div>
+<div class="flex items-baseline gap-1 bg-surface-container-high px-2.5 py-0.5 rounded-full">
+<span class="text-label-sm font-label-sm text-on-surface-variant font-bold">420</span>
+<span class="text-label-sm font-label-sm text-on-surface-variant">PTS</span>
+</div>
+</div>
+<div class="flex flex-col gap-1">
+<h3 class="text-headline-sm font-headline-sm text-on-surface/90 font-bold tracking-tight">中/英/日 技术白皮书实时协作校对</h3>
+<p class="text-body-sm font-body-sm text-on-surface-variant">全面修订跨链协议段落术语，并补全日文语法本地化标注。</p>
+</div>
+<!-- Rating Result -->
+<div class="flex items-center justify-between p-2 rounded-lg bg-surface-container-low text-label-sm font-label-sm">
+<div class="flex items-center gap-1 text-tertiary">
+<span class="material-symbols-outlined text-[15px] fill-current">star</span>
+<span class="material-symbols-outlined text-[15px] fill-current">star</span>
+<span class="material-symbols-outlined text-[15px] fill-current">star</span>
+<span class="material-symbols-outlined text-[15px] fill-current">star</span>
+<span class="material-symbols-outlined text-[15px] fill-current">star</span>
+<span class="text-on-surface font-semibold ml-1">5.0 满分履约</span>
+</div>
+<span class="text-secondary font-medium">双向信用加成 +0.2</span>
+</div>
+<!-- Card Actions -->
+<div class="flex items-center justify-end gap-2 pt-1">
+<button class="px-3 py-1.5 rounded-lg bg-surface-container-high text-on-surface hover:bg-surface-bright text-label-sm font-label-sm transition-colors">
+          查看评价账单
+        </button>
+<button class="px-3 py-1.5 rounded-lg bg-surface-bright text-primary text-label-sm font-label-sm font-semibold hover:bg-surface-container-high transition-colors">
+          再次发起委托
+        </button>
+</div>
+</div>
+<!-- Accepted Cards (Visible under '我接到的') -->
+<!-- Card 6: 我接到的 - 进行中 -->
+<div class="bounty-card hidden flex flex-col rounded-xl bg-surface-container p-space-md shadow-md gap-3" data-reward="1500" data-role="accepted" data-status="progress" data-time="1">
+<div class="flex items-start justify-between gap-2">
+<div class="flex flex-wrap items-center gap-1.5">
+<span class="px-2 py-0.5 rounded-full text-label-sm font-label-sm bg-secondary/15 text-secondary flex items-center gap-1 font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse"></span>
+            我正在执行
+          </span>
+<span class="px-2 py-0.5 rounded-full text-label-sm font-label-sm bg-surface-container-high text-on-surface-variant">前端开发</span>
+</div>
+<div class="flex items-baseline gap-1 bg-secondary/10 px-2.5 py-0.5 rounded-full">
+<span class="text-label-sm font-label-sm text-secondary font-bold">+1,500</span>
+<span class="text-label-sm font-label-sm text-secondary">PTS 待入账</span>
+</div>
+</div>
+<div class="flex flex-col gap-1">
+<h3 class="text-headline-sm font-headline-sm text-on-surface font-bold tracking-tight">Tailwind CSS 移动端金融看板图表重构</h3>
+<p class="text-body-sm font-body-sm text-on-surface-variant">已完成SVG折线与响应式网格适配，目前正在进行高帧率平滑动画调优。</p>
+</div>
+<div class="flex items-center justify-between p-2 rounded-lg bg-surface-container-low">
+<div class="flex items-center gap-2">
+<div class="w-7 h-7 rounded-full bg-surface-bright flex items-center justify-center text-primary font-bold text-label-sm font-label-sm">
+            发
+          </div>
+<div class="flex flex-col">
+<span class="text-body-sm font-body-sm text-on-surface font-medium">发单人: @NovaLabs</span>
+<span class="text-label-sm font-label-sm text-on-surface-variant">托管资金已全额入锁</span>
+</div>
+</div>
+<span class="text-label-sm font-label-sm text-tertiary">余 2天 8小时</span>
+</div>
+<div class="flex items-center justify-end gap-2 pt-1">
+<button class="px-3 py-1.5 rounded-lg bg-surface-container-high text-on-surface hover:bg-surface-bright text-label-sm font-label-sm transition-colors flex items-center gap-1">
+<span class="material-symbols-outlined text-[15px] text-primary">chat</span>
+          联系发单人
+        </button>
+<button class="px-3 py-1.5 rounded-lg bg-primary text-on-primary text-label-sm font-label-sm font-bold shadow-md active:scale-95 transition-transform flex items-center gap-1">
+<span class="material-symbols-outlined text-[15px]">upload_file</span>
+          提交阶段成果
+        </button>
+</div>
+</div>
+<!-- Card 7: 我接到的 - 竞标/审核中 -->
+<div class="bounty-card hidden flex flex-col rounded-xl bg-surface-container p-space-md shadow-md gap-3" data-reward="900" data-role="accepted" data-status="pending" data-time="2">
+<div class="flex items-start justify-between gap-2">
+<div class="flex flex-wrap items-center gap-1.5">
+<span class="px-2 py-0.5 rounded-full text-label-sm font-label-sm bg-tertiary-container/30 text-tertiary flex items-center gap-1 font-semibold">
+<span class="material-symbols-outlined text-[13px]">hourglass_top</span>
+            方案竞标评估中
+          </span>
+<span class="px-2 py-0.5 rounded-full text-label-sm font-label-sm bg-surface-container-high text-on-surface-variant">游戏UI</span>
+</div>
+<div class="flex items-baseline gap-1 bg-secondary/10 px-2.5 py-0.5 rounded-full">
+<span class="text-label-sm font-label-sm text-secondary font-bold">+900</span>
+<span class="text-label-sm font-label-sm text-secondary">PTS</span>
+</div>
+</div>
+<div class="flex flex-col gap-1">
+<h3 class="text-headline-sm font-headline-sm text-on-surface font-bold tracking-tight">二次元卡牌战斗界面 HUD 与技能动效切片</h3>
+<p class="text-body-sm font-body-sm text-on-surface-variant">你的接单提案已于昨天提交，发单方已查阅作品集，预计今日公布签约。</p>
+</div>
+<div class="flex items-center justify-end gap-2 pt-1">
+<button class="px-3 py-1.5 rounded-lg bg-surface-container-high text-on-surface hover:bg-surface-bright text-label-sm font-label-sm transition-colors">
+          修改提案补充说明
+        </button>
+<button class="px-3 py-1.5 rounded-lg bg-surface-container-high text-error hover:bg-surface-bright text-label-sm font-label-sm transition-colors">
+          撤回竞标
+        </button>
+</div>
+</div>
+<!-- Card 8: 我接到的 - 已结算 -->
+<div class="bounty-card hidden flex flex-col rounded-xl bg-surface-container p-space-md shadow-md gap-3" data-reward="2400" data-role="accepted" data-status="completed" data-time="3">
+<div class="flex items-start justify-between gap-2">
+<div class="flex flex-wrap items-center gap-1.5">
+<span class="px-2 py-0.5 rounded-full text-label-sm font-label-sm bg-secondary/15 text-secondary flex items-center gap-1 font-semibold">
+<span class="material-symbols-outlined text-[13px]">payments</span>
+            赏金已入账
+          </span>
+<span class="px-2 py-0.5 rounded-full text-label-sm font-label-sm bg-surface-container-high text-on-surface-variant">智能合约</span>
+</div>
+<div class="flex items-baseline gap-1 bg-secondary-container/20 px-2.5 py-0.5 rounded-full">
+<span class="text-label-sm font-label-sm text-secondary font-bold">+2,400</span>
+<span class="text-label-sm font-label-sm text-secondary">PTS 钱包到账</span>
+</div>
+</div>
+<div class="flex flex-col gap-1">
+<h3 class="text-headline-sm font-headline-sm text-on-surface font-bold tracking-tight">Solidity 权益分发合约编写与 Foundry 自动化测试套件</h3>
+<p class="text-body-sm font-body-sm text-on-surface-variant">测试覆盖率达到 98.7%，发单方给予全五星评价与额外鼓励金。</p>
+</div>
+<div class="flex items-center justify-end gap-2 pt-1">
+<button class="px-3 py-1.5 rounded-lg bg-surface-container-high text-on-surface hover:bg-surface-bright text-label-sm font-label-sm transition-colors">
+          查看入账流水
+        </button>
+</div>
+</div>
+<!-- Delightful Empty State (Hidden by default, shown when filters match 0) -->
+<div class="hidden flex-col items-center justify-center p-space-xl text-center rounded-xl bg-surface-container-low mt-space-md" id="empty-state">
+<div class="w-16 h-16 rounded-full bg-surface-container-high flex items-center justify-center mb-space-sm">
+<span class="material-symbols-outlined text-[32px] text-primary">inbox</span>
+</div>
+<h4 class="text-headline-sm font-headline-sm text-on-surface font-bold">没有找到相关的委托</h4>
+<p class="text-body-sm font-body-sm text-on-surface-variant mt-1 max-w-xs">当前筛选状态下暂无数据，尝试调整过滤标签或发布一份属于你的新任务吧！</p>
+<button class="mt-space-md px-4 py-2 rounded-full bg-primary-container text-on-primary-container text-label-sm font-label-sm font-bold shadow-md active:scale-95 transition-transform" onclick="resetFilters()">
+        重置筛选条件
+      </button>
+</div>
+</div>
+</div>
+<script>
+  let currentRole = 'published';
+  let currentStatus = 'all';
+  let sortDescending = true;
+
+  function switchRole(role) {
+    currentRole = role;
+    const tabPub = document.getElementById('tab-published');
+    const tabAcc = document.getElementById('tab-accepted');
+
+    const badgePub = document.getElementById('badge-published');
+    const badgeAcc = document.getElementById('badge-accepted');
+
+    const statMainLabel = document.getElementById('stat-main-label');
+    const statMainVal = document.getElementById('stat-main-val');
+    const statSub1Label = document.getElementById('stat-sub1-label');
+    const statSub1Val = document.getElementById('stat-sub1-val');
+    const statSub2Label = document.getElementById('stat-sub2-label');
+    const statSub2Val = document.getElementById('stat-sub2-val');
+    const btnAction = document.getElementById('btn-create-bounty');
+
+    if (role === 'published') {
+      tabPub.className = "flex-1 flex items-center justify-center gap-space-xs py-2 px-3 rounded-full bg-surface-bright text-on-surface shadow-md transition-all duration-300";
+      tabAcc.className = "flex-1 flex items-center justify-center gap-space-xs py-2 px-3 rounded-full text-on-surface-variant hover:text-on-surface transition-all duration-300";
+
+      badgePub.className = "px-1.5 py-0.2 rounded-full text-label-sm font-label-sm bg-primary-container/25 text-primary";
+      badgeAcc.className = "px-1.5 py-0.2 rounded-full text-label-sm font-label-sm bg-surface-variant text-on-surface-variant";
+
+      statMainLabel.textContent = "平台托管中赏金";
+      statMainVal.textContent = "1,850";
+      statSub1Label.textContent = "正在履约中";
+      statSub1Val.innerHTML = `2 <span class="text-body-sm font-body-sm font-normal text-on-surface-variant">单</span>`;
+      statSub2Label.textContent = "历史履约完成";
+      statSub2Val.innerHTML = `14 <span class="text-body-sm font-body-sm font-normal text-on-surface-variant">单</span>`;
+
+      btnAction.innerHTML = `<span class="material-symbols-outlined text-[16px] font-bold">add</span><span class="text-label-sm font-label-sm font-bold">发布新委托</span>`;
+    } else {
+      tabAcc.className = "flex-1 flex items-center justify-center gap-space-xs py-2 px-3 rounded-full bg-surface-bright text-on-surface shadow-md transition-all duration-300";
+      tabPub.className = "flex-1 flex items-center justify-center gap-space-xs py-2 px-3 rounded-full text-on-surface-variant hover:text-on-surface transition-all duration-300";
+
+      badgeAcc.className = "px-1.5 py-0.2 rounded-full text-label-sm font-label-sm bg-secondary/25 text-secondary";
+      badgePub.className = "px-1.5 py-0.2 rounded-full text-label-sm font-label-sm bg-surface-variant text-on-surface-variant";
+
+      statMainLabel.textContent = "待结算到账积分";
+      statMainVal.textContent = "2,400";
+      statSub1Label.textContent = "接单执行中";
+      statSub1Val.innerHTML = `1 <span class="text-body-sm font-body-sm font-normal text-on-surface-variant">单</span>`;
+      statSub2Label.textContent = "累计交付赚取";
+      statSub2Val.innerHTML = `18,920 <span class="text-body-sm font-body-sm font-normal text-on-surface-variant">PTS</span>`;
+
+      btnAction.innerHTML = `<span class="material-symbols-outlined text-[16px] font-bold">explore</span><span class="text-label-sm font-label-sm font-bold">去广场接单</span>`;
+    }
+
+    updatePillCounters();
+    filterCards();
+  }
+
+  function setStatusFilter(status) {
+    currentStatus = status;
+    const pills = document.querySelectorAll('.status-tab-pill');
+    pills.forEach(p => {
+      const isTarget = p.getAttribute('data-status') === status;
+      if (isTarget) {
+        p.className = "status-tab-pill px-3 py-1.5 rounded-full text-label-sm font-label-sm bg-primary text-on-primary font-bold shadow-sm transition-all whitespace-nowrap flex items-center gap-1.5";
+      } else {
+        p.className = "status-tab-pill px-3 py-1.5 rounded-full text-label-sm font-label-sm bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all whitespace-nowrap flex items-center gap-1.5";
+      }
+    });
+    filterCards();
+  }
+
+  function updatePillCounters() {
+    const cards = Array.from(document.querySelectorAll('.bounty-card'));
+    const roleCards = cards.filter(c => c.getAttribute('data-role') === currentRole);
+
+    const countAll = roleCards.length;
+    const countPending = roleCards.filter(c => c.getAttribute('data-status') === 'pending').length;
+    const countProgress = roleCards.filter(c => c.getAttribute('data-status') === 'progress').length;
+    const countCompleted = roleCards.filter(c => c.getAttribute('data-status') === 'completed').length;
+
+    const findCountSpan = (st) => document.querySelector(`.status-tab-pill[data-status="${st}"] .tab-count`);
+    if (findCountSpan('all')) findCountSpan('all').textContent = countAll;
+    if (findCountSpan('pending')) findCountSpan('pending').textContent = countPending;
+    if (findCountSpan('progress')) findCountSpan('progress').textContent = countProgress;
+    if (findCountSpan('completed')) findCountSpan('completed').textContent = countCompleted;
+  }
+
+  function filterCards() {
+    const searchVal = (document.getElementById('search-input').value || '').trim().toLowerCase();
+    const cards = document.querySelectorAll('.bounty-card');
+    let visibleCount = 0;
+
+    cards.forEach(card => {
+      const roleMatch = card.getAttribute('data-role') === currentRole;
+      const statusMatch = currentStatus === 'all' || card.getAttribute('data-status') === currentStatus;
+      const textMatch = !searchVal || card.innerText.toLowerCase().includes(searchVal);
+
+      if (roleMatch && statusMatch && textMatch) {
+        card.classList.remove('hidden');
+        card.classList.add('flex');
+        visibleCount++;
+      } else {
+        card.classList.add('hidden');
+        card.classList.remove('flex');
+      }
+    });
+
+    const empty = document.getElementById('empty-state');
+    if (visibleCount === 0) {
+      empty.classList.remove('hidden');
+      empty.classList.add('flex');
+    } else {
+      empty.classList.add('hidden');
+      empty.classList.remove('flex');
+    }
+  }
+
+  function toggleSort() {
+    sortDescending = !sortDescending;
+    const label = document.getElementById('sort-label');
+    label.textContent = sortDescending ? "最新更新" : "悬赏金额";
+
+    const container = document.getElementById('cards-container');
+    const cards = Array.from(document.querySelectorAll('.bounty-card'));
+    
+    cards.sort((a, b) => {
+      if (sortDescending) {
+        return parseInt(a.getAttribute('data-time')) - parseInt(b.getAttribute('data-time'));
+      } else {
+        return parseInt(b.getAttribute('data-reward')) - parseInt(a.getAttribute('data-reward'));
+      }
+    });
+
+    cards.forEach(card => container.appendChild(card));
+  }
+
+  function resetFilters() {
+    document.getElementById('search-input').value = '';
+    setStatusFilter('all');
+  }
+
+  // Init
+  updatePillCounters();
+</script></main><nav class="fixed bottom-0 w-full z-50 pb-safe bg-surface/85 backdrop-blur-xl shadow-[0_-4px_16px_rgba(0,0,0,0.2)]" data-active-classes="text-primary"><div class="flex justify-around items-center h-16 px-space-xs"><a class="flex flex-col items-center justify-center min-w-[56px] h-12 text-on-surface-variant hover:text-on-surface transition-colors" data-path="messages" href="#"><span class="material-symbols-outlined text-[24px]">chat</span><span class="text-label-sm font-label-sm mt-0.5">消息</span></a><a class="flex flex-col items-center justify-center min-w-[56px] h-12 text-on-surface-variant hover:text-on-surface transition-colors" data-path="contacts" href="#"><span class="material-symbols-outlined text-[24px]">group</span><span class="text-label-sm font-label-sm mt-0.5">联系人</span></a><a class="flex flex-col items-center justify-center min-w-[56px] h-12 text-on-surface-variant hover:text-on-surface transition-colors group" data-path="publish-bounty" href="#"><div class="w-11 h-11 -mt-5 rounded-full bg-gradient-to-tr from-inverse-primary to-primary-container flex items-center justify-center shadow-[0_8px_20px_-4px_rgba(128,131,255,0.45)] group-active:scale-95 transition-transform"><span class="material-symbols-outlined text-on-primary-container text-[24px]">add</span></div><span class="text-label-sm font-label-sm mt-0.5">发布</span></a><a class="flex flex-col items-center justify-center min-w-[56px] h-12 text-on-surface-variant hover:text-on-surface transition-colors" data-path="bounty-plaza" href="#"><span class="material-symbols-outlined text-[24px]">explore</span><span class="text-label-sm font-label-sm mt-0.5">委托广场</span></a><a class="flex flex-col items-center justify-center min-w-[56px] h-12 text-on-surface-variant hover:text-on-surface transition-colors" data-path="my-profile" href="#"><span class="material-symbols-outlined text-[24px]">account_circle</span><span class="text-label-sm font-label-sm mt-0.5">我的</span></a></div></nav><script>window.addEventListener('load',function(){setTimeout(function(){
+var o=[];
+document.querySelectorAll('.bounty-card').forEach(function(e,i){if(e.classList.contains('hidden'))return;
+ var h=e.querySelector('h3'),p=e.querySelector('p');
+ var a=h.getBoundingClientRect(),b=p.getBoundingClientRect();
+ o.push('CARD'+(i+1)+' h3 h='+Math.round(a.height)+' w='+Math.round(a.width)+' text='+h.innerText.replace(/\n/g,'|')+' | p h='+Math.round(b.height)+' text='+p.innerText.replace(/\n/g,'|'));
+});
+var p=document.createElement('pre');p.id='M3';p.textContent=o.join('\n');document.body.appendChild(p);},1000);});</script><script>window.addEventListener('load',function(){setTimeout(function(){
+var o=[];var es=document.querySelectorAll('.bounty-card h3');
+es.forEach(function(e,i){var c=getComputedStyle(e);o.push('D h3_'+(i+1)+' fs='+c.fontSize+' ls='+c.letterSpacing+' ff='+c.fontFamily+' fw='+c.fontWeight+' w='+Math.round(e.getBoundingClientRect().width)+' h='+Math.round(e.getBoundingClientRect().height)+' scrollW='+e.scrollWidth);});
+var p=document.createElement('pre');p.id='M4';p.textContent=o.join('\n');document.body.appendChild(p);},1000);});</script></body></html>

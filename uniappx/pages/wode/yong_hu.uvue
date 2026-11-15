@@ -1,0 +1,1421 @@
+<script setup lang="ts">
+	import { onShow } from '@dcloudio/uni-app'
+	import { computed, onMounted, ref } from 'vue'
+	import type { 积分账户, 积分流水, 用户 } from '../../common/leixing'
+	import { 发送请求, 读取当前用户, 获取API地址 } from '../../common/wangluo'
+	import { 断开实时消息 } from '../../common/实时'
+	import { 刷新联系人列表 } from '../lianxiren/联系人列表'
+	import {
+		存储API地址,
+		移除登录信息,
+	} from '../../common/本地存储'
+
+	// 本页由首页 pages/shou_ye/shou_ye 用 v-if 当组件挂载，顶栏/底栏由首页统一渲染。
+	// 组件的页面生命周期 onShow 不触发，所以初始化与消息页一样同时挂 onShow + onMounted。
+
+	// 设计稿「我的.html」的深色 UI 保留不变；用户资料、积分账户与流水的真实逻辑
+	// 由 wode.uvue（旧版个人中心）迁入：登录/注册、刷新积分、退出登录、保存 API 地址。
+	// 委托标签、社交圈、权益中心、设置列表后端暂无对应接口，仍保留设计稿示例数据。
+	// 图标为本地 SVG，头像/LOGO 复用 /static/hui_hua/，字体为本地 ttf，App 端不依赖外链。
+
+	type 委托标签 = { 键 : string; 名称 : string; 数 : string }
+	type 统计项 = { 键 : string; 数 : string; 单位 : string; 标签 : string; 绿 : boolean }
+	type 社交项 = { 键 : string; 图标 : string; 底色 : string; 数 : string; 标签 : string; 灰 : boolean }
+	type 权益项 = { 键 : string; 图标 : string; 底色 : string; 名称 : string; 价格 : string }
+	type 设置项 = { 键 : string; 图标 : string; 名称 : string; 绿点 : boolean }
+	type 用户资料项 = { 昵称 : string; 账号 : string; 编号 : string }
+	type 流水项 = { 键 : string; 说明 : string; 变动 : string; 时间 : string; 正 : boolean }
+
+	// 组件的 onLoad 不会触发，窗口信息改为 setup 期间同步取值，
+	// 保证首页 v-if 挂载时顶栏 padding 与底栏占位依旧正确。
+	const 系统信息 : any = uni.getSystemInfoSync()
+	const 状态栏高 = ref(系统信息.statusBarHeight ?? 0)
+	// di_lan 会抬到 windowBottom 之上，页面底部占位要同步加这段高度
+	const 窗口底高 = ref(系统信息.windowBottom ?? 0)
+	const 当前标签 = ref('active')
+
+	// ↓ 由 wode.uvue 迁入的真实状态
+	const 当前用户 = ref<用户 | null>(null)
+	const 积分 = ref<积分账户 | null>(null)
+	const 流水 = ref<积分流水[]>([])
+	const API地址 = ref('')
+	const 积分错误 = ref('')
+	const 显示流水 = ref(false)
+
+	// 设计稿示例数据（后端暂无对应接口，保留静态）
+	const 委托标签列表 = ref<委托标签[]>([
+		{ 键: 'active', 名称: '进行中', 数: '2' },
+		{ 键: 'review', 名称: '待验收', 数: '1' },
+		{ 键: 'history', 名称: '历史完成', 数: '65' },
+	])
+
+	// 统计列表改为下方由真实积分账户派生的 computed（可用 / 托管中 / 总积分）
+
+	const 社交列表 = ref<社交项[]>([
+		{ 键: 'a', 图标: '/static/yong_hu/icons/person_check.svg', 底色: 'rgba(78, 222, 163, 0.15)', 数: '142', 标签: '互助好友', 灰: false },
+		{ 键: 'b', 图标: '/static/yong_hu/icons/groups.svg', 底色: 'rgba(192, 193, 255, 0.15)', 数: '8', 标签: '已加入群聊', 灰: false },
+		{ 键: 'c', 图标: '/static/yong_hu/icons/block.svg', 底色: '#222a3d', 数: '0', 标签: '黑名单管理', 灰: true },
+	])
+
+	const 权益列表 = ref<权益项[]>([
+		{ 键: 'a', 图标: '/static/yong_hu/icons/percent.svg', 底色: 'rgba(255, 185, 95, 0.15)', 名称: '免抽成卡', 价格: '300 PTS' },
+		{ 键: 'b', 图标: '/static/yong_hu/icons/auto_awesome.svg', 底色: 'rgba(192, 193, 255, 0.15)', 名称: '霓虹头像框', 价格: '650 PTS' },
+		{ 键: 'c', 图标: '/static/yong_hu/icons/package_2.svg', 底色: 'rgba(78, 222, 163, 0.15)', 名称: '周边盲盒', 价格: '1,200 PTS' },
+	])
+
+	const 设置列表 = ref<设置项[]>([
+		{ 键: 'a', 图标: '/static/yong_hu/icons/notifications_active.svg', 名称: '消息通知与委托推送', 绿点: true },
+		{ 键: 'b', 图标: '/static/yong_hu/icons/lock.svg', 名称: '隐私与账号安全', 绿点: false },
+		{ 键: 'c', 图标: '/static/yong_hu/icons/help_center.svg', 名称: '帮助中心与申诉仲裁', 绿点: false },
+		{ 键: 'd', 图标: '/static/yong_hu/icons/settings.svg', 名称: '设置', 绿点: false },
+	])
+
+	// 千分位显示：时间.ts 里已说明 toLocaleString 在安卓运行时不可靠，这里手工拼。
+	function 格式化数量(值 : number) : string {
+		const 负 = 值 < 0
+		const 文本 = String(Math.floor(Math.abs(值)))
+		let 结果 = ''
+		for (let i = 0; i < 文本.length; i++) {
+			if (i > 0 && (文本.length - i) % 3 == 0) 结果 += ','
+			结果 += 文本.slice(i, i + 1)
+		}
+		return (负 ? '-' : '') + 结果
+	}
+
+	// 真实数据到设计稿字段的转换：每个函数都有显式返回类型，
+	// 避免 uni-app x 把 computed 里的对象字面量推断成 UTSJSONObject。
+	function 转换用户资料(资料 : 用户 | null) : 用户资料项 {
+		if (资料 == null) return { 昵称: '未登录', 账号: '', 编号: '' }
+		return { 昵称: 资料.昵称, 账号: '@' + 资料.登录名, 编号: '用户编号：' + 资料.用户编号 }
+	}
+
+	function 生成统计列表(账户 : 积分账户 | null) : 统计项[] {
+		if (账户 == null) return [
+			{ 键: 'a', 数: '—', 单位: 'PTS', 标签: '可用积分', 绿: false },
+			{ 键: 'b', 数: '—', 单位: 'PTS', 标签: '托管中', 绿: false },
+			{ 键: 'c', 数: '—', 单位: 'PTS', 标签: '总积分', 绿: true },
+		]
+		return [
+			{ 键: 'a', 数: 格式化数量(账户.可用积分), 单位: 'PTS', 标签: '可用积分', 绿: false },
+			{ 键: 'b', 数: 格式化数量(账户.冻结积分), 单位: 'PTS', 标签: '托管中', 绿: false },
+			{ 键: 'c', 数: 格式化数量(账户.总积分), 单位: 'PTS', 标签: '总积分', 绿: true },
+		]
+	}
+
+	function 转换流水项(记录 : 积分流水) : 流水项 {
+		const 正 = 记录.可用变动 > 0
+		return {
+			键: 记录.流水编号,
+			说明: 记录.说明 != '' ? 记录.说明 : 记录.交易类型,
+			变动: (正 ? '+' : '') + String(记录.可用变动),
+			时间: 记录.创建时间.slice(0, 10),
+			正: 正,
+		}
+	}
+
+	// 模板只消费字符串，避免在模板里对可空的 当前用户 / 积分 做属性访问。
+	const 用户资料 = computed(() : 用户资料项 => 转换用户资料(当前用户.value))
+
+	const 余额文本 = computed(() : string => {
+		const 账户 = 积分.value
+		if (账户 == null) return '—'
+		return 格式化数量(账户.可用积分)
+	})
+
+	// 设计稿的三格统计换成真实积分账户的三项，字段结构不变，模板无需改。
+	const 统计列表 = computed(() : 统计项[] => 生成统计列表(积分.value))
+
+	// 账单明细：把后端流水转成模板直接可用的字符串字段。
+	const 流水展示列表 = computed(() : 流水项[] => 流水.value.map((记录) => 转换流水项(记录)))
+
+	// v-for 中的点击不能写 @click="fn(项)"，web 端会把带循环变量的处理器
+	// 缓存成所有行共用的闭包；统一用 :data-key + dataset 回查。
+	function 切换委托标签(事件 : { currentTarget : { dataset : Record<string, unknown> } }) {
+		const 键 = 事件.currentTarget.dataset['key']
+		if (typeof 键 == 'string') 当前标签.value = 键
+	}
+
+	function 点权益(事件 : { currentTarget : { dataset : Record<string, unknown> } }) {
+		const 键 = 事件.currentTarget.dataset['key']
+		if (typeof 键 != 'string') return
+		const 项 = 权益列表.value.find(条 => 条.键 == 键)
+		uni.showToast({ title: 项 == null ? '兑换' : '兑换' + 项.名称, icon: 'none' })
+	}
+
+	function 点设置(事件 : { currentTarget : { dataset : Record<string, unknown> } }) {
+		const 键 = 事件.currentTarget.dataset['key']
+		if (typeof 键 != 'string') return
+		const 项 = 设置列表.value.find(条 => 条.键 == 键)
+		uni.showToast({ title: 项 == null ? '设置' : 项.名称, icon: 'none' })
+	}
+
+	function 提示(文字 : string) {
+		uni.showToast({ title: 文字, icon: 'none' })
+	}
+
+	function 打开页面(路径 : string) {
+		uni.navigateTo({ url: 路径 })
+	}
+
+	// ---------- 以下由 wode.uvue（旧版个人中心）迁入 ----------
+
+	// 登录 / 注册表单与请求逻辑已整体迁到 pages/deng_lu/deng_lu（设计稿登录注册页），
+	// 这里只保留「去登录」入口；从登录页返回时 onShow 会重新读取当前用户。
+	function 打开登录页() {
+		uni.navigateTo({ url: '/pages/deng_lu/deng_lu' })
+	}
+
+	async function 刷新积分() {
+		if (当前用户.value == null) return
+		积分错误.value = ''
+		try {
+			const [账户, 账目] = await Promise.all([
+				发送请求<积分账户>('/my/points'),
+				发送请求<积分流水[]>('/my/points/ledger?limit=30'),
+			])
+			积分.value = 账户
+			流水.value = 账目
+		} catch (原因) {
+			积分错误.value = 原因 instanceof Error ? 原因.message : '积分账户加载失败'
+			console.error('积分账户加载失败', 原因)
+		}
+	}
+
+	function 退出登录() {
+		移除登录信息()
+		断开实时消息()
+		当前用户.value = null
+		积分.value = null
+		流水.value = []
+		积分错误.value = ''
+		显示流水.value = false
+		// 未登录时模块内会把会话列表清空，避免退出后还看到上一个用户的会话
+		// 联系人列表同理：清空后通讯录不会残留上一个账号的好友与群聊
+		void 刷新联系人列表().catch((原因) => { console.error('退出后清空联系人失败', 原因) })
+		uni.showToast({ title: '已退出登录', icon: 'success' })
+	}
+
+	function 保存API地址() {
+		const 地址 = API地址.value.trim().replace(/\/+$/, '')
+		if (!地址.startsWith('http://') && !地址.startsWith('https://')) {
+			uni.showToast({ title: 'API 地址必须以 http:// 或 https:// 开头', icon: 'none' })
+			return
+		}
+		存储API地址(地址)
+		API地址.value = 地址
+		uni.showToast({ title: 'API 地址已保存', icon: 'success' })
+	}
+
+	// 设计稿的「账单明细」按钮：展开流水，并顺手刷新一次积分。
+	function 查看账单() {
+		显示流水.value = !显示流水.value
+		void 刷新积分()
+	}
+
+	// 旧版是页面 onShow；本页被首页当组件用 v-if 挂载，页面 onShow 不触发，
+	// 所以与消息页一致同时挂 onShow + onMounted，并用 400ms 去重避免双跑。
+	let 上次初始化 = 0
+	function 初始化页面() {
+		const 现在 = Date.now()
+		if (现在 - 上次初始化 < 400) return
+		上次初始化 = 现在
+		当前用户.value = 读取当前用户()
+		API地址.value = 获取API地址()
+		void 刷新积分()
+	}
+	onShow(初始化页面)
+	onMounted(初始化页面)
+</script>
+
+<template>
+	<view class="yh_ye">
+		<!-- 顶栏由首页 pages/shou_ye/shou_ye 统一渲染，本页不再引入 ding_lan -->
+		<!-- 页面级滚动：内容由页面自身撑开，顶栏/底栏仍为 fixed -->
+		<view class="yh_nei_rong">
+			<!-- 顶栏占位：为首页那份 fixed 顶栏留出 64px 内容高度 + 状态栏高度 -->
+			<view :style="{ height: (64 + 状态栏高) + 'px' }"></view>
+
+			<view class="yh_rong_qi">
+				<!-- 未登录：登录 / 注册表单已整体迁到 pages/deng_lu/deng_lu，这里只留入口 -->
+				<view v-if="当前用户 == null" class="yh_ka yh_deng_lu_ka">
+					<text class="yh_deng_lu_biao_ti">登录 LinkQuest</text>
+					<text class="yh_deng_lu_fu">登录后即可查看积分账户、委托进度和消息。</text>
+					<view class="yh_deng_lu_an" @click="打开登录页">
+						<text class="yh_deng_lu_an_zi">登录 / 注册</text>
+					</view>
+				</view>
+
+				<template v-else>
+				<!-- 1. 个人 Hero 卡 -->
+				<view class="yh_ka yh_hero_ka">
+					<!-- 环境光晕：用预烘焙的径向渐隐 PNG（边缘 alpha 为 0），
+					     不用 linear-gradient + 圆形裁剪，否则会在卡片里切出一条圆弧 -->
+					<image class="yh_guang_you" src="/static/guang/zi_15.png" mode="scaleToFill"></image>
+					<image class="yh_guang_zuo" src="/static/guang/lv_10.png" mode="scaleToFill"></image>
+					<view class="yh_hero_nei">
+						<view class="yh_hero_shou_hang">
+							<view class="yh_tou_xiang_qu">
+								<view class="yh_tou_80">
+									<image class="yh_tou_72" src="/static/hui_hua/profile.jpg" mode="aspectFill"></image>
+								</view>
+								<view class="yh_deng_ji">
+									<image class="yh_tu_12" src="/static/yong_hu/icons/military_tech.svg" mode="aspectFit"></image>
+									<text class="yh_deng_ji_zi">Lv.5 互助达人</text>
+								</view>
+							</view>
+							<view class="yh_kuai_jie">
+								<view class="yh_er_wei_ma" @click="提示('分享名片二维码')">
+									<image class="yh_tu_20" src="/static/yong_hu/icons/qr_code_2.svg" mode="aspectFit"></image>
+								</view>
+								<view class="yh_bian_ji" @click="提示('编辑资料')">
+									<image class="yh_tu_16" src="/static/yong_hu/icons/edit.svg" mode="aspectFit"></image>
+									<text class="yh_bian_ji_zi">编辑资料</text>
+								</view>
+							</view>
+						</view>
+
+						<view class="yh_shen_fen">
+							<view class="yh_ming_hang">
+								<text class="yh_ming">{{ 用户资料.昵称 }}</text>
+								<image class="yh_ren_zheng_tu" src="/static/yong_hu/icons/verified.svg" mode="aspectFit"></image>
+							</view>
+							<text class="yh_zhang_hao">{{ 用户资料.账号 }}</text>
+							<text class="yh_jian_jie">{{ 用户资料.编号 }}</text>
+						</view>
+
+						<view class="yh_xin_ren">
+							<view class="yh_xin_ren_zu">
+								<image class="yh_tu_16" src="/static/yong_hu/icons/verified_user.svg" mode="aspectFit"></image>
+								<text class="yh_xin_ren_zi">实名认证</text>
+							</view>
+							<view class="yh_ge_dian"></view>
+							<view class="yh_xin_ren_zu">
+								<text class="yh_xin_fen">信用分 785</text>
+								<text class="yh_xin_fu">(极好)</text>
+							</view>
+							<view class="yh_ge_dian"></view>
+							<view class="yh_xin_ren_zu">
+								<image class="yh_tu_16" src="/static/yong_hu/icons/check_circle.svg" mode="aspectFit"></image>
+								<text class="yh_xin_ren_zi">履约率 99.2%</text>
+							</view>
+						</view>
+					</view>
+				</view>
+
+				<!-- 2. 积分资产 -->
+				<view class="yh_ka">
+					<view class="yh_ka_tou yh_ka_tou_20">
+						<view class="yh_ka_tou_zuo">
+							<image class="yh_tu_20" src="/static/yong_hu/icons/monetization_on.svg" mode="aspectFit"></image>
+							<text class="yh_ka_tou_zi">可用积分资产</text>
+						</view>
+						<view class="yh_zhang_dan" @click="查看账单">
+							<text class="yh_zhang_dan_zi">账单明细</text>
+							<image class="yh_tu_16" src="/static/yong_hu/icons/chevron_right_primary.svg" mode="aspectFit"></image>
+						</view>
+					</view>
+
+					<!-- 积分接口错误提示，沿用旧版「错误不淹没内容」的做法 -->
+					<view v-if="积分错误" class="yh_cuo_wu_tiao">
+						<text class="yh_cuo_wu_zi">{{ 积分错误 }}</text>
+					</view>
+
+					<view class="yh_yu_e_hang">
+						<view class="yh_yu_e_zuo">
+							<text class="yh_yu_e_shu">{{ 余额文本 }}</text>
+							<text class="yh_yu_e_dan">PTS</text>
+						</view>
+						<view class="yh_yu_e_you">
+							<view class="yh_dui_huan" @click="提示('兑换权益')">
+								<image class="yh_tu_16" src="/static/yong_hu/icons/redeem.svg" mode="aspectFit"></image>
+								<text class="yh_dui_huan_zi">兑换权益</text>
+							</view>
+							<view class="yh_chong_zhi" @click="提示('充值')">
+								<text class="yh_chong_zhi_zi">充值</text>
+							</view>
+						</view>
+					</view>
+
+					<view class="yh_tong_ji">
+						<view v-for="项 in 统计列表" :key="项.键" class="yh_tong_ji_xiang">
+							<view class="yh_tong_ji_shu_hang">
+								<text :class="项.绿 ? 'yh_tong_ji_shu_lv' : 'yh_tong_ji_shu'">{{ 项.数 }}</text>
+								<text :class="项.绿 ? 'yh_tong_ji_dan_lv' : 'yh_tong_ji_dan'">{{ 项.单位 }}</text>
+							</view>
+							<text class="yh_tong_ji_zi">{{ 项.标签 }}</text>
+						</view>
+					</view>
+
+					<!-- 账单明细：展开后展示真实积分流水 -->
+					<view v-if="显示流水" class="yh_liu_shui">
+						<view v-if="流水展示列表.length == 0" class="yh_liu_shui_kong">
+							<text class="yh_liu_shui_kong_zi">暂无积分流水</text>
+						</view>
+						<view v-for="记录 in 流水展示列表" :key="记录.键" class="yh_liu_shui_hang">
+							<view class="yh_liu_shui_zuo">
+								<text class="yh_liu_shui_ming">{{ 记录.说明 }}</text>
+								<text class="yh_liu_shui_shi">{{ 记录.时间 }}</text>
+							</view>
+							<text :class="记录.正 ? 'yh_liu_shui_jia' : 'yh_liu_shui_jian'">{{ 记录.变动 }}</text>
+						</view>
+					</view>
+				</view>
+
+				<!-- 3. 我的委托 -->
+				<view class="yh_ka">
+					<view class="yh_ka_tou">
+						<view class="yh_ka_tou_zuo">
+							<image class="yh_tu_22" src="/static/yong_hu/icons/assignment.svg" mode="aspectFit"></image>
+							<text class="yh_ka_biao_ti">我的委托</text>
+						</view>
+						<view class="yh_biao_qian_hui" @click="打开页面('/pages/woderenwu/woderenwu')">
+							<text class="yh_biao_qian_hui_zi">全部记录</text>
+						</view>
+					</view>
+
+					<view class="yh_biao_qian_hang">
+						<view
+							v-for="项 in 委托标签列表"
+							:key="项.键"
+							:data-key="项.键"
+							class="yh_biao_qian"
+							:class="当前标签 == 项.键 ? 'yh_biao_qian_ji' : ''"
+							@click="切换委托标签"
+						>
+							<text :class="当前标签 == 项.键 ? 'yh_biao_qian_zi_ji' : 'yh_biao_qian_zi'">{{ 项.名称 }}</text>
+							<text :class="当前标签 == 项.键 ? 'yh_biao_qian_shu_ji' : 'yh_biao_qian_shu'">{{ 项.数 }}</text>
+						</view>
+					</view>
+
+					<view class="yh_huo_dong" @click="提示('查看工作台')">
+						<view class="yh_huo_dong_shou">
+							<view class="yh_jin_ji">
+								<text class="yh_jin_ji_zi">紧急接单中</text>
+							</view>
+							<text class="yh_jia_fen">+450 PTS</text>
+						</view>
+						<text class="yh_huo_dong_ming">设计 Web3 社交钱包暗黑系图标组 (8枚)</text>
+						<view class="yh_huo_dong_di">
+							<view class="yh_sheng_yu">
+								<image class="yh_tu_14" src="/static/yong_hu/icons/schedule.svg" mode="aspectFit"></image>
+								<text class="yh_sheng_yu_zi">剩余 6 小时交付</text>
+							</view>
+							<view class="yh_gong_zuo_tai">
+								<text class="yh_gong_zuo_tai_zi">查看工作台</text>
+								<image class="yh_tu_14" src="/static/yong_hu/icons/chevron_right_primary.svg" mode="aspectFit"></image>
+							</view>
+						</view>
+					</view>
+				</view>
+
+				<!-- 4. 社交圈 -->
+				<view class="yh_ka">
+					<view class="yh_ka_tou">
+						<view class="yh_ka_tou_zuo">
+							<image class="yh_tu_22" src="/static/yong_hu/icons/diversity_3.svg" mode="aspectFit"></image>
+							<text class="yh_ka_biao_ti">社交圈</text>
+						</view>
+						<view class="yh_lian_jie" @click="提示('查找同好')">
+							<text class="yh_lian_jie_zi">查找同好</text>
+							<image class="yh_tu_16" src="/static/yong_hu/icons/chevron_right_primary.svg" mode="aspectFit"></image>
+						</view>
+					</view>
+					<view class="yh_san_ge_hang">
+						<view v-for="项 in 社交列表" :key="项.键" class="yh_she_jiao_ge">
+							<view class="yh_she_jiao_yuan" :style="{ backgroundColor: 项.底色 }">
+								<image class="yh_tu_18" :src="项.图标" mode="aspectFit"></image>
+							</view>
+							<text :class="项.灰 ? 'yh_she_jiao_shu_hui' : 'yh_she_jiao_shu'">{{ 项.数 }}</text>
+							<text class="yh_she_jiao_zi">{{ 项.标签 }}</text>
+						</view>
+					</view>
+				</view>
+
+				<!-- 5. 积分权益中心 -->
+				<view class="yh_ka">
+					<view class="yh_ka_tou">
+						<view class="yh_ka_tou_zuo">
+							<image class="yh_tu_22" src="/static/yong_hu/icons/workspace_premium.svg" mode="aspectFit"></image>
+							<text class="yh_ka_biao_ti">积分权益中心</text>
+						</view>
+						<view class="yh_re_dui">
+							<text class="yh_re_dui_zi">限时热兑</text>
+						</view>
+					</view>
+					<view class="yh_san_ge_hang">
+						<view v-for="项 in 权益列表" :key="项.键" class="yh_quan_yi_ge">
+							<view class="yh_quan_yi_tu_kuang" :style="{ backgroundColor: 项.底色 }">
+								<image class="yh_tu_20" :src="项.图标" mode="aspectFit"></image>
+							</view>
+							<text class="yh_quan_yi_ming">{{ 项.名称 }}</text>
+							<text class="yh_quan_yi_jia">{{ 项.价格 }}</text>
+							<view class="yh_quan_yi_an" :data-key="项.键" @click="点权益">
+								<text class="yh_quan_yi_an_zi">兑换</text>
+							</view>
+						</view>
+					</view>
+				</view>
+
+				<!-- 6. 设置与帮助 -->
+				<view class="yh_ka yh_she_zhi_ka">
+					<view
+						v-for="项 in 设置列表"
+						:key="项.键"
+						:data-key="项.键"
+						class="yh_she_zhi_hang"
+						@click="点设置"
+					>
+						<view class="yh_she_zhi_zuo">
+							<view class="yh_she_zhi_yuan">
+								<image class="yh_tu_18" :src="项.图标" mode="aspectFit"></image>
+							</view>
+							<text class="yh_she_zhi_zi">{{ 项.名称 }}</text>
+						</view>
+						<view class="yh_she_zhi_you">
+							<view v-if="项.绿点" class="yh_lv_dian"></view>
+							<image class="yh_tu_20" src="/static/yong_hu/icons/chevron_right_variant.svg" mode="aspectFit"></image>
+						</view>
+					</view>
+				</view>
+
+				<!-- 7. 切换/退出账号 -->
+				<view class="yh_tui_chu_qu">
+					<view class="yh_tui_chu" @click="退出登录">
+						<image class="yh_tu_18" src="/static/yong_hu/icons/logout.svg" mode="aspectFit"></image>
+						<text class="yh_tui_chu_zi">切换或退出账号</text>
+					</view>
+				</view>
+				</template>
+
+				<!-- 8. API 服务地址：登录前后都可改，沿用旧版 wode.uvue -->
+				<view class="yh_ka yh_di_zhi_ka">
+					<view class="yh_ka_tou">
+						<view class="yh_ka_tou_zuo">
+							<image class="yh_tu_20" src="/static/yong_hu/icons/settings.svg" mode="aspectFit"></image>
+							<text class="yh_ka_tou_zi">API 服务地址</text>
+						</view>
+					</view>
+					<input v-model="API地址" class="yh_shu_ru" placeholder-class="yh_zhan_wei" placeholder="http://服务器地址:8080/api/v1" />
+					<view class="yh_bao_cun_an" @click="保存API地址">
+						<text class="yh_bao_cun_zi">保存地址</text>
+					</view>
+				</view>
+			</view>
+
+			<!-- 底部导航占位：58 底栏 + 16 余量 + windowBottom -->
+			<view class="yh_di_zhan_wei" :style="{ height: (74 + 窗口底高) + 'px' }"></view>
+		</view>
+
+		<!-- 底栏由首页统一渲染，本页不自带 di_lan；下方占位为 58px 底栏留白 -->
+	</view>
+</template>
+
+<style>
+	/* 设计稿字体：Plus Jakarta Sans（正文/标题）、Space Grotesk（标签）。
+	   按字重落地为本地 ttf，web 与 App 都不依赖 Google Fonts 外链。 */
+@font-face { font-family: 'PJS400'; src: url('/static/hui_hua/fonts/PlusJakartaSans-400.ttf'); }
+@font-face { font-family: 'PJS600'; src: url('/static/hui_hua/fonts/PlusJakartaSans-600.ttf'); }
+@font-face { font-family: 'PJS700'; src: url('/static/hui_hua/fonts/PlusJakartaSans-700.ttf'); }
+@font-face { font-family: 'PJS800'; src: url('/static/hui_hua/fonts/PlusJakartaSans-800.ttf'); }
+@font-face { font-family: 'SG600'; src: url('/static/hui_hua/fonts/SpaceGrotesk-600.ttf'); }
+@font-face { font-family: 'SG700'; src: url('/static/hui_hua/fonts/SpaceGrotesk-700.ttf'); }
+
+	/* uni-app x 的 text 不继承父 view 字体，每个文字类都要单独指定 */
+	.yh_ming, .yh_jian_jie, .yh_yu_e_shu, .yh_tong_ji_shu, .yh_tong_ji_shu_lv,
+	.yh_tong_ji_dan, .yh_tong_ji_dan_lv, .yh_ka_biao_ti, .yh_biao_qian_shu,
+	.yh_biao_qian_shu_ji, .yh_huo_dong_ming, .yh_sheng_yu_zi,
+	.yh_she_jiao_shu, .yh_she_jiao_shu_hui, .yh_she_zhi_zi {
+		font-family: 'PJS400';
+	}
+	.yh_deng_ji_zi, .yh_bian_ji_zi, .yh_zhang_hao, .yh_xin_ren_zi,
+	.yh_xin_fen, .yh_xin_fu, .yh_ka_tou_zi, .yh_zhang_dan_zi,
+	.yh_yu_e_dan, .yh_dui_huan_zi, .yh_chong_zhi_zi, .yh_tong_ji_zi,
+	.yh_biao_qian_hui_zi, .yh_biao_qian_zi, .yh_biao_qian_zi_ji,
+	.yh_jin_ji_zi, .yh_jia_fen, .yh_gong_zuo_tai_zi, .yh_lian_jie_zi,
+	.yh_re_dui_zi, .yh_she_jiao_zi, .yh_quan_yi_ming, .yh_quan_yi_jia,
+	.yh_quan_yi_an_zi, .yh_tui_chu_zi {
+		font-family: 'SG600';
+	}
+
+	.yh_ye {
+		display: flex;
+		flex-direction: column;
+		width: 100%;
+		/* 页面级滚动：不锁死高度，让内容撑开页面；min-height 保证内容不足一屏时背景铺满 */
+		min-height: 800px; /* uni-app x 不支持百分比，固定值近似一屏，保证背景铺满 */
+		background-color: #0b1326;
+	}
+	.yh_nei_rong {
+		display: flex;
+		flex-direction: column;
+		width: 100%;
+	}
+	.yh_rong_qi {
+		display: flex;
+		flex-direction: column;
+		padding-left: 16px;
+		padding-right: 16px;
+		padding-bottom: 24px;
+	}
+	.yh_ka {
+		padding: 16px;
+		margin-bottom: 16px;
+		border-radius: 12px;
+		background-color: #171f33;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+	}
+	/* 与 di_lan 的 58px 固定底栏配套（58 + 16 余量） */
+	.yh_di_zhan_wei { height: 74px; }
+
+	/* 顶栏右侧插槽样式已随顶栏一并移到 pages/shou_ye/shou_ye.uvue；
+	   .yh_tu_22 在下方列表图标里仍有使用，作为通用尺寸保留。 */
+	.yh_tu_22 { width: 22px; height: 22px; }
+
+	/* ---------- 通用图标尺寸 ---------- */
+	.yh_tu_12 { width: 12px; height: 12px; }
+	.yh_tu_14 { width: 14px; height: 14px; }
+	.yh_tu_16 { width: 16px; height: 16px; }
+	.yh_tu_18 { width: 18px; height: 18px; }
+	.yh_tu_20 { width: 20px; height: 20px; }
+
+	/* ---------- 1. 个人 Hero 卡 ---------- */
+	.yh_hero_ka { position: relative; overflow: hidden; }
+	.yh_guang_you {
+		position: absolute;
+		top: -48px;
+		right: -48px;
+		width: 176px;
+		height: 176px;
+	}
+	.yh_guang_zuo {
+		position: absolute;
+		bottom: -32px;
+		left: -32px;
+		width: 144px;
+		height: 144px;
+	}
+	.yh_hero_nei { position: relative; display: flex; flex-direction: column; }
+	.yh_hero_shou_hang {
+		display: flex;
+		flex-direction: row;
+		align-items: flex-start;
+		justify-content: space-between;
+		height: 80px;
+	}
+	.yh_tou_xiang_qu { position: relative; width: 80px; height: 80px; }
+	.yh_tou_80 {
+		width: 80px;
+		height: 80px;
+		padding: 4px;
+		border-radius: 40px;
+		background: linear-gradient(to top right, #c0c1ff, #4edea3);
+	}
+	.yh_tou_72 { width: 72px; height: 72px; border-radius: 36px; }
+	.yh_deng_ji {
+		position: absolute;
+		bottom: -4px;
+		left: -8px;
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: center;
+		width: 96px;
+		height: 18px;
+		border-radius: 9px;
+		background-color: #060e20;
+	}
+	.yh_deng_ji_zi {
+		margin-left: 2px;
+		color: #4edea3;
+		font-size: 10px;
+		line-height: 14px;
+		font-weight: 700;
+		letter-spacing: 0.5px;
+		white-space: nowrap;
+	}
+	.yh_kuai_jie {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		padding-top: 4px;
+	}
+	.yh_er_wei_ma {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 36px;
+		height: 36px;
+		margin-right: 4px;
+		border-radius: 18px;
+		background-color: #222a3d;
+	}
+	.yh_bian_ji {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		height: 28px;
+		padding-left: 12px;
+		padding-right: 12px;
+		border-radius: 14px;
+		background-color: #2d3449;
+	}
+	.yh_bian_ji_zi {
+		margin-left: 4px;
+		color: #dae2fd;
+		font-size: 12px;
+		line-height: 16px;
+		font-weight: 600;
+		letter-spacing: 0.36px;
+	}
+	.yh_shen_fen { display: flex; flex-direction: column; margin-top: 16px; }
+	.yh_ming_hang { display: flex; flex-direction: row; align-items: center; }
+	.yh_ming {
+		color: #dae2fd;
+		font-size: 22px;
+		line-height: 28px;
+		font-weight: 700;
+		letter-spacing: -0.55px;
+		white-space: nowrap;
+	}
+	.yh_ren_zheng_tu { width: 18px; height: 18px; margin-left: 8px; }
+	.yh_zhang_hao {
+		margin-top: 2px;
+		color: #c0c1ff;
+		font-size: 12px;
+		line-height: 16px;
+		font-weight: 600;
+		letter-spacing: 0.3px;
+	}
+	.yh_jian_jie {
+		margin-top: 6px;
+		width: 100%;
+		color: #c7c4d7;
+		font-size: 14px;
+		line-height: 23px;
+		font-weight: 400;
+		white-space: normal;
+	}
+	.yh_xin_ren {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+		height: 36px;
+		margin-top: 16px;
+		padding-left: 10px;
+		padding-right: 10px;
+		border-radius: 8px;
+		background-color: #131b2e;
+	}
+	.yh_xin_ren_zu { display: flex; flex-direction: row; align-items: center; }
+	.yh_xin_ren_zi {
+		margin-left: 4px;
+		color: #dae2fd;
+		font-size: 10px;
+		line-height: 14px;
+		font-weight: 700;
+		letter-spacing: 0.5px;
+		white-space: nowrap;
+	}
+	.yh_xin_fen {
+		color: #ffb95f;
+		font-size: 10px;
+		line-height: 14px;
+		font-weight: 700;
+		letter-spacing: 0.5px;
+		white-space: nowrap;
+	}
+	.yh_xin_fu {
+		margin-left: 4px;
+		color: #c7c4d7;
+		font-size: 10px;
+		line-height: 14px;
+		font-weight: 400;
+		letter-spacing: 0.5px;
+		white-space: nowrap;
+	}
+	.yh_ge_dian { width: 4px; height: 4px; border-radius: 2px; background-color: #464554; }
+
+	/* ---------- 卡片通用头部 ---------- */
+	.yh_ka_tou {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+		height: 24px;
+	}
+	.yh_ka_tou_20 { height: 20px; }
+	.yh_ka_tou_zuo { display: flex; flex-direction: row; align-items: center; }
+	.yh_ka_tou_zi {
+		margin-left: 6px;
+		color: #c7c4d7;
+		font-size: 12px;
+		line-height: 16px;
+		font-weight: 600;
+		letter-spacing: 0.6px;
+	}
+	.yh_ka_biao_ti {
+		margin-left: 8px;
+		color: #dae2fd;
+		font-size: 18px;
+		line-height: 24px;
+		font-weight: 600;
+		letter-spacing: -0.18px;
+	}
+
+	/* ---------- 2. 积分资产 ---------- */
+	.yh_zhang_dan { display: flex; flex-direction: row; align-items: center; }
+	.yh_zhang_dan_zi {
+		margin-right: 2px;
+		color: #c0c1ff;
+		font-size: 12px;
+		line-height: 16px;
+		font-weight: 600;
+		letter-spacing: 0.36px;
+	}
+	.yh_yu_e_hang {
+		display: flex;
+		flex-direction: row;
+		align-items: flex-end;
+		justify-content: space-between;
+		height: 36px;
+		margin-top: 12px;
+	}
+	.yh_yu_e_zuo { display: flex; flex-direction: row; align-items: flex-end; }
+	.yh_yu_e_shu {
+		color: #dae2fd;
+		font-size: 30px;
+		line-height: 36px;
+		font-weight: 800;
+		letter-spacing: -0.75px;
+	}
+	.yh_yu_e_dan {
+		margin-left: 6px;
+		color: #ffb95f;
+		font-size: 12px;
+		line-height: 16px;
+		font-weight: 700;
+		letter-spacing: 0.36px;
+	}
+	.yh_yu_e_you { display: flex; flex-direction: row; align-items: center; }
+	.yh_dui_huan {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		height: 28px;
+		padding-left: 12px;
+		padding-right: 12px;
+		margin-right: 8px;
+		border-radius: 14px;
+		background-color: #c0c1ff;
+	}
+	.yh_dui_huan_zi {
+		margin-left: 4px;
+		color: #1000a9;
+		font-size: 12px;
+		line-height: 16px;
+		font-weight: 600;
+		letter-spacing: 0.36px;
+	}
+	.yh_chong_zhi {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		height: 28px;
+		padding-left: 12px;
+		padding-right: 12px;
+		border-radius: 14px;
+		background-color: #222a3d;
+	}
+	.yh_chong_zhi_zi {
+		color: #dae2fd;
+		font-size: 12px;
+		line-height: 16px;
+		font-weight: 600;
+		letter-spacing: 0.36px;
+	}
+	.yh_tong_ji {
+		display: flex;
+		flex-direction: row;
+		height: 58px;
+		margin-top: 16px;
+		padding-top: 8px;
+		padding-left: 10px;
+		padding-right: 2px;
+		padding-bottom: 10px;
+		border-radius: 8px;
+		background-color: #131b2e;
+	}
+	.yh_tong_ji_xiang {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		flex: 1;
+		margin-right: 8px;
+	}
+	.yh_tong_ji_shu_hang { display: flex; flex-direction: row; align-items: flex-end; }
+	.yh_tong_ji_shu {
+		color: #dae2fd;
+		font-size: 18px;
+		line-height: 24px;
+		font-weight: 700;
+		letter-spacing: -0.18px;
+	}
+	.yh_tong_ji_shu_lv {
+		color: #4edea3;
+		font-size: 18px;
+		line-height: 24px;
+		font-weight: 700;
+		letter-spacing: -0.18px;
+	}
+	.yh_tong_ji_dan {
+		margin-left: 2px;
+		color: #c7c4d7;
+		font-size: 10px;
+		line-height: 14px;
+		font-weight: 400;
+		letter-spacing: 0.5px;
+	}
+	.yh_tong_ji_dan_lv {
+		margin-left: 2px;
+		color: #4edea3;
+		font-size: 10px;
+		line-height: 14px;
+		font-weight: 400;
+		letter-spacing: 0.5px;
+	}
+	.yh_tong_ji_zi {
+		margin-top: 2px;
+		color: #c7c4d7;
+		font-size: 10px;
+		line-height: 14px;
+		font-weight: 700;
+		letter-spacing: 0.5px;
+		white-space: nowrap;
+	}
+
+	/* ---------- 3. 我的委托 ---------- */
+	.yh_biao_qian_hui {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		height: 18px;
+		padding-left: 8px;
+		padding-right: 8px;
+		border-radius: 9px;
+		background-color: #222a3d;
+	}
+	.yh_biao_qian_hui_zi {
+		color: #c7c4d7;
+		font-size: 10px;
+		line-height: 14px;
+		font-weight: 700;
+		letter-spacing: 0.5px;
+	}
+	.yh_biao_qian_hang {
+		display: flex;
+		flex-direction: row;
+		height: 56px;
+		margin-top: 12px;
+		margin-right: -8px;
+	}
+	.yh_biao_qian {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		flex: 1;
+		margin-right: 8px;
+		border-radius: 8px;
+		background-color: #222a3d;
+	}
+	.yh_biao_qian_ji { background-color: #8083ff; }
+	.yh_biao_qian_zi {
+		color: #c7c4d7;
+		font-size: 10px;
+		line-height: 14px;
+		font-weight: 700;
+		letter-spacing: 0.25px;
+	}
+	.yh_biao_qian_zi_ji {
+		color: #0d0096;
+		font-size: 10px;
+		line-height: 14px;
+		font-weight: 700;
+		letter-spacing: 0.25px;
+	}
+	.yh_biao_qian_shu {
+		margin-top: 2px;
+		color: #c7c4d7;
+		font-size: 18px;
+		line-height: 24px;
+		font-weight: 800;
+		letter-spacing: -0.18px;
+	}
+	.yh_biao_qian_shu_ji {
+		margin-top: 2px;
+		color: #0d0096;
+		font-size: 18px;
+		line-height: 24px;
+		font-weight: 800;
+		letter-spacing: -0.18px;
+	}
+	.yh_huo_dong {
+		display: flex;
+		flex-direction: column;
+		margin-top: 12px;
+		padding: 12px;
+		border-radius: 8px;
+		background-color: #131b2e;
+	}
+	.yh_huo_dong_shou {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+		height: 18px;
+	}
+	.yh_jin_ji {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		height: 18px;
+		padding-left: 8px;
+		padding-right: 8px;
+		border-radius: 9px;
+		background-color: rgba(192, 193, 255, 0.15);
+	}
+	.yh_jin_ji_zi {
+		color: #c0c1ff;
+		font-size: 10px;
+		line-height: 14px;
+		font-weight: 700;
+		letter-spacing: 0.5px;
+	}
+	.yh_jia_fen {
+		color: #ffb95f;
+		font-size: 10px;
+		line-height: 14px;
+		font-weight: 700;
+		letter-spacing: 0.5px;
+	}
+	.yh_huo_dong_ming {
+		margin-top: 8px;
+		width: 100%;
+		color: #dae2fd;
+		font-size: 14px;
+		line-height: 20px;
+		font-weight: 600;
+		white-space: nowrap;
+		text-overflow: ellipsis;
+		overflow: hidden;
+	}
+	.yh_huo_dong_di {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+		height: 16px;
+		margin-top: 8px;
+	}
+	.yh_sheng_yu { display: flex; flex-direction: row; align-items: center; }
+	.yh_sheng_yu_zi {
+		margin-left: 4px;
+		color: #c7c4d7;
+		font-size: 12px;
+		line-height: 16px;
+		font-weight: 400;
+		letter-spacing: 0.12px;
+	}
+	.yh_gong_zuo_tai { display: flex; flex-direction: row; align-items: center; }
+	.yh_gong_zuo_tai_zi {
+		color: #c0c1ff;
+		font-size: 12px;
+		line-height: 16px;
+		font-weight: 600;
+		letter-spacing: 0.36px;
+	}
+
+	/* ---------- 4. 社交圈 ---------- */
+	.yh_lian_jie { display: flex; flex-direction: row; align-items: center; }
+	.yh_lian_jie_zi {
+		color: #c0c1ff;
+		font-size: 12px;
+		line-height: 16px;
+		font-weight: 600;
+		letter-spacing: 0.36px;
+	}
+	.yh_san_ge_hang {
+		display: flex;
+		flex-direction: row;
+		margin-top: 12px;
+		margin-right: -8px;
+	}
+	.yh_she_jiao_ge {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		flex: 1;
+		height: 102px;
+		margin-right: 8px;
+		padding: 12px;
+		border-radius: 8px;
+		background-color: #131b2e;
+	}
+	.yh_she_jiao_yuan {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 32px;
+		height: 32px;
+		border-radius: 16px;
+	}
+	.yh_she_jiao_shu {
+		margin-top: 4px;
+		color: #dae2fd;
+		font-size: 18px;
+		line-height: 24px;
+		font-weight: 700;
+		letter-spacing: -0.18px;
+	}
+	.yh_she_jiao_shu_hui {
+		margin-top: 4px;
+		color: #c7c4d7;
+		font-size: 18px;
+		line-height: 24px;
+		font-weight: 700;
+		letter-spacing: -0.18px;
+	}
+	.yh_she_jiao_zi {
+		margin-top: 4px;
+		color: #c7c4d7;
+		font-size: 10px;
+		line-height: 14px;
+		font-weight: 700;
+		letter-spacing: 0.5px;
+		white-space: nowrap;
+	}
+
+	/* ---------- 5. 积分权益中心 ---------- */
+	.yh_re_dui {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		height: 18px;
+		padding-left: 8px;
+		padding-right: 8px;
+		border-radius: 9px;
+		background-color: rgba(255, 185, 95, 0.1);
+	}
+	.yh_re_dui_zi {
+		color: #ffb95f;
+		font-size: 10px;
+		line-height: 14px;
+		font-weight: 700;
+		letter-spacing: 0.5px;
+	}
+	.yh_quan_yi_ge {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		flex: 1;
+		height: 128px;
+		margin-right: 8px;
+		padding: 10px;
+		border-radius: 8px;
+		background-color: #131b2e;
+	}
+	.yh_quan_yi_tu_kuang {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 36px;
+		height: 36px;
+		border-radius: 12px;
+	}
+	.yh_quan_yi_ming {
+		margin-top: 8px;
+		color: #dae2fd;
+		font-size: 12px;
+		line-height: 16px;
+		font-weight: 600;
+		letter-spacing: 0.36px;
+		white-space: nowrap;
+	}
+	.yh_quan_yi_jia {
+		margin-top: 4px;
+		color: #ffb95f;
+		font-size: 10px;
+		line-height: 14px;
+		font-weight: 700;
+		letter-spacing: 0.5px;
+		white-space: nowrap;
+	}
+	.yh_quan_yi_an {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 100%;
+		height: 22px;
+		margin-top: 8px;
+		border-radius: 4px;
+		background-color: #222a3d;
+	}
+	.yh_quan_yi_an_zi {
+		color: #dae2fd;
+		font-size: 10px;
+		line-height: 14px;
+		font-weight: 700;
+		letter-spacing: 0.5px;
+	}
+
+	/* ---------- 6. 设置与帮助 ---------- */
+	.yh_she_zhi_ka { padding: 8px; }
+	.yh_she_zhi_hang {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+		height: 56px;
+		padding-left: 12px;
+		padding-right: 12px;
+	}
+	.yh_she_zhi_zuo { display: flex; flex-direction: row; align-items: center; }
+	.yh_she_zhi_yuan {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 32px;
+		height: 32px;
+		border-radius: 16px;
+		background-color: #222a3d;
+	}
+	.yh_she_zhi_zi {
+		margin-left: 12px;
+		color: #dae2fd;
+		font-size: 14px;
+		line-height: 20px;
+		font-weight: 400;
+		white-space: nowrap;
+	}
+	.yh_she_zhi_you { display: flex; flex-direction: row; align-items: center; }
+	.yh_lv_dian {
+		width: 8px;
+		height: 8px;
+		margin-right: 4px;
+		border-radius: 4px;
+		background-color: #4edea3;
+	}
+
+	/* ---------- 7. 退出 ---------- */
+	.yh_tui_chu_qu {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: center;
+		height: 46px;
+		padding-top: 8px;
+	}
+	.yh_tui_chu {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: center;
+		height: 38px;
+		padding-left: 24px;
+		padding-right: 24px;
+		border-radius: 19px;
+		background-color: #131b2e;
+	}
+	.yh_tui_chu_zi {
+		margin-left: 6px;
+		color: #c7c4d7;
+		font-size: 12px;
+		line-height: 16px;
+		font-weight: 600;
+		letter-spacing: 0.36px;
+	}
+
+	/* 底栏样式已移入 components/di_lan/di_lan.uvue */
+
+	/* 按字重指向对应 ttf：uni-app x 的自定义字体规则不支持字重属性，Android 单字重字体也不响应数值字重 */
+	.yh_ming { font-family: 'PJS700'; }
+	.yh_yu_e_shu { font-family: 'PJS800'; }
+	.yh_tong_ji_shu { font-family: 'PJS700'; }
+	.yh_tong_ji_shu_lv { font-family: 'PJS700'; }
+	.yh_ka_biao_ti { font-family: 'PJS600'; }
+	.yh_biao_qian_shu { font-family: 'PJS800'; }
+	.yh_biao_qian_shu_ji { font-family: 'PJS800'; }
+	.yh_huo_dong_ming { font-family: 'PJS600'; }
+	.yh_she_jiao_shu { font-family: 'PJS700'; }
+	.yh_she_jiao_shu_hui { font-family: 'PJS700'; }
+	.yh_deng_ji_zi { font-family: 'SG700'; }
+	.yh_xin_ren_zi { font-family: 'SG700'; }
+	.yh_xin_fen { font-family: 'SG700'; }
+	.yh_yu_e_dan { font-family: 'SG700'; }
+	.yh_tong_ji_zi { font-family: 'SG700'; }
+	.yh_biao_qian_hui_zi { font-family: 'SG700'; }
+	.yh_biao_qian_zi { font-family: 'SG700'; }
+	.yh_biao_qian_zi_ji { font-family: 'SG700'; }
+	.yh_jin_ji_zi { font-family: 'SG700'; }
+	.yh_jia_fen { font-family: 'SG700'; }
+	.yh_re_dui_zi { font-family: 'SG700'; }
+	.yh_she_jiao_zi { font-family: 'SG700'; }
+	.yh_quan_yi_jia { font-family: 'SG700'; }
+	.yh_quan_yi_an_zi { font-family: 'SG700'; }
+
+	/* ---------- 接入旧版个人中心逻辑后的补充样式（深色主题） ---------- */
+	/* 未登录：登录 / 注册面板 */
+	.yh_deng_lu_ka {
+		display: flex;
+		flex-direction: column;
+		margin-top: 16px;
+	}
+	.yh_deng_lu_biao_ti {
+		color: #dae2fd;
+		font-size: 20px;
+		line-height: 28px;
+		font-weight: 700;
+		font-family: 'PJS700';
+	}
+	.yh_deng_lu_fu {
+		margin-top: 6px;
+		margin-bottom: 16px;
+		color: #c7c4d7;
+		font-size: 12px;
+		line-height: 18px;
+		font-family: 'PJS400';
+	}
+	.yh_shu_ru {
+		height: 42px;
+		padding-left: 12px;
+		padding-right: 12px;
+		margin-bottom: 10px;
+		border-radius: 10px;
+		background-color: #131b2e;
+		color: #dae2fd;
+		font-size: 13px;
+		font-family: 'PJS400';
+	}
+	.yh_zhan_wei {
+		color: #908fa0;
+		font-size: 13px;
+	}
+	.yh_deng_lu_an {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		height: 42px;
+		margin-top: 6px;
+		border-radius: 21px;
+		background-color: #c0c1ff;
+	}
+	.yh_deng_lu_an_jin { opacity: 0.5; }
+	.yh_deng_lu_an_zi {
+		color: #1000a9;
+		font-size: 14px;
+		font-weight: 700;
+		font-family: 'SG700';
+	}
+	.yh_qie_huan_an {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		height: 36px;
+		margin-top: 4px;
+	}
+	.yh_qie_huan_zi {
+		color: #c0c1ff;
+		font-size: 12px;
+		font-family: 'SG600';
+	}
+
+	/* API 服务地址 */
+	.yh_di_zhi_ka { display: flex; flex-direction: column; }
+	.yh_bao_cun_an {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		height: 36px;
+		border-radius: 18px;
+		background-color: #222a3d;
+	}
+	.yh_bao_cun_zi {
+		color: #dae2fd;
+		font-size: 12px;
+		font-weight: 700;
+		font-family: 'SG700';
+	}
+
+	/* 积分接口错误提示 */
+	.yh_cuo_wu_tiao {
+		margin-top: 10px;
+		padding: 8px 10px;
+		border-radius: 8px;
+		background-color: rgba(240, 45, 45, 0.16);
+	}
+	.yh_cuo_wu_zi {
+		color: #ff9a9a;
+		font-size: 11px;
+		line-height: 16px;
+		font-family: 'PJS400';
+	}
+
+	/* 账单明细流水 */
+	.yh_liu_shui {
+		margin-top: 12px;
+		padding-left: 10px;
+		padding-right: 10px;
+		border-radius: 8px;
+		background-color: #131b2e;
+	}
+	.yh_liu_shui_kong {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		height: 44px;
+	}
+	.yh_liu_shui_kong_zi {
+		color: #908fa0;
+		font-size: 12px;
+		font-family: 'PJS400';
+	}
+	.yh_liu_shui_hang {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+		height: 48px;
+		border-bottom: 1px solid #222a3d;
+	}
+	.yh_liu_shui_zuo { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+	.yh_liu_shui_ming {
+		color: #dae2fd;
+		font-size: 12px;
+		line-height: 17px;
+		font-family: 'PJS400';
+		white-space: nowrap;
+		text-overflow: ellipsis;
+		overflow: hidden;
+	}
+	.yh_liu_shui_shi {
+		color: #908fa0;
+		font-size: 10px;
+		line-height: 14px;
+		font-family: 'SG600';
+	}
+	.yh_liu_shui_jia {
+		margin-left: 8px;
+		color: #4edea3;
+		font-size: 13px;
+		font-weight: 700;
+		font-family: 'SG700';
+	}
+	.yh_liu_shui_jian {
+		margin-left: 8px;
+		color: #c7c4d7;
+		font-size: 13px;
+		font-weight: 700;
+		font-family: 'SG700';
+	}
+</style>

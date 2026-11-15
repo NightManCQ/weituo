@@ -1,0 +1,216 @@
+<script setup lang="ts">
+import { onShow } from '@dcloudio/uni-app'
+import { onMounted, ref } from 'vue'
+import type { 任务, 用户 } from '../../common/leixing'
+
+// 本页由首页用 v-if 当组件挂载，跨标签操作抛 change-tab 交给首页切标签。
+const 事件 = defineEmits(['change-tab'])
+
+import { 发送请求, 读取当前用户 } from '../../common/wangluo'
+import { 格式化时间 } from '../xiaoxi/时间'
+
+const 当前用户 = ref<用户 | null>(null)
+const 委托列表 = ref<任务[]>([])
+const 正在加载 = ref(false)
+const 错误信息 = ref('')
+
+async function 刷新() {
+  正在加载.value = true
+  错误信息.value = ''
+  try {
+    // 委托广场只要「投标中」的委托，状态由后端固定，这里不传任何筛选参数
+    委托列表.value = await 发送请求<任务[]>('/tasks')
+  } catch (原因) {
+    错误信息.value = 原因 instanceof Error ? 原因.message : '加载委托失败'
+  } finally {
+    正在加载.value = false
+  }
+}
+
+// 卡片整体点击进入委托详情。
+// 注意：web 端 v-for 里带参数的事件处理器会被缓存到渲染上下文，
+// 所有卡片可能共用第一次迭代的闭包（点哪张都开第一张）；需要时改成 data-id + dataset 取值。
+function 去发布() {
+  事件('change-tab', '发布')
+}
+
+function 打开委托(委托: any) {
+  
+  console.log("______________",委托);
+
+  const 编号 = 委托.任务编号
+  
+  if (typeof 编号 != 'string' || 编号.length == 0) return
+  uni.navigateTo({ url: `/pages/weituo/weituo?id=${encodeURIComponent(编号)}` })
+}
+
+// onShow 覆盖「从详情页返回」，onMounted 覆盖首页 v-if 切换标签时组件重新挂载
+// （组件挂载不会触发页面 onShow）。两者可能在首帧先后触发，用短节流避免重复请求。
+let 上次初始化 = 0
+function 初始化页面() {
+  const 现在 = Date.now()
+  if (现在 - 上次初始化 < 400) return
+  上次初始化 = 现在
+  当前用户.value = 读取当前用户()
+  void 刷新()
+}
+onShow(初始化页面)
+onMounted(初始化页面)
+
+// 本页在首页里是 v-if 挂载的组件，背景是首页那层深色 .sy_ye，
+// 所以自己铺浅色底，顶部让出状态栏（本页无顶栏，标题自带）、底部让出底栏（58 + 窗口底高）。
+const 首页系统信息 = uni.getSystemInfoSync()
+const 顶栏占位 = (首页系统信息.statusBarHeight ?? 0) + 12
+const 底栏占位 = (首页系统信息.windowBottom ?? 0) + 58
+</script>
+
+<template>
+  <view class="ye_mian" :style="{ paddingTop: 顶栏占位 + 'px', paddingBottom: 底栏占位 + 'px' }">
+    <view class="ye_mian_biao_ti">
+      <text class="fu_biao_ti">正在发生</text>
+      <text class="biao_ti">委托广场</text>
+      <text class="fu_zhu_wen_ben">{{ 当前用户 == null ? '发现委托，找到一起完成它的人。' : `你好，${当前用户.昵称}，看看有哪些委托适合你。` }}</text>
+    </view>
+    <view class="cao_zuo_zu">
+      <button class="zhu_yao_an_niu" @click="去发布">＋ 发布委托</button>
+      <button class="ci_yao_an_niu" @click="刷新">刷新</button>
+      <button v-if="当前用户 != null" class="ci_yao_an_niu" @click="uni.navigateTo({ url: '/pages/woderenwu/woderenwu' })">我的委托</button>
+    </view>
+    <view v-if="错误信息" class="ti_shi_xin_xi cuo_wu">{{ 错误信息 }}</view>
+    <view v-if="正在加载 && 委托列表.length == 0" class="kong_zhuang_tai">正在加载委托…</view>
+    <view v-else-if="错误信息" class="kong_zhuang_tai">
+      <text>委托加载失败</text>
+      <button class="ci_yao_an_niu" @click="刷新">重新加载</button>
+    </view>
+    <view v-else-if="委托列表.length == 0" class="kong_zhuang_tai">暂时没有投标中的委托</view>
+    <view v-for="委托 in 委托列表" :key="委托.任务编号" class="ka_pian"  @click="打开委托(委托)">
+      <view class="liang_duan_dui_qi">
+        <text class="biao_ji">{{ 委托.任务状态 }}</text>
+        <text class="fu_zhu_wen_ben">{{ 格式化时间(委托.创建时间) }}</text>
+      </view>
+      <text class="ka_pian_biao_ti">{{ 委托.标题 }}</text>
+      <text class="zheng_wen">{{ 委托.描述 || '暂无补充描述' }}</text>
+      <view class="liang_duan_dui_qi ka_pian_di_bu">
+        <text class="fu_zhu_wen_ben">{{ 委托.报酬积分 == null ? '无积分报酬' : `${委托.报酬积分} 积分报酬` }}</text>
+      </view>
+    </view>
+  </view>
+</template>
+
+<style>
+  /* 本页作为首页组件挂载，样式不再依赖 App.uvue 的全局类，自己带一份，避免浅色文字压深色底 */
+  .ye_mian {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    /* 首页根容器是深色的，这里铺满浅色底，避免露出深色 */
+    min-height: 1200px;
+    padding-left: 16px;
+    padding-right: 16px;
+    background-color: #f4f6f5;
+  }
+  .ye_mian_biao_ti {
+    display: flex;
+    flex-direction: column;
+    margin: 4px 0 16px;
+  }
+  .fu_biao_ti {
+    color: #0f9b7e;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+  }
+  .biao_ti {
+    margin-top: 2px;
+    color: #1b2427;
+    font-size: 25px;
+    font-weight: 700;
+  }
+  .cao_zuo_zu {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .zhu_yao_an_niu,
+  .ci_yao_an_niu {
+    min-height: 38px;
+    margin: 4px 8px 4px 0;
+    padding: 0 14px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .zhu_yao_an_niu {
+    border: 0;
+    background-color: #0f9b7e;
+    color: #ffffff;
+  }
+  .ci_yao_an_niu {
+    border: 1px solid #c9e0d7;
+    background-color: #ffffff;
+    color: #0f9b7e;
+  }
+  .ti_shi_xin_xi {
+    margin: 10px 0;
+    padding: 11px 13px;
+    border-radius: 10px;
+    font-size: 13px;
+  }
+  .cuo_wu {
+    background-color: #fff0ec;
+    color: #a84229;
+  }
+  .kong_zhuang_tai {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 12px;
+    color: #7c8986;
+    font-size: 13px;
+  }
+  .ka_pian {
+    display: flex;
+    flex-direction: column;
+    margin: 6px 0 10px;
+    padding: 16px;
+    border: 1px solid #e8edeb;
+    border-radius: 16px;
+    background-color: #ffffff;
+  }
+  .ka_pian_biao_ti {
+    margin: 6px 0;
+    color: #1b2427;
+    font-size: 16px;
+    font-weight: 700;
+    line-height: 24px;
+  }
+  .zheng_wen {
+    color: #34423d;
+    font-size: 14px;
+    line-height: 22px;
+  }
+  .fu_zhu_wen_ben {
+    color: #7c8986;
+    font-size: 12px;
+    line-height: 18px;
+  }
+  .biao_ji {
+    padding: 5px 9px;
+    border-radius: 14px;
+    background-color: #e7f4ef;
+    color: #0f9b7e;
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 600;
+  }
+  .liang_duan_dui_qi {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .ka_pian_di_bu {
+    margin-top: 12px;
+  }
+</style>

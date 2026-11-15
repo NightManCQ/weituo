@@ -1,0 +1,138 @@
+<script setup lang="ts">
+/**
+ * 聊天消息里的「图片组」（1 张大图 + 2 张小图）。
+ * 对应设计稿 对话.html 中 class="w-full rounded-xl overflow-hidden shadow-md bg-surface-container-low p-1.5 space-y-1.5" 那一块：
+ * 大图 192 高、右下角胶囊标签；下面两等宽小图、左下角圆角标签。
+ */
+const 属性 = defineProps({
+	大图: { type: String, default: '/static/liaotian/render_01.jpg' },
+	大图说明: { type: String, default: '4K 渲染帧 01' },
+	左图: { type: String, default: '/static/liaotian/render_02.jpg' },
+	左图说明: { type: String, default: '局部高光' },
+	右图: { type: String, default: '/static/liaotian/render_03.jpg' },
+	右图说明: { type: String, default: '白模拓扑' },
+})
+
+// 大图 0、左图 1、右图 2；页面拿序号决定预览哪一张
+const 发出 = defineEmits(['预览'])
+
+function 点图(序号 : number) {
+	发出('预览', 序号)
+}
+</script>
+
+<template>
+	<view class="tpz">
+		<view class="tpz_da_wai" @click="点图(0)">
+			<image class="tpz_tu" :src="属性.大图" mode="aspectFill"></image>
+			<view class="tpz_da_biao">
+				<image class="tpz_da_biao_tu" src="/static/liaotian/icons/hd.svg" mode="aspectFit"></image>
+				<text class="tpz_da_biao_zi">{{ 属性.大图说明 }}</text>
+			</view>
+		</view>
+
+		<view class="tpz_xiao_hang">
+			<view class="tpz_xiao_wai" @click="点图(1)">
+				<image class="tpz_tu" :src="属性.左图" mode="aspectFill"></image>
+				<view class="tpz_xiao_biao">
+					<text class="tpz_xiao_biao_zi">{{ 属性.左图说明 }}</text>
+				</view>
+			</view>
+			<view class="tpz_xiao_wai tpz_xiao_you" @click="点图(2)">
+				<image class="tpz_tu" :src="属性.右图" mode="aspectFill"></image>
+				<view class="tpz_xiao_biao">
+					<text class="tpz_xiao_biao_zi">{{ 属性.右图说明 }}</text>
+				</view>
+			</view>
+		</view>
+	</view>
+</template>
+
+<style>
+/* 组件内也有 text，uni-app x 不继承父 view 字体，字体得在组件内再注册一次 */
+@font-face { font-family: 'PJS400'; src: url('/static/hui_hua/fonts/PlusJakartaSans-400.ttf'); }
+@font-face { font-family: 'PJS500'; src: url('/static/hui_hua/fonts/PlusJakartaSans-500.ttf'); }
+@font-face { font-family: 'SG700'; src: url('/static/hui_hua/fonts/SpaceGrotesk-700.ttf'); }
+
+/* ---------- 外框：w-full rounded-xl overflow-hidden shadow-md bg-surface-container-low p-1.5 ---------- */
+.tpz {
+	width: 100%;
+	padding: 6px;
+	border-radius: 12px;
+	overflow: hidden;
+	background-color: #131b2e;
+	box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+}
+
+/* 图片统一铺满裁切，等价于 object-cover */
+.tpz_tu {
+	width: 100%;
+	height: 100%;
+}
+
+/* ---------- 大图：h-48 + 右下角胶囊 ---------- */
+.tpz_da_wai {
+	position: relative;
+	width: 100%;
+	height: 192px;
+	border-radius: 8px;
+	overflow: hidden;
+}
+.tpz_da_biao {
+	position: absolute;
+	bottom: 8px;
+	right: 8px;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	padding: 2px 8px;
+	border-radius: 999px;
+	background-color: rgba(6, 14, 32, 0.8);
+}
+.tpz_da_biao_tu { width: 12px; height: 12px; }
+.tpz_da_biao_zi {
+	margin-left: 4px;
+	font-family: 'SG600';
+	font-size: 10px;
+	line-height: 14px;
+	font-weight: 700;
+	letter-spacing: 0.5px;
+	color: #dae2fd;
+}
+
+/* ---------- 两等宽小图：h-24 + 左下角标签 ---------- */
+.tpz_xiao_hang {
+	display: flex;
+	flex-direction: row;
+	margin-top: 6px;
+}
+.tpz_xiao_wai {
+	position: relative;
+	flex: 1;
+	height: 96px;
+	border-radius: 8px;
+	overflow: hidden;
+}
+.tpz_xiao_you { margin-left: 6px; }
+.tpz_xiao_biao {
+	position: absolute;
+	bottom: 4px;
+	left: 4px;
+	padding-left: 6px;
+	padding-right: 6px;
+	border-radius: 4px;
+	background-color: rgba(6, 14, 32, 0.7);
+}
+.tpz_xiao_biao_zi {
+	font-family: 'SG600';
+	font-size: 10px;
+	line-height: 14px;
+	font-weight: 700;
+	letter-spacing: 0.5px;
+	color: #dae2fd;
+}
+
+	/* 按字重指向对应 ttf：uni-app x 的自定义字体规则不支持字重属性，Android 单字重字体也不响应数值字重 */
+	.tpz_da_biao_zi { font-family: 'SG700'; }
+	.tpz_xiao_biao_zi { font-family: 'SG700'; }
+</style>

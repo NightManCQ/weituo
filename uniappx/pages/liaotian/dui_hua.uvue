@@ -1,0 +1,1455 @@
+<script setup lang="ts">
+import { onHide, onLoad, onShow } from '@dcloudio/uni-app'
+import { computed, nextTick, ref } from 'vue'
+import type { 好友消息, 群消息, 用户 } from '../../common/leixing'
+import { 创建编号, 发送请求, 读取当前用户 } from '../../common/wangluo'
+import { 订阅实时事件 } from '../../common/实时'
+import type { 实时事件 } from '../../common/实时'
+import { 清零会话新消息条数 } from '../xiaoxi/会话列表'
+import { 格式化日期标签, 格式化消息时间, 消息日期键 } from '../xiaoxi/时间'
+import WeiTuoJinDuKa from './组件/wei_tuo_jin_du_ka.uvue'
+import WenJianKa from './组件/wen_jian_ka.uvue'
+import TuPianZu from './组件/tu_pian_zu.uvue'
+import JieSuanKa from './组件/jie_suan_ka.uvue'
+
+/**
+ * 设计稿「对话.html」的 UI + 旧版 pages/liaotian/liaotian.uvue 的全部业务逻辑。
+ *
+ * 迁移范围（与旧版行为一致）：URL 参数 hui_hua / lei_xing / ming_cheng / bian_hao、
+ * 当前用户与会话状态、历史消息拉取与去重合并、好友/群聊消息发送（含失败重试幂等）、
+ * MQTT 实时消息订阅与 task.completed 刷新、消息时间/日期分隔、滚动到最新、
+ * 输入框发送后保持聚焦、键盘高度避让、onLoad/onShow/onHide 生命周期、未读数清零、
+ * 按会话类型打开联系人/群聊/委托详情。
+ *
+ * 设计稿 UI 骨架（顶栏、会话对象条、工具面板、四个富内容卡组件）与样式保持原样：
+ * 后端消息结构没有设计稿里的头像/富文本字段，所以在最外层做一层「好友消息|群消息 -> 消息项」
+ * 字段适配，模板继续用 dh_* 类名渲染。设计稿里写死的示例消息已全部移除，消息区只渲染后端数据；
+ * 四个富内容卡（图片组/文件/结算/委托进度）由「消息.类型」决定，类型不符或数据不全时降级为文本气泡，
+ * 因此页面上不会再出现任何设计稿假数据。
+ *
+ * 富消息协议（后端只存纯文本，前端按正文识别）：
+ *   正文为 JSON 且带 type/类型 字段，例如
+ *   {"type":"image","urls":["https://...jpg"],"text":"渲染预览"}
+ *   {"type":"file","name":"a.zip","size":"42.5 MB"}
+ *   {"type":"settlement","amount":"500","title":"成果物验收与托管释放"}
+ *   {"type":"task","title":"3D 渲染","number":"QK-8821"}
+ *   type 也接受 image/file/settlement/task 英文别名；字段缺失（图片无 urls、文件无 name、
+ *   结算无 amount、委托无 title）时按普通文本渲染，避免出现空卡片。
+ *
+ * 旧版 import 的 使用全局变量.系统信息.窗口顶高 仅用于顶栏占位，本页已有 setup 同步取的
+ * 状态栏高（与 hui_hua_lie_biao 一致），不再重复引入。
+ */
+
+type 工具项 = {
+	键 : string
+	名称 : string
+	图标 : string
+}
+
+/** 渲染用消息：把好友消息与群消息统一成一套字段，模板不必感知后端结构 */
+type 消息项 = {
+	键 : string
+	正文 : string
+	发送者编号 : string
+	发送者昵称 : string
+	创建时间 : string
+	是自己 : boolean
+	/** 文本 / 图片 / 文件 / 结算 / 委托 —— 模板按此字段决定渲染哪一种卡片 */
+	类型 : string
+	图片一 : string
+	图片二 : string
+	图片三 : string
+	图片说明 : string
+	文件名 : string
+	文件大小 : string
+	金额 : string
+	卡片标题 : string
+	卡片副标题 : string
+	卡片编号 : string
+}
+
+/** 富消息解析结果：正文是纯文本时返回 null */
+type 富消息 = {
+	类型 : string
+	说明 : string
+	图片 : string[]
+	文件名 : string
+	文件大小 : string
+	金额 : string
+	标题 : string
+	副标题 : string
+	编号 : string
+}
+
+// 窗口信息在 setup 同步取一次：页面级滚动下 fixed 顶栏/输入栏都要按状态栏与 windowBottom 偏移
+const 系统信息 : any = uni.getSystemInfoSync()
+const 状态栏高 = ref(系统信息.statusBarHeight ?? 0)
+const 窗口底高 = ref(系统信息.windowBottom ?? 0)
+// 根容器最小高度：默认写死 1200px（超过主流手机视口），
+// 窗口信息取不到时首帧也有深色底，不会只剩内容那么高、把页面容器底色露出来；
+// 大屏（窗口更高）则用真实窗口高，避免底部露底
+const 默认最小高度 = 1200
+// 页面从屏幕顶开始绘制（顶栏自己让出状态栏），所以基准取 screenHeight 与 windowHeight 的较大者
+const 设备高 = Math.max(系统信息.screenHeight ?? 0, 系统信息.windowHeight ?? 0)
+const 最小高度 = ref(Math.max(设备高, 默认最小高度))
+
+// ---------- 旧版 liaotian.uvue 迁入的会话状态 ----------
+const 当前用户 = ref<用户 | null>(null)
+const 会话编号 = ref('')
+const 会话类型 = ref('')
+const 会话名称 = ref('会话')
+const 业务编号 = ref('')
+const 群消息列表 = ref<群消息[]>([])
+const 好友消息列表 = ref<好友消息[]>([])
+// 旧版叫「消息正文」，这里沿用新版输入栏已有的 v-model 名，避免改动模板绑定
+const 草稿 = ref('')
+const 键盘高度 = ref(0)
+const 好友消息待确认 = ref<{ 客户端消息编号 : string; 正文 : string } | null>(null)
+const 正在加载 = ref(false)
+const 正在发送 = ref(false)
+const 错误 = ref('')
+// 输入框焦点受控：发送动作会让原生输入框失焦，这里主动补回焦点，保证发完能继续输入
+const 输入框聚焦 = ref(false)
+let 发送后保持聚焦 = false
+let 保持聚焦计时器 = 0
+let 正在刷新 = false
+let 取消订阅 : (() => void) | null = null
+
+// ---------- 新版设计稿 UI 状态 ----------
+const 展开工具 = ref(false)
+
+// 底部展开面板的 8 个入口（图标颜色见 /static/liaotian/icons 内的 svg 填充色）
+const 工具列表 = ref<工具项[]>([
+	{ 键: '委托卡片', 名称: '委托卡片', 图标: '/static/liaotian/icons/assignment_add.svg' },
+	{ 键: '转账积分', 名称: '转账积分', 图标: '/static/liaotian/icons/paid.svg' },
+	{ 键: '发送文件', 名称: '发送文件', 图标: '/static/liaotian/icons/attach_file.svg' },
+	{ 键: '相册图片', 名称: '相册图片', 图标: '/static/liaotian/icons/image.svg' },
+	{ 键: '发送位置', 名称: '发送位置', 图标: '/static/liaotian/icons/location_on.svg' },
+	{ 键: '语音连麦', 名称: '语音连麦', 图标: '/static/liaotian/icons/phone_in_talk.svg' },
+	{ 键: '云端资产', 名称: '云端资产', 图标: '/static/liaotian/icons/cloud_sync.svg' },
+	{ 键: '委托合约', 名称: '委托合约', 图标: '/static/liaotian/icons/gavel.svg' },
+])
+
+// ---------- 富消息解析：后端消息只有纯文本，图片/文件/结算/委托按正文协议识别 ----------
+// 允许的 type 值（含英文别名）
+const 富类型别名 : Record<string, string> = {
+	text: '文本', '文本': '文本',
+	image: '图片', '图片': '图片',
+	file: '文件', '文件': '文件',
+	settlement: '结算', '结算': '结算',
+	task: '委托', '委托': '委托', '委托进度': '委托',
+}
+
+function 读文本(记录 : Record<string, unknown>, 键组 : string[]) : string {
+	for (let i = 0; i < 键组.length; i++) {
+		const 值 = 记录[键组[i]]
+		if (typeof 值 == 'string' && (值 as string).length > 0) return 值 as string
+	}
+	return ''
+}
+
+function 读图片(记录 : Record<string, unknown>, 键组 : string[]) : string[] {
+	const 结果 : string[] = []
+	for (let i = 0; i < 键组.length; i++) {
+		const 值 = 记录[键组[i]]
+		if (!Array.isArray(值)) continue
+		const 列表 = 值 as unknown[]
+		for (let j = 0; j < 列表.length; j++) {
+			const 项 = 列表[j]
+			if (typeof 项 != 'string') continue
+			const 地址 = 项 as string
+			if (地址.length == 0 || 结果.length >= 3) continue
+			结果.push(地址)
+		}
+	}
+	return 结果
+}
+
+/** 正文是 JSON 富消息时解析成结构化数据；普通文本返回 null（渲染成气泡） */
+function 解析富消息(正文 : string) : 富消息 | null {
+	const 文本 = 正文.trim()
+	if (文本.length < 5) return null
+	if (文本.slice(0, 1) != '{' || 文本.slice(文本.length - 1, 文本.length) != '}') return null
+	let 记录 : Record<string, unknown>
+	try {
+		记录 = JSON.parse(文本) as Record<string, unknown>
+	} catch (原因) {
+		return null
+	}
+	const 类型原文 = 读文本(记录, ['type', '类型', '消息类型']).toLowerCase()
+	const 类型值 = 富类型别名[类型原文]
+	if (类型值 == null) return null
+	const 类型 = 类型值 as string
+	const 结果 : 富消息 = {
+		类型: 类型,
+		说明: 读文本(记录, ['text', 'content', '正文', '说明']),
+		图片: 读图片(记录, ['urls', 'images', '图片']),
+		文件名: 读文本(记录, ['name', '文件名']),
+		文件大小: 读文本(记录, ['size', '文件大小']),
+		金额: 读文本(记录, ['amount', '金额']),
+		标题: 读文本(记录, ['title', '标题']),
+		副标题: 读文本(记录, ['subtitle', '副标题']),
+		编号: 读文本(记录, ['number', '编号']),
+	}
+	// 关键数据缺失时降级为文本气泡，避免出现空卡片
+	if (类型 == '文本' && 结果.说明 == '') return null
+	if (类型 == '图片' && 结果.图片.length == 0) return null
+	if (类型 == '文件' && 结果.文件名.length == 0) return null
+	if (类型 == '结算' && 结果.金额.length == 0) return null
+	if (类型 == '委托' && 结果.标题.length == 0) return null
+	return 结果
+}
+
+// ---------- 真实数据 -> 设计稿模板的字段适配 ----------
+function 组装消息项(
+	键 : string,
+	正文 : string,
+	发送者编号 : string,
+	发送者昵称 : string,
+	创建时间 : string,
+	我 : string,
+) : 消息项 {
+	const 富 = 解析富消息(正文)
+	if (富 == null) {
+		return {
+			键: 键, 正文: 正文, 发送者编号: 发送者编号, 发送者昵称: 发送者昵称,
+			创建时间: 创建时间, 是自己: 发送者编号 == 我, 类型: '文本',
+			图片一: '', 图片二: '', 图片三: '', 图片说明: '',
+			文件名: '', 文件大小: '', 金额: '', 卡片标题: '', 卡片副标题: '', 卡片编号: '',
+		}
+	}
+	// 图片组是「1 大 + 2 小」的三格布局，缺图时用首图补齐，避免出现空框
+	const 图一 = 富.图片.length > 0 ? 富.图片[0] : ''
+	const 图二 = 富.图片.length > 1 ? 富.图片[1] : 图一
+	const 图三 = 富.图片.length > 2 ? 富.图片[2] : 图一
+	return {
+		键: 键, 正文: 富.说明, 发送者编号: 发送者编号, 发送者昵称: 发送者昵称,
+		创建时间: 创建时间, 是自己: 发送者编号 == 我, 类型: 富.类型,
+		图片一: 图一, 图片二: 图二, 图片三: 图三,
+		图片说明: 富.说明.length > 0 ? 富.说明 : '预览图',
+		文件名: 富.文件名, 文件大小: 富.文件大小.length > 0 ? 富.文件大小 : '大小未知',
+		金额: 富.金额, 卡片标题: 富.标题, 卡片副标题: 富.副标题, 卡片编号: 富.编号,
+	}
+}
+
+function 转换好友消息项(消息 : 好友消息) : 消息项 {
+	const 我 = 当前用户.value == null ? '' : 当前用户.value.用户编号
+	const 键 = 消息.消息编号 != '' ? 消息.消息编号 : 消息.客户端消息编号
+	return 组装消息项(键, 消息.消息正文, 消息.发送者编号, 消息.发送者昵称, 消息.创建时间, 我)
+}
+
+function 转换群消息项(消息 : 群消息) : 消息项 {
+	const 我 = 当前用户.value == null ? '' : 当前用户.value.用户编号
+	const 键 = 消息.消息编号 != '' ? 消息.消息编号 : 消息.客户端消息编号
+	return 组装消息项(键, 消息.消息正文, 消息.发送者编号, 消息.发送者昵称, 消息.创建时间, 我)
+}
+
+const 消息列表 = computed<消息项[]>(() => {
+	if (会话类型.value == '好友') return 好友消息列表.value.map((消息) => 转换好友消息项(消息))
+	return 群消息列表.value.map((消息) => 转换群消息项(消息))
+})
+
+// 图片消息里的全部图片，供 previewImage 使用（去重后按会话顺序）
+const 全部图片 = computed<string[]>(() => {
+	const 结果 : string[] = []
+	const 列表 = 消息列表.value
+	for (let i = 0; i < 列表.length; i++) {
+		const 项 = 列表[i]
+		if (项.类型 != '图片') continue
+		if (项.图片一 != '' && 结果.indexOf(项.图片一) < 0) 结果.push(项.图片一)
+		if (项.图片二 != '' && 结果.indexOf(项.图片二) < 0) 结果.push(项.图片二)
+		if (项.图片三 != '' && 结果.indexOf(项.图片三) < 0) 结果.push(项.图片三)
+	}
+	return 结果
+})
+
+// 会话副标题 / 标签按会话类型给出，不再回落到设计稿文案
+const 会话副标题 = computed<string>(() => {
+	if (会话类型.value == '好友') return '好友私聊'
+	if (会话类型.value == '委托') return '委托群聊'
+	if (会话类型.value == '群聊') return '群聊消息'
+	return '在线'
+})
+const 会话标签 = computed<string>(() => {
+	if (会话类型.value == '好友') return '好友'
+	if (会话类型.value == '委托') return '委托'
+	if (会话类型.value == '群聊') return '群聊'
+	return '会话'
+})
+const 姓名首字 = computed<string>(() => 会话名称.value.slice(0, 1))
+
+/** 与旧版一致：相邻两条消息跨天（或首条）时插入日期分隔 */
+function 是否显示日期(索引 : number) : boolean {
+	const 列表 = 消息列表.value
+	return 索引 == 0 || 消息日期键(列表[索引 - 1].创建时间) != 消息日期键(列表[索引].创建时间)
+}
+
+function 提示(文字 : string) {
+	uni.showToast({ title: 文字, icon: 'none' })
+}
+
+/** 顶栏右上角「更多」 */
+function 更多() {
+	提示('更多操作')
+}
+
+function 语音通话() {
+	提示('正在发起语音通话…')
+}
+
+function 视频通话() {
+	提示('正在发起视频通话…')
+}
+
+function 切换工具面板() {
+	展开工具.value = !展开工具.value
+}
+
+// v-for 里不能写带循环变量的闭包（web 端会缓存成同一行），按项目约定走 dataset
+function 点工具(事件 : { currentTarget : { dataset : Record<string, unknown> } }) {
+	const 名称 = 事件.currentTarget.dataset['jian']
+	if (typeof 名称 != 'string') return
+	展开工具.value = false
+	提示(名称 + '：功能开发中')
+}
+
+// ---------- 旧版 liaotian.uvue 迁入：消息合并 / 实时事件 / 刷新 / 发送 ----------
+
+/** 页面级滚动下把消息区滚到底：选择器换成新版根容器 .dh_ye */
+function 滚动到最新消息() {
+	// 空会话/加载中/出错时没有可滚的消息：根容器 min-height 已铺满整屏，
+	// 此时滚到底只会把空态提示顶出视口，直接跳过
+	if (消息列表.value.length == 0) return
+	nextTick(() => {
+		uni.createSelectorQuery().select('.dh_ye').boundingClientRect((位置) => {
+			if (位置 == null) return
+			const 页面视口高度 = uni.getSystemInfoSync().windowHeight
+			const 最新消息滚动位置 = Math.max(位置.height - 页面视口高度, 0)
+			uni.pageScrollTo({ scrollTop: 最新消息滚动位置, duration: 0 })
+		}).exec()
+	})
+}
+
+function 合并好友消息(待合并消息 : 好友消息[]) : 好友消息[] {
+	const 去重消息 = 待合并消息.filter((消息, 索引, 列表) =>
+		列表.findIndex((候选) =>
+			候选.消息编号 == 消息.消息编号 ||
+			候选.客户端消息编号 == 消息.客户端消息编号,
+		) == 索引,
+	)
+	return 去重消息.sort((左侧, 右侧) => 左侧.创建时间.localeCompare(右侧.创建时间)).slice(-200)
+}
+
+function 添加好友消息(消息 : 好友消息) {
+	const 已有消息 = 好友消息列表.value.some((项目) =>
+		项目.消息编号 == 消息.消息编号 ||
+		项目.客户端消息编号 == 消息.客户端消息编号,
+	)
+	if (已有消息) return
+	好友消息列表.value = 合并好友消息([...好友消息列表.value, 消息])
+	滚动到最新消息()
+}
+
+function 处理好友实时事件(事件 : 实时事件) {
+	if (事件.事件类型 != '私聊消息已创建' || 事件.数据 == null) return
+	const 数据 = 事件.数据
+	const 联系人编号 = 数据['联系人编号'] ?? 数据['contact_user_id']
+	if (会话类型.value != '好友' || !当前用户.value || 联系人编号 != 业务编号.value) return
+	const 消息编号 = 数据['消息编号'] ?? 数据['message_id']
+	const 消息会话编号 = 数据['会话编号'] ?? 数据['conversation_id'] ?? 事件.会话编号
+	const 发送者编号 = 数据['发送者编号'] ?? 数据['sender_id']
+	const 发送者昵称 = 数据['发送者昵称'] ?? 数据['sender_nickname']
+	const 客户端消息编号 = 数据['客户端消息编号'] ?? 数据['client_message_id']
+	const 消息文本 = 数据['消息正文'] ?? 数据['content']
+	const 创建时间 = 数据['创建时间'] ?? 数据['created_at']
+	if (
+		typeof 消息编号 != 'string' ||
+		typeof 消息会话编号 != 'string' ||
+		typeof 发送者编号 != 'string' ||
+		typeof 发送者昵称 != 'string' ||
+		typeof 客户端消息编号 != 'string' ||
+		typeof 消息文本 != 'string' ||
+		typeof 创建时间 != 'string'
+	) {
+		console.error('好友私聊 MQTT 事件缺少消息字段', 事件.原始事件)
+		return
+	}
+	if (发送者编号 != 当前用户.value.用户编号 && 发送者编号 != 业务编号.value) return
+	添加好友消息({
+		消息编号,
+		会话编号: 消息会话编号,
+		发送者编号,
+		发送者昵称,
+		客户端消息编号,
+		消息正文: 消息文本,
+		创建时间,
+	})
+}
+
+function 处理群聊实时事件(事件 : 实时事件) {
+	if (事件.事件类型 == 'task.completed' && 事件.任务编号 == 业务编号.value) {
+		void 刷新()
+		return
+	}
+	if (事件.事件类型 != '群聊消息已创建' || 事件.数据 == null) return
+	const 数据 = 事件.数据
+	const 群编号 = 数据['群组编号'] ?? 事件.原始事件['群组编号']
+	if (群编号 != 会话编号.value) return
+	const 消息编号 = 数据['消息编号']
+	const 群内序号 = 数据['群内序号']
+	const 发送者编号 = 数据['发送者编号']
+	const 发送者昵称 = 数据['发送者昵称']
+	const 客户端消息编号 = 数据['客户端消息编号']
+	const 正文 = 数据['消息正文']
+	const 创建时间 = 数据['创建时间']
+	if (
+		typeof 消息编号 != 'string' ||
+		typeof 群内序号 != 'number' ||
+		typeof 发送者编号 != 'string' ||
+		typeof 发送者昵称 != 'string' ||
+		typeof 客户端消息编号 != 'string' ||
+		typeof 正文 != 'string' ||
+		typeof 创建时间 != 'string'
+	) {
+		console.error('群聊 MQTT 事件缺少消息字段', 事件.原始事件)
+		return
+	}
+	if (群消息列表.value.some((消息) =>
+		消息.消息编号 == 消息编号 ||
+		消息.客户端消息编号 == 客户端消息编号,
+	)) return
+	群消息列表.value = [...群消息列表.value, {
+		消息编号,
+		群组编号: 会话编号.value,
+		群内序号,
+		发送者编号,
+		发送者昵称,
+		客户端消息编号,
+		消息正文: 正文,
+		创建时间,
+	}].sort((左侧, 右侧) => 左侧.群内序号 - 右侧.群内序号).slice(-100)
+	滚动到最新消息()
+}
+
+async function 刷新() {
+	if (当前用户.value == null) {
+		群消息列表.value = []
+		好友消息列表.value = []
+		错误.value = '登录后才能查看和发送消息'
+		return
+	}
+	if (正在刷新) return
+	正在刷新 = true
+	正在加载.value = true
+	错误.value = ''
+	try {
+		if (会话类型.value == '群聊' || 会话类型.value == '委托') {
+			const 消息 = await 发送请求<群消息[]>(`/groups/${encodeURIComponent(会话编号.value)}/messages?limit=100`)
+			const 合并消息 = [...群消息列表.value, ...消息]
+			群消息列表.value = 合并消息.filter((项目, 索引, 列表) =>
+				列表.findIndex((候选) =>
+					候选.消息编号 == 项目.消息编号 ||
+					候选.客户端消息编号 == 项目.客户端消息编号,
+				) == 索引,
+			).sort((左侧, 右侧) => 左侧.群内序号 - 右侧.群内序号).slice(-100)
+			滚动到最新消息()
+		} else if (会话类型.value == '好友') {
+			// 接口是 /my/friends/{friend_id}/messages，参数是好友的用户编号（业务编号），
+			// 不是私聊会话编号：从会话列表进来时两者不同，用会话编号会 404 → 空消息页
+			const 好友编号 = 业务编号.value != '' ? 业务编号.value : 会话编号.value
+			const 消息 = await 发送请求<好友消息[]>(`/my/friends/${encodeURIComponent(好友编号)}/messages?limit=200`)
+			好友消息列表.value = 合并好友消息([...好友消息列表.value, ...消息])
+			滚动到最新消息()
+		}
+	} catch (原因) {
+		错误.value = 原因 instanceof Error ? 原因.message : '加载聊天失败'
+	} finally {
+		正在刷新 = false
+		正在加载.value = false
+	}
+}
+
+/** 旧版是纯 toast，这里改为真实发送：好友消息失败后保留 client_message_id 保证重发幂等 */
+async function 发送() {
+	const 正文 = 草稿.value.trim()
+	if (!正文) {
+		提示('请输入消息内容')
+		return
+	}
+	if (当前用户.value == null) {
+		提示('登录后才能发送消息')
+		return
+	}
+	if (正在发送.value) return
+	const 待发送消息 : { 客户端消息编号 : string; 正文 : string } | null = 会话类型.value == '好友'
+		? (好友消息待确认.value ?? { 客户端消息编号: 创建编号(), 正文 })
+		: null
+	正在发送.value = true
+	错误.value = ''
+	// 点击发送按钮 / 键盘发送键都会让输入框失焦，先补回焦点保证可以接着输入
+	恢复输入状态()
+	try {
+		if (待发送消息 != null) {
+			const 消息 = await 发送请求<好友消息>(`/my/friends/${encodeURIComponent(业务编号.value)}/messages`, {
+				method: 'POST',
+				data: {
+					client_message_id: 待发送消息.客户端消息编号,
+					content: 待发送消息.正文,
+				} as UTSJSONObject,
+			})
+			添加好友消息(消息)
+			好友消息待确认.value = null
+		} else if (会话编号.value) {
+			const 消息 = await 发送请求<群消息>(`/groups/${encodeURIComponent(会话编号.value)}/messages`, {
+				method: 'POST',
+				data: { client_message_id: 创建编号(), content: 正文 } as UTSJSONObject,
+			})
+			if (!群消息列表.value.some((项目) => 项目.消息编号 == 消息.消息编号)) 群消息列表.value.push(消息)
+		}
+		草稿.value = ''
+		滚动到最新消息()
+		恢复输入状态()
+	} catch (原因) {
+		错误.value = 原因 instanceof Error ? 原因.message : '发送消息失败'
+		// 仅真正失败才进入「待重试」态：发送中不置位，否则输入框被 disabled 会收起键盘
+		if (待发送消息 != null) 好友消息待确认.value = 待发送消息
+	} finally {
+		正在发送.value = false
+	}
+}
+
+/** 旧版「返回」由 ding_lan 的 显示返回 内建逻辑覆盖（多一层页面栈判断），这里迁联系人详情入口 */
+function 打开联系人详情() {
+	if (会话类型.value == '委托') {
+		uni.navigateTo({ url: `/pages/weituo/weituo?id=${encodeURIComponent(业务编号.value)}` })
+		return
+	}
+	if (会话类型.value == '群聊') {
+		uni.navigateTo({ url: `/pages/lianxiren/qun_liao?groupId=${encodeURIComponent(业务编号.value)}` })
+		return
+	}
+	if (会话类型.value != '好友') return
+	uni.navigateTo({ url: `/pages/lianxiren/hao_you?userId=${encodeURIComponent(业务编号.value)}` })
+}
+
+function 去登录() {
+	uni.switchTab({ url: '/pages/wode/wode' })
+}
+
+function 处理聚焦() {
+	输入框聚焦.value = true
+}
+
+function 处理失焦() {
+	输入框聚焦.value = false
+	// 因发送而失焦：立刻补回焦点（同步设置，避免键盘收起动画）
+	if (发送后保持聚焦) 输入框聚焦.value = true
+}
+
+/** 发送后恢复输入状态：已在输入中则不动（避免键盘闪一下），已失焦才重新聚焦 */
+function 恢复输入状态() {
+	if (当前用户.value == null) return
+	发送后保持聚焦 = true
+	if (保持聚焦计时器 != 0) clearTimeout(保持聚焦计时器)
+	nextTick(() => {
+		if (!输入框聚焦.value) 输入框聚焦.value = true
+	})
+	// 失焦事件可能晚于本次调用到达，保留一小段窗口兜底
+	保持聚焦计时器 = setTimeout(() => {
+		保持聚焦计时器 = 0
+		发送后保持聚焦 = false
+		if (当前用户.value != null && !输入框聚焦.value) 输入框聚焦.value = true
+	}, 300)
+}
+
+/** 取消发送后的聚焦兜底：离开页面时调用，避免在别的页面被抢焦点 */
+function 停止保持聚焦() {
+	if (保持聚焦计时器 != 0) {
+		clearTimeout(保持聚焦计时器)
+		保持聚焦计时器 = 0
+	}
+	发送后保持聚焦 = false
+}
+
+function 处理键盘高度变化(事件 : { detail : { height : number } }) {
+	键盘高度.value = Math.max(事件.detail.height, 0)
+	滚动到最新消息()
+}
+
+/** 图片组点击：预览本会话全部图片，current 落到被点的那一格（越界则用首图） */
+function 预览图片(序号 : number) {
+	const 列表 = 全部图片.value
+	if (列表.length == 0) return
+	const 当前 = 序号 >= 0 && 序号 < 列表.length ? 列表[序号] : 列表[0]
+	uni.previewImage({ urls: 列表, current: 当前 })
+}
+
+function 预览文件() {
+	提示('开始预览附件')
+}
+
+function 下载文件() {
+	提示('开始下载附件')
+}
+
+/** 进度卡「查看详情」：接真实业务编号，与旧版 liaotian 的委托详情入口一致 */
+function 查看委托详情() {
+	if (业务编号.value == '') {
+		提示('暂无委托信息')
+		return
+	}
+	uni.navigateTo({ url: `/pages/weituo/weituo?id=${encodeURIComponent(业务编号.value)}` })
+}
+
+function 申请提前验收() {
+	uni.showModal({
+		title: '申请提前验收',
+		content: '将向对方发起提前验收申请，确认继续吗？',
+		success: (结果) => {
+			if (结果.confirm) 提示('已提交提前验收申请')
+		},
+	})
+}
+
+/** 结算卡：验收并释放托管（金额与文案全部来自消息本身，不带设计稿假数据） */
+function 验收结算() {
+	uni.showModal({
+		title: '确认验收',
+		content: '确认验收该成果并释放托管赏金吗？',
+		success: (结果) => {
+			if (结果.confirm) 提示('已确认验收')
+		},
+	})
+}
+
+/** 结算卡：提出修改意见 */
+function 提出修改() {
+	uni.showModal({
+		title: '提出修改意见',
+		content: '请输入需要修改的内容',
+		success: (结果) => {
+			if (结果.confirm) 提示('修改意见已提交')
+		},
+	})
+}
+
+// ---------- 生命周期：旧版 onLoad / onShow / onHide 原样迁入 ----------
+onLoad((参数) => {
+	当前用户.value = 读取当前用户()
+	会话编号.value = 参数['hui_hua'] as string || ''
+	会话类型.value = 参数['lei_xing'] as string || ''
+	会话名称.value = 参数['ming_cheng'] as string || '会话'
+	业务编号.value = 参数['bian_hao'] as string || ''
+	群消息列表.value = []
+	好友消息列表.value = []
+	if (会话编号.value) 清零会话新消息条数(会话编号.value)
+})
+onShow(() => {
+	// 从登录页返回时 onLoad 不会再触发，这里补一次用户读取（旧版只在 onLoad 读）
+	当前用户.value = 读取当前用户()
+	if (取消订阅 == null) {
+		取消订阅 = 订阅实时事件((事件) => {
+			if (会话类型.value == '好友') 处理好友实时事件(事件)
+			else 处理群聊实时事件(事件)
+		})
+	}
+	void 刷新()
+})
+onHide(() => {
+	取消订阅?.()
+	取消订阅 = null
+	// 离开页面时收掉发送后的聚焦兜底，避免在别的页面被抢焦点
+	停止保持聚焦()
+})
+</script>
+
+<template>
+	<!-- 根容器默认 min-height 1200px（:style 用 max(窗口高, 1200) 覆盖）：
+	     跳转首帧、脚本未就绪、窗口信息取不到时也保证深色铺满，不露页面容器白底 -->
+	<view class="dh_ye" :style="{ minHeight: 最小高度 + 'px' }">
+		<!-- 顶栏：共用 components/ding_lan；标题用真实会话名称，右侧插槽不变 -->
+		<ding_lan 外观="会话列表" :标题="会话名称" :显示返回="true" :状态栏高="状态栏高">
+			<view class="dh_ding_an" @click="更多">
+				<image class="dh_ding_tu" src="/static/liaotian/icons/more_vert.svg" mode="aspectFit"></image>
+			</view>
+			<image class="dh_ding_tou" src="/static/hui_hua/profile.jpg" mode="aspectFill"></image>
+		</ding_lan>
+
+		<!-- 会话对象条：设计稿里是 sticky 子栏，这里钉在顶栏正下方（视觉等价，App 端不依赖 sticky） -->
+		<view class="dh_hui_hua_tiao" :style="'top:' + (64 + 状态栏高) + 'px'">
+			<view class="dh_hui_hua_zuo" @click="打开联系人详情">
+				<view class="dh_tou_xiang_kuang">
+					<!-- 后端会话没有头像 URL：沿用 hui_hua_lie_biao 的做法，降级成名称首字头像 -->
+					<view class="dh_tou_xiang dh_tou_xiang_wen">
+						<text class="dh_tou_xiang_zi">{{ 姓名首字 }}</text>
+					</view>
+					<view class="dh_zai_xian_dian">
+						<view class="dh_zai_xian_xin"></view>
+					</view>
+				</view>
+				<view class="dh_ming_qu">
+					<view class="dh_ming_hang">
+						<text class="dh_ming">{{ 会话名称 }}</text>
+						<view class="dh_biao_qian">
+							<text class="dh_biao_qian_zi">{{ 会话标签 }}</text>
+						</view>
+					</view>
+					<view class="dh_za_hang">
+						<view class="dh_za_dian"></view>
+						<text class="dh_za_zi">{{ 会话副标题 }}</text>
+					</view>
+				</view>
+			</view>
+			<view class="dh_tiao_an_hang">
+				<view class="dh_tiao_an" @click="语音通话">
+					<image class="dh_tiao_an_tu" src="/static/liaotian/icons/call.svg" mode="aspectFit"></image>
+				</view>
+				<view class="dh_tiao_an" @click="视频通话">
+					<image class="dh_tiao_an_tu" src="/static/liaotian/icons/videocam.svg" mode="aspectFit"></image>
+				</view>
+			</view>
+		</view>
+
+		<!-- 消息滚动区 -->
+		<!-- 页面级滚动：内容由页面自身撑开，顶栏/会话条/输入栏仍为 fixed -->
+		<view class="dh_gun_dong">
+			<!-- 顶栏 + 会话对象条占位 -->
+			<view :style="'height:' + (64 + 状态栏高 + 60) + 'px'"></view>
+
+			<!-- 钉住的委托进度卡：只有委托会话才有托管进度，好友/群聊会话不渲染 -->
+			<view v-if="会话类型 == '委托'" class="dh_jin_du_wai">
+				<WeiTuoJinDuKa :标题="'【委托中】' + 会话名称" :托管文案="'平台托管'"
+					:编号="'托管编号 #' + (业务编号 != '' ? 业务编号 : 会话编号)"
+					@查看详情="查看委托详情" @申请验收="申请提前验收" />
+			</view>
+
+			<view class="dh_xiao_xi_qu">
+				<!-- 旧版迁入的状态区：错误重试 / 加载中 / 未登录 -->
+				<view v-if="错误 && 当前用户 != null" class="dh_cuo_wu_tiao">
+					<text class="dh_cuo_wu_zi">{{ 错误 }}</text>
+					<view class="dh_chong_shi" @click="刷新">
+						<text class="dh_chong_shi_zi">{{ 正在加载 ? '加载中…' : '重试' }}</text>
+					</view>
+				</view>
+				<view v-if="正在加载 && 消息列表.length == 0" class="dh_zhuang_tai">正在加载消息…</view>
+				<view v-if="当前用户 == null" class="dh_deng_lu">
+					<view class="dh_deng_lu_an" @click="去登录">
+						<text class="dh_deng_lu_zi">登录后开始聊天</text>
+					</view>
+				</view>
+
+				<!-- 消息区：只渲染后端消息（历史 + 实时），每一种卡片都由「消息.类型」控制 -->
+				<view v-for="(消息, 索引) in 消息列表" :key="消息.键" class="dh_xiao_xi_kuai">
+					<view v-if="是否显示日期(索引)" class="dh_shi_jian_hang">
+						<view class="dh_shi_jian">
+							<text class="dh_shi_jian_zi">{{ 格式化日期标签(消息.创建时间) }}</text>
+						</view>
+					</view>
+
+					<!-- 结算卡：整宽结构卡（不套气泡），金额与标题来自消息本身 -->
+					<view v-if="消息.类型 == '结算'" class="dh_jie_suan_wei">
+						<JieSuanKa
+							:标题="消息.卡片标题 != '' ? 消息.卡片标题 : '成果物验收与托管释放'"
+							:副标题="消息.卡片副标题 != '' ? 消息.卡片副标题 : '请核实成果无误后确认放行赏金'"
+							:金额="消息.金额"
+							@验收="验收结算" @修改="提出修改" />
+					</view>
+
+					<!-- 委托进度卡：整宽结构卡 -->
+					<view v-else-if="消息.类型 == '委托'" class="dh_jin_du_wai">
+						<WeiTuoJinDuKa :标题="消息.卡片标题" :托管文案="'平台托管'"
+							:编号="消息.卡片编号 != '' ? '托管编号 #' + 消息.卡片编号 : ''"
+							@查看详情="查看委托详情" @申请验收="申请提前验收" />
+					</view>
+
+					<!-- 对方消息 -->
+					<view v-else-if="!消息.是自己" class="dh_xiao_xi_hang">
+						<view class="dh_xiao_tou_wen">
+							<text class="dh_xiao_tou_zi">{{ 消息.发送者昵称.slice(0, 1) }}</text>
+						</view>
+						<view class="dh_dui_fang_qu" :class="{ 'dh_dui_fang_qu_kuan': 消息.类型 != '文本' }">
+							<text class="dh_ming_zi">{{ 消息.发送者昵称 }} {{ 格式化消息时间(消息.创建时间) }}</text>
+							<!-- 文本气泡 -->
+							<view v-if="消息.类型 == '文本'" class="dh_dui_fang_kuang">
+								<text class="dh_zheng_wen">{{ 消息.正文 }}</text>
+							</view>
+							<!-- 图片组卡 -->
+							<view v-else-if="消息.类型 == '图片'" class="dh_fu_jian">
+								<TuPianZu :大图="消息.图片一" :大图说明="消息.图片说明"
+									:左图="消息.图片二" :右图="消息.图片三"
+									:左图说明="消息.图片说明" :右图说明="消息.图片说明"
+									@预览="预览图片" />
+							</view>
+							<!-- 文件卡 -->
+							<view v-else-if="消息.类型 == '文件'" class="dh_fu_jian">
+								<WenJianKa :文件名="消息.文件名" :文件大小="消息.文件大小"
+									@预览="预览文件" @下载="下载文件" />
+							</view>
+						</view>
+					</view>
+
+					<!-- 自己发送 -->
+					<view v-else class="dh_xiao_xi_hang dh_zi_ji_hang">
+						<view class="dh_zi_ji_qu" :class="{ 'dh_zi_ji_qu_kuan': 消息.类型 != '文本' }">
+							<text class="dh_ming_zi dh_ming_zi_you">我 {{ 格式化消息时间(消息.创建时间) }}</text>
+							<view v-if="消息.类型 == '文本'" class="dh_zi_ji_kuang">
+								<text class="dh_zheng_wen dh_zheng_wen_wo">{{ 消息.正文 }}</text>
+							</view>
+							<view v-else-if="消息.类型 == '图片'" class="dh_fu_jian">
+								<TuPianZu :大图="消息.图片一" :大图说明="消息.图片说明"
+									:左图="消息.图片二" :右图="消息.图片三"
+									:左图说明="消息.图片说明" :右图说明="消息.图片说明"
+									@预览="预览图片" />
+							</view>
+							<view v-else-if="消息.类型 == '文件'" class="dh_fu_jian">
+								<WenJianKa :文件名="消息.文件名" :文件大小="消息.文件大小"
+									@预览="预览文件" @下载="下载文件" />
+							</view>
+						</view>
+						<view class="dh_wo_tou">
+							<image class="dh_wo_tou_tu" src="/static/liaotian/icons/person.svg" mode="aspectFit"></image>
+						</view>
+					</view>
+				</view>
+
+				<!-- 空会话：没有消息、不在加载、没有错误时给一个占位，避免整页只剩背景 -->
+				<view v-if="当前用户 != null && 错误 == '' && !正在加载 && 消息列表.length == 0" class="dh_kong_tai">
+					<view class="dh_kong_yuan">
+						<image class="dh_kong_tu" src="/static/liaotian/icons/sentiment_satisfied.svg" mode="aspectFit"></image>
+					</view>
+					<text class="dh_kong_ming">还没有消息</text>
+					<text class="dh_kong_fu">发送第一条消息，开始这段对话</text>
+				</view>
+
+				<!-- 给底部悬浮输入栏留白（设计稿 pb-28） -->
+				<view class="dh_di_bu_zhan_wei"></view>
+			</view>
+		</view>
+
+		<!-- 底部悬浮输入栏：键盘弹起 / windowBottom 时整栏上抬（旧版 liaotian 的键盘避让逻辑） -->
+		<view class="dh_di_bu" :style="'bottom:' + (键盘高度 + 窗口底高) + 'px'">
+			<!-- 可展开的工具面板 -->
+			<view v-if="展开工具" class="dh_gong_ju">
+				<view class="dh_gong_ju_hang">
+					<view class="dh_gong_ju_xiang" v-for="项 in 工具列表" :key="项.键" :data-jian="项.键" @click="点工具">
+						<view class="dh_gong_ju_kuang">
+							<image class="dh_gong_ju_tu" :src="项.图标" mode="aspectFit"></image>
+						</view>
+						<text class="dh_gong_ju_zi">{{ 项.名称 }}</text>
+					</view>
+				</view>
+			</view>
+
+			<view class="dh_shu_ru_hang">
+				<view class="dh_yuan_an" @click="提示('按住说话')">
+					<image class="dh_yuan_an_tu" src="/static/liaotian/icons/mic.svg" mode="aspectFit"></image>
+				</view>
+
+				<view class="dh_shu_ru_kuang">
+					<textarea class="dh_shu_ru" v-model="草稿"
+						:placeholder="好友消息待确认 != null ? '发送失败，可重试原消息' : '输入消息...'"
+						placeholder-style="color:#908fa0"
+						:auto-height="true" :maxlength="4000" confirm-type="send"
+						:adjust-position="true" :confirm-hold="true" :hold-keyboard="true"
+						:disabled="好友消息待确认 != null || 当前用户 == null" :focus="输入框聚焦"
+						@focus="处理聚焦" @blur="处理失焦" @confirm="发送"
+						@keyboardheightchange="处理键盘高度变化"></textarea>
+					<view class="dh_biao_qing" @click="提示('表情面板')">
+						<image class="dh_biao_qing_tu" src="/static/liaotian/icons/sentiment_satisfied.svg" mode="aspectFit"></image>
+					</view>
+				</view>
+
+				<view class="dh_yuan_an dh_yuan_an_you" @click="切换工具面板">
+					<view class="dh_jia_zhuan" :style="展开工具 ? 'transform: rotate(45deg)' : ''">
+						<image class="dh_yuan_an_tu" src="/static/liaotian/icons/add.svg" mode="aspectFit"></image>
+					</view>
+				</view>
+
+				<view class="dh_fa_song"
+					:class="{ 'dh_fa_song_jin': 正在发送 || 草稿.trim().length == 0 }" @click="发送">
+					<image class="dh_fa_song_tu" src="/static/liaotian/icons/send.svg" mode="aspectFit"></image>
+				</view>
+			</view>
+		</view>
+	</view>
+</template>
+
+<style>
+/* 设计稿字体：Plus Jakarta Sans（正文/标题）、Space Grotesk（标签）。
+   按字重落地为本地 ttf，web 与 App 都不依赖 Google Fonts 外链。 */
+@font-face { font-family: 'PJS400'; src: url('/static/hui_hua/fonts/PlusJakartaSans-400.ttf'); }
+@font-face { font-family: 'PJS500'; src: url('/static/hui_hua/fonts/PlusJakartaSans-500.ttf'); }
+@font-face { font-family: 'PJS600'; src: url('/static/hui_hua/fonts/PlusJakartaSans-600.ttf'); }
+@font-face { font-family: 'PJS700'; src: url('/static/hui_hua/fonts/PlusJakartaSans-700.ttf'); }
+@font-face { font-family: 'SG600'; src: url('/static/hui_hua/fonts/SpaceGrotesk-600.ttf'); }
+@font-face { font-family: 'SG700'; src: url('/static/hui_hua/fonts/SpaceGrotesk-700.ttf'); }
+
+/* 字体在 uni-app x 里不继承，逐类声明避免回退到系统字体 */
+.dh_ming, .dh_zheng_wen, .dh_xi_tong_zi, .dh_hao_ping, .dh_fen_ge,
+.dh_shu_ru, .dh_ming_zi {
+	font-family: 'PJS400';
+}
+.dh_biao_qian_zi, .dh_za_zi, .dh_xi_tong_jin, .dh_shi_jian_zi, .dh_gong_ju_zi {
+	font-family: 'SG600';
+}
+
+/* ---------- 页面容器 ---------- */
+.dh_ye {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	/* 页面级滚动：不锁死高度，让内容撑开页面。
+	   min-height 默认写死 1200px（超出主流手机视口）作为兜底：
+	   跳转首帧、脚本未就绪、窗口信息取不到时，页面也有满屏深色，
+	   不会因高度只剩内容高度而露出页面容器底色（白闪）；
+	   拿到窗口高后由模板 :style 覆盖为 max(窗口高, 1200)，高屏不露底、矮屏不缩水 */
+	min-height: 1200px;
+	background-color: #0b1326;
+}
+.dh_gun_dong {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+}
+
+/* ---------- 顶栏右侧插槽（顶栏本体样式在 components/ding_lan 里） ---------- */
+.dh_ding_an {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 44px;
+	height: 44px;
+}
+.dh_ding_tu { width: 22px; height: 22px; }
+.dh_ding_tou {
+	width: 32px;
+	height: 32px;
+	margin-left: 4px;
+	border-radius: 16px;
+}
+
+/* ---------- 会话对象条 ---------- */
+.dh_hui_hua_tiao {
+	position: fixed;
+	left: 0;
+	right: 0;
+	z-index: 40;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	padding: 10px 16px;
+	background-color: rgba(11, 19, 38, 0.9);
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
+}
+.dh_hui_hua_zuo {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	flex: 1;
+	min-width: 0;
+}
+.dh_tou_xiang_kuang {
+	position: relative;
+	width: 40px;
+	height: 40px;
+	flex-shrink: 0;
+}
+.dh_tou_xiang {
+	width: 40px;
+	height: 40px;
+	border-radius: 20px;
+	box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+}
+/* 在线小绿点：外圈 2px 与页面同色，内圈带发光 */
+.dh_zai_xian_dian {
+	position: absolute;
+	bottom: 0;
+	right: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 16px;
+	height: 16px;
+	border-radius: 8px;
+	background-color: #0b1326;
+}
+.dh_zai_xian_xin {
+	width: 12px;
+	height: 12px;
+	border-radius: 6px;
+	background-color: #4edea3;
+	box-shadow: 0 0 8px rgba(78, 222, 163, 0.8);
+}
+.dh_ming_qu {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-width: 0;
+	margin-left: 8px;
+	overflow: hidden;
+}
+.dh_ming_hang {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	overflow: hidden;
+}
+.dh_ming {
+	flex-shrink: 1;
+	font-size: 18px;
+	line-height: 24px;
+	font-weight: 600;
+	letter-spacing: -0.18px;
+	color: #dae2fd;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+.dh_biao_qian {
+	flex-shrink: 0;
+	margin-left: 6px;
+	padding: 2px 6px;
+	border-radius: 999px;
+	background-color: #222a3d;
+}
+.dh_biao_qian_zi {
+	font-size: 10px;
+	line-height: 14px;
+	font-weight: 700;
+	letter-spacing: 0.5px;
+	color: #c0c1ff;
+}
+.dh_za_hang {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	overflow: hidden;
+}
+.dh_za_dian {
+	width: 6px;
+	height: 6px;
+	flex-shrink: 0;
+	margin-right: 4px;
+	border-radius: 3px;
+	background-color: #4edea3;
+}
+.dh_za_zi {
+	font-size: 10px;
+	line-height: 14px;
+	font-weight: 700;
+	letter-spacing: 0.5px;
+	color: #4edea3;
+}
+.dh_tiao_an_hang {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	flex-shrink: 0;
+	margin-left: 4px;
+}
+.dh_tiao_an {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 36px;
+	height: 36px;
+	margin-left: 4px;
+	border-radius: 18px;
+	background-color: #222a3d;
+}
+.dh_tiao_an_tu { width: 19px; height: 19px; }
+
+/* ---------- 委托进度卡外层：px-gutter pt-space-sm pb-space-xs ---------- */
+.dh_jin_du_wai {
+	padding: 8px 16px 4px;
+}
+
+/* ---------- 消息流：px-gutter py-space-sm ---------- */
+.dh_xiao_xi_qu {
+	display: flex;
+	flex-direction: column;
+	padding: 8px 16px 0;
+}
+
+/* 消息行 */
+.dh_xiao_xi_hang {
+	display: flex;
+	flex-direction: row;
+	align-items: flex-start;
+	margin-bottom: 16px;
+}
+.dh_zi_ji_hang { justify-content: flex-end; }
+
+.dh_wo_tou {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 36px;
+	height: 36px;
+	flex-shrink: 0;
+	margin-top: 2px;
+	margin-left: 8px;
+	border-radius: 18px;
+	background-color: #c0c1ff;
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+.dh_wo_tou_tu { width: 20px; height: 20px; }
+
+.dh_ming_zi {
+	margin-bottom: 4px;
+	margin-left: 4px;
+	font-size: 10px;
+	line-height: 14px;
+	font-weight: 700;
+	letter-spacing: 0.5px;
+	color: #908fa0;
+}
+.dh_ming_zi_you {
+	margin-left: 0;
+	margin-right: 4px;
+	text-align: right;
+}
+
+/* 气泡列：max-width 不支持百分比，改用 width 百分比；列内 align-items 让气泡仍按内容收缩 */
+.dh_dui_fang_qu {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	width: 80%;
+	margin-left: 8px;
+}
+/* 带附件的消息列：设计稿 85%，width 百分比在 App 端合法，附件卡可撑满整列 */
+.dh_dui_fang_qu_kuan {
+	width: 85%;
+}
+
+.dh_zi_ji_qu {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	width: 80%;
+	margin-right: 8px;
+}
+/* 自己发送的富内容卡（图片组/文件）：和对方侧一样放宽到 85%，否则文件名会被 nowrap 顶出 */
+.dh_zi_ji_qu_kuan {
+	width: 85%;
+	align-items: stretch;
+}
+
+.dh_dui_fang_kuang {
+	padding: 16px;
+	border-radius: 16px;
+	border-bottom-left-radius: 2px;
+	background-color: #131b2e;
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+.dh_zi_ji_kuang {
+	padding: 16px;
+	border-radius: 16px;
+	border-bottom-right-radius: 2px;
+	background-color: #8083ff;
+	box-shadow: 0 4px 6px rgba(0, 0, 0, 0.28);
+}
+.dh_zheng_wen {
+	font-size: 14px;
+	line-height: 20px;
+	color: #dae2fd;
+}
+.dh_zheng_wen_wo {
+	font-weight: 500;
+	color: #0d0096;
+}
+
+/* 附件卡之间 8px（设计稿 space-y-space-sm）。
+   width:100% + min-width:0 必须加：卡片里的文件名是 nowrap，不加会被撑宽顶出会话列 */
+.dh_fu_jian {
+	margin-top: 8px;
+	width: 100%;
+	min-width: 0;
+}
+
+/* 时间分隔 */
+.dh_shi_jian_hang {
+	display: flex;
+	flex-direction: row;
+	justify-content: center;
+	margin-bottom: 16px;
+}
+.dh_shi_jian {
+	padding: 2px 8px;
+	border-radius: 999px;
+	background-color: #060e20;
+}
+.dh_shi_jian_zi {
+	font-size: 10px;
+	line-height: 14px;
+	font-weight: 700;
+	letter-spacing: 0.5px;
+	color: #908fa0;
+}
+
+/* 结算卡外层间距（卡片自带上 8 / 下 8） */
+.dh_jie_suan_wei { margin-bottom: 8px; }
+
+/* 底部输入栏留白 */
+.dh_di_bu_zhan_wei { height: 112px; }
+
+/* ---------- 底部输入栏 ---------- */
+.dh_di_bu {
+	position: fixed;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 40;
+	background-color: rgba(11, 19, 38, 0.96);
+	box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.4);
+}
+
+/* 工具面板：px-gutter py-space-md，四列 */
+.dh_gong_ju {
+	padding: 16px;
+	background-color: #131b2e;
+}
+.dh_gong_ju_hang {
+	display: flex;
+	flex-direction: row;
+	flex-wrap: wrap;
+}
+.dh_gong_ju_xiang {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	width: 25%;
+	margin-bottom: 16px;
+	padding-left: 4px;
+	padding-right: 4px;
+}
+.dh_gong_ju_kuang {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 48px;
+	height: 48px;
+	border-radius: 12px;
+	background-color: #2d3449;
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+.dh_gong_ju_tu { width: 24px; height: 24px; }
+.dh_gong_ju_zi {
+	margin-top: 4px;
+	font-size: 10px;
+	line-height: 14px;
+	font-weight: 700;
+	letter-spacing: 0.5px;
+	color: #c7c4d7;
+}
+
+/* 输入行：px-gutter py-2，元素底对齐 */
+.dh_shu_ru_hang {
+	display: flex;
+	flex-direction: row;
+	align-items: flex-end;
+	padding: 8px 16px;
+}
+.dh_yuan_an {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 40px;
+	height: 40px;
+	flex-shrink: 0;
+	margin-left: 0;
+	margin-bottom: 2px;
+	border-radius: 20px;
+	background-color: #222a3d;
+}
+.dh_yuan_an_tu { width: 22px; height: 22px; }
+.dh_yuan_an_you { margin-left: 8px; }
+/* 加号转 45° 变叉号（对应设计稿展开时的 rotate-45） */
+.dh_jia_zhuan {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+}
+
+.dh_shu_ru_kuang {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	flex: 1;
+	min-width: 0;
+	margin-left: 8px;
+	padding: 6px 12px;
+	border-radius: 16px;
+	background-color: #131b2e;
+	box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.25);
+}
+.dh_shu_ru {
+	flex: 1;
+	min-width: 0;
+	max-height: 96px;
+	padding: 4px 0;
+	font-size: 14px;
+	line-height: 20px;
+	color: #dae2fd;
+	background-color: transparent;
+	border-width: 0;
+}
+.dh_biao_qing {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	flex-shrink: 0;
+	border-radius: 16px;
+}
+.dh_biao_qing_tu { width: 20px; height: 20px; }
+
+.dh_fa_song {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 40px;
+	height: 40px;
+	flex-shrink: 0;
+	margin-left: 8px;
+	margin-bottom: 2px;
+	border-radius: 20px;
+	background-color: #8083ff;
+	box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+}
+.dh_fa_song_tu { width: 20px; height: 20px; }
+
+/* ---------- 接入旧版聊天逻辑后新增：真实消息与状态区（沿用设计稿深色配色） ---------- */
+/* 后端会话没有头像 URL，降级为名称首字头像 */
+.dh_tou_xiang_wen {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background-color: #2d3449;
+}
+.dh_tou_xiang_zi {
+	font-size: 18px;
+	font-weight: 700;
+	color: #dae2fd;
+}
+/* uvue 的 view 默认 overflow:hidden，放开避免裁掉消息气泡的阴影 */
+.dh_xiao_xi_kuai { overflow: visible; }
+.dh_xiao_tou_wen {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 36px;
+	height: 36px;
+	flex-shrink: 0;
+	margin-top: 2px;
+	border-radius: 18px;
+	background-color: #2d3449;
+}
+.dh_xiao_tou_zi {
+	font-size: 16px;
+	font-weight: 700;
+	color: #dae2fd;
+}
+.dh_cuo_wu_tiao {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 12px;
+	padding: 10px 12px;
+	border-radius: 12px;
+	background-color: #2a1b2e;
+}
+.dh_cuo_wu_zi {
+	flex: 1;
+	font-size: 12px;
+	line-height: 16px;
+	color: #ffb4a8;
+}
+.dh_chong_shi {
+	flex-shrink: 0;
+	margin-left: 8px;
+	padding: 4px 12px;
+	border-radius: 12px;
+	background-color: #8083ff;
+}
+.dh_chong_shi_zi {
+	font-size: 12px;
+	line-height: 16px;
+	font-weight: 700;
+	color: #0d0096;
+}
+.dh_zhuang_tai {
+	padding: 12px 0;
+	text-align: center;
+	font-size: 12px;
+	line-height: 16px;
+	color: #908fa0;
+}
+.dh_deng_lu {
+	display: flex;
+	justify-content: center;
+	margin-bottom: 12px;
+}
+.dh_deng_lu_an {
+	padding: 8px 18px;
+	border-radius: 20px;
+	background-color: #8083ff;
+}
+.dh_deng_lu_zi {
+	font-size: 13px;
+	font-weight: 700;
+	color: #0d0096;
+}
+
+/* ---------- 空会话占位：页面上没有任何消息时的提示，不再展示设计稿示例 ---------- */
+.dh_kong_tai {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	padding: 72px 32px 0;
+}
+.dh_kong_yuan {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 72px;
+	height: 72px;
+	border-radius: 36px;
+	background-color: #131b2e;
+}
+.dh_kong_tu {
+	width: 30px;
+	height: 30px;
+}
+.dh_kong_ming {
+	margin-top: 16px;
+	font-family: 'PJS600';
+	font-size: 15px;
+	line-height: 21px;
+	color: #dae2fd;
+}
+.dh_kong_fu {
+	margin-top: 6px;
+	font-family: 'PJS400';
+	font-size: 12px;
+	line-height: 17px;
+	color: #908fa0;
+}
+.dh_fa_song_jin { opacity: 0.45; }
+
+	/* 按字重指向对应 ttf：uni-app x 的自定义字体规则不支持字重属性，Android 单字重字体也不响应数值字重 */
+	.dh_ming { font-family: 'PJS600'; }
+	.dh_ming_zi { font-family: 'PJS700'; }
+	.dh_biao_qian_zi { font-family: 'SG700'; }
+	.dh_za_zi { font-family: 'SG700'; }
+	.dh_xi_tong_jin { font-family: 'SG700'; }
+	.dh_shi_jian_zi { font-family: 'SG700'; }
+	.dh_gong_ju_zi { font-family: 'SG700'; }
+</style>

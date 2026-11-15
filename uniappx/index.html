@@ -12,6 +12,22 @@
 		<title>委托协作</title>
 		<!--preload-links-->
 		<!--app-context-->
+		<style>
+			/*
+			 * 首帧兜底：uni-page 容器创建前，浏览器先绘制 html/body。
+			 * 默认白底在深色页（对话页等）首帧渲染前会闪一下白，故与深色页主色对齐。
+			 * 页面容器一旦挂载即被页面自身背景覆盖，不影响浅色页。
+			 */
+			html,
+			body {
+				margin: 0;
+				background-color: #0b1326;
+			}
+			#app {
+				min-height: 100vh;
+				background-color: #0b1326;
+			}
+		</style>
 	</head>
 	<body>
 		<div id="app"><!--app-html--></div>

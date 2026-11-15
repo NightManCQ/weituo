@@ -1,0 +1,1306 @@
+<script setup lang="ts">
+	import { onLoad } from '@dcloudio/uni-app'
+	import { ref, computed } from 'vue'
+
+	// 设计稿「委托发布.html」1:1 迁移（Connect & Create 发现页）。
+	// 顶栏共用 components/ding_lan 的「委托详情」外观；页面级滚动：根 view 不锁高度，
+	// 内容自然撑开，顶栏由组件 fixed，内容首块用 64 + 状态栏高 占位。
+	// 外链 Material Symbols 全部落到 /static/fa_bu/icons/ 并按设计稿配色着色，
+	// 头像复用 /static/wei_tuo/，字体复用 /static/hui_hua/fonts/。
+
+	type 达人项 = {
+		键 : string
+		头像 : string
+		名称 : string
+		信用 : string
+		简介 : string
+		标签一 : string
+		标签二 : string
+		单数 : string
+		在线 : boolean
+		已申请 : boolean
+	}
+
+	type 群项 = {
+		键 : string
+		图标 : string
+		底线 : string
+		名称 : string
+		徽章 : string
+		徽章底 : string
+		徽章字 : string
+		群号 : string
+		人数 : string
+		悬赏 : string
+		累计 : string
+		已申请 : boolean
+	}
+
+	const 状态栏高 = ref(0)
+	const 搜索词 = ref('')
+	const 当前标签 = ref('people')
+	const 选中技术 = ref('全部推荐')
+	const 选中群类 = ref('精选推荐群')
+
+	const 技术标签 = ref<string[]>([
+		'全部推荐', 'UI/UX设计', 'Rust / Go开发', 'Blender 3D', '同城急送',
+	])
+	const 群分类 = ref<string[]>([
+		'精选推荐群', '悬赏求助大厅', '同城应急互助', '技术攻坚组',
+	])
+
+	const 达人列表 = ref<达人项[]>([
+		{
+			键: 'maya', 头像: '/static/wei_tuo/avatar_maya.jpg', 名称: '林栖 · Maya',
+			信用: '信用 99.8', 简介: '主攻 Figma系统架构 · 动效设计 · 接单完成率 100%',
+			标签一: 'UI/UX', 标签二: '移动端架构', 单数: '已结34单', 在线: true, 已申请: false,
+		},
+		{
+			键: 'alex', 头像: '/static/wei_tuo/avatar_alex.jpg', 名称: 'Alex 晨风',
+			信用: '信用 98.4', 简介: 'FastAPI / Go 高并发微服务 · 悬赏答疑先锋',
+			标签一: '后端开发', 标签二: '智能合约', 单数: '已结52单', 在线: true, 已申请: false,
+		},
+		{
+			键: 'zero', 头像: '/static/wei_tuo/avatar_momo.jpg', 名称: 'Zero.三维工坊',
+			信用: '信用 99.1', 简介: 'Blender产品级渲染 / 角色建模 / C4D动效互助',
+			标签一: '3D建模', 标签二: '着色器', 单数: '', 在线: false, 已申请: false,
+		},
+	])
+
+	const 群列表 = ref<群项[]>([
+		{
+			键: 'g1', 图标: '/static/fa_bu/icons/terminal.svg', 底线: '#4edea3',
+			名称: 'FastAPI & Python 互助协作组', 徽章: '技术公会',
+			徽章底: 'rgba(128, 131, 255, 0.2)', 徽章字: '#c0c1ff',
+			群号: '群号: LQ-GRP-5021 · 自动化部署 / 异步高并发悬赏',
+			人数: '482 / 500 人', 悬赏: '6 个进行中悬赏', 累计: '累计发放: 12,400 积分', 已申请: false,
+		},
+		{
+			键: 'g2', 图标: '/static/fa_bu/icons/view_in_ar.svg', 底线: '#c0c1ff',
+			名称: 'Blender 材质渲染与即时约稿', 徽章: '双向担保',
+			徽章底: 'rgba(78, 222, 163, 0.1)', 徽章字: '#4edea3',
+			群号: '群号: LQ-GRP-8812 · 商业模型 / 材质贴图求助与急聘',
+			人数: '320 / 500 人', 悬赏: '11 个进行中悬赏', 累计: '累计发放: 38,900 积分', 已申请: false,
+		},
+		{
+			键: 'g3', 图标: '/static/fa_bu/icons/draw.svg', 底线: '#ffb95f',
+			名称: '二次元插画与立绘约稿派发组', 徽章: '官方认证',
+			徽章底: 'rgba(255, 185, 95, 0.15)', 徽章字: '#ffb95f',
+			群号: '群号: LQ-GRP-1049 · 甲方预算托管 / 画师急速匹配',
+			人数: '495 / 500 人', 悬赏: '18 个进行中悬赏', 累计: '累计发放: 94,000 积分', 已申请: false,
+		},
+	])
+
+	const 显示建群 = ref(false)
+	const 显示名片 = ref(false)
+	const 群类型 = ref('bounty')
+	const 新群名 = ref('')
+
+	// ---------- 轻提示（设计稿顶部胶囊 Toast） ----------
+	const 提示文字 = ref('')
+	const 提示图标 = ref('/static/fa_bu/icons/check_circle.svg')
+	let 提示计时器 = 0
+	function 显示提示(文字 : string, 图标 : string = '/static/fa_bu/icons/check_circle.svg') {
+		提示文字.value = 文字
+		提示图标.value = 图标
+		if (提示计时器 != 0) clearTimeout(提示计时器)
+		提示计时器 = setTimeout(() => {
+			提示文字.value = ''
+			提示计时器 = 0
+		}, 2800)
+	}
+
+	const 有搜索词 = computed(() : boolean => 搜索词.value.length > 0)
+
+	onLoad(() => {
+		const 信息 = uni.getSystemInfoSync()
+		状态栏高.value = 信息.statusBarHeight ?? 0
+	})
+
+	// ---------- 通用交互 ----------
+	function 切换标签(事件 : { currentTarget : { dataset : Record<string, unknown> } }) {
+		const 值 = 事件.currentTarget.dataset['tab']
+		if (typeof 值 == 'string') 当前标签.value = 值
+	}
+
+	function 选技术(事件 : { currentTarget : { dataset : Record<string, unknown> } }) {
+		const 值 = 事件.currentTarget.dataset['name']
+		if (typeof 值 == 'string') 选中技术.value = 值
+	}
+
+	function 选群类(事件 : { currentTarget : { dataset : Record<string, unknown> } }) {
+		const 值 = 事件.currentTarget.dataset['name']
+		if (typeof 值 == 'string') 选中群类.value = 值
+	}
+
+	function 点头像() {
+		显示提示('个人主页与信誉档案', '/static/fa_bu/icons/person_search_active.svg')
+	}
+
+	function 扫码() {
+		显示提示('正在调起摄像头扫码镜头...', '/static/fa_bu/icons/photo_camera.svg')
+	}
+
+	function 雷达() {
+		显示提示('互助雷达启动中: 正在扫描附近 500m 活跃节点...', '/static/fa_bu/icons/radar.svg')
+	}
+
+	function 名片() {
+		显示名片.value = true
+	}
+
+	// ---------- 加好友 / 加群：重新构造数组，避免 UTS 里就地改深层对象不刷新 ----------
+	function 复制达人(源 : 达人项, 已申请 : boolean) : 达人项 {
+		return {
+			键: 源.键, 头像: 源.头像, 名称: 源.名称, 信用: 源.信用, 简介: 源.简介,
+			标签一: 源.标签一, 标签二: 源.标签二, 单数: 源.单数, 在线: 源.在线, 已申请: 已申请,
+		}
+	}
+
+	function 复制群(源 : 群项, 已申请 : boolean) : 群项 {
+		return {
+			键: 源.键, 图标: 源.图标, 底线: 源.底线, 名称: 源.名称, 徽章: 源.徽章,
+			徽章底: 源.徽章底, 徽章字: 源.徽章字, 群号: 源.群号, 人数: 源.人数,
+			悬赏: 源.悬赏, 累计: 源.累计, 已申请: 已申请,
+		}
+	}
+
+	function 切换好友(事件 : { currentTarget : { dataset : Record<string, unknown> } }) {
+		const 键 = 事件.currentTarget.dataset['key']
+		if (typeof 键 != 'string') return
+		const 新列表 : 达人项[] = []
+		let 名称 = ''
+		let 变为已申请 = false
+		达人列表.value.forEach((项) => {
+			if (项.键 == 键) {
+				名称 = 项.名称
+				变为已申请 = !项.已申请
+				新列表.push(复制达人(项, 变为已申请))
+			} else {
+				新列表.push(复制达人(项, 项.已申请))
+			}
+		})
+		达人列表.value = 新列表
+		if (变为已申请) {
+			显示提示(`已向 ${名称} 发送协作好友申请！`, '/static/fa_bu/icons/check_circle.svg')
+		} else {
+			显示提示('已取消好友申请', '/static/fa_bu/icons/info.svg')
+		}
+	}
+
+	function 切换加群(事件 : { currentTarget : { dataset : Record<string, unknown> } }) {
+		const 键 = 事件.currentTarget.dataset['key']
+		if (typeof 键 != 'string') return
+		const 新列表 : 群项[] = []
+		let 名称 = ''
+		let 变为已申请 = false
+		群列表.value.forEach((项) => {
+			if (项.键 == 键) {
+				名称 = 项.名称
+				变为已申请 = !项.已申请
+				新列表.push(复制群(项, 变为已申请))
+			} else {
+				新列表.push(复制群(项, 项.已申请))
+			}
+		})
+		群列表.value = 新列表
+		if (变为已申请) {
+			显示提示(`已提交加入「${名称}」的申请`, '/static/fa_bu/icons/verified.svg')
+		} else {
+			显示提示('已撤回加群申请', '/static/fa_bu/icons/info.svg')
+		}
+	}
+
+	// ---------- 建群弹窗 ----------
+	function 打开建群(事件 : { currentTarget : { dataset : Record<string, unknown> } }) {
+		const 值 = 事件.currentTarget.dataset['type']
+		群类型.value = typeof 值 == 'string' ? 值 : 'bounty'
+		显示建群.value = true
+	}
+
+	function 选群类型(事件 : { currentTarget : { dataset : Record<string, unknown> } }) {
+		const 值 = 事件.currentTarget.dataset['type']
+		if (typeof 值 == 'string') 群类型.value = 值
+	}
+
+	function 确认建群() {
+		const 名称 = 新群名.value.trim() != '' ? 新群名.value.trim() : '新协作讨论群'
+		显示建群.value = false
+		新群名.value = ''
+		显示提示(`群聊「${名称}」创建成功！邀请码已复制`, '/static/fa_bu/icons/celebration.svg')
+	}
+</script>
+
+<template>
+	<view class="fb_ye">
+		<!-- 固定顶栏：共用 components/ding_lan 的「委托详情」外观，右侧插槽放圆形头像按钮 -->
+		<ding_lan 外观="委托详情" :显示返回="true" :状态栏高="状态栏高">
+			<view class="fb_ding_tou" @click="点头像">
+				<image class="fb_ding_tou_tu" src="/static/fa_bu/icons/person.svg" mode="aspectFit"></image>
+			</view>
+		</ding_lan>
+
+		<!-- 页面级滚动：根容器不锁高度，内容自然撑开；首块为 fixed 顶栏占位 -->
+		<view class="fb_nei_rong">
+			<view :style="{ height: (64 + 状态栏高) + 'px' }"></view>
+
+			<!-- 1. 搜索栏 + 扫码 -->
+			<view class="fb_sou_qu">
+				<view class="fb_sou_hang">
+					<view class="fb_sou_kuang">
+						<image class="fb_sou_tu" src="/static/fa_bu/icons/search.svg" mode="aspectFit"></image>
+						<input
+							class="fb_sou_shu_ru"
+							v-model="搜索词"
+							placeholder="搜索 ID / 手机号 / 技能标签 / 群号"
+							placeholder-class="fb_zhan_wei"
+							maxlength="60"
+						/>
+						<view v-if="有搜索词" class="fb_sou_qing" @click="搜索词 = ''">
+							<image class="fb_sou_qing_tu" src="/static/fa_bu/icons/close.svg" mode="aspectFit"></image>
+						</view>
+					</view>
+					<view class="fb_sao" @click="扫码">
+						<image class="fb_sao_tu" src="/static/fa_bu/icons/qr_scan.svg" mode="aspectFit"></image>
+					</view>
+				</view>
+			</view>
+
+			<!-- 2. Hero 建群卡 + 两枚胶囊工具 -->
+			<view class="fb_hero_qu">
+				<view class="fb_hero">
+					<!-- 环境光晕：设计稿是 blur 圆，uvue 无滤镜，用径向渐隐 PNG 近似 -->
+					<image class="fb_guang fb_guang_zi" src="/static/guang/zi_15.png" mode="scaleToFill"></image>
+					<image class="fb_guang fb_guang_lv" src="/static/guang/lv_12.png" mode="scaleToFill"></image>
+
+					<view class="fb_hero_nei">
+						<view class="fb_hui_zhang_hang">
+							<view class="fb_hui_zhang_zu">
+								<text class="fb_hui_zhang fb_hui_zhang_zi">GUILD HUB</text>
+								<text class="fb_hui_zhang fb_hui_zhang_lv">悬赏担保支持</text>
+							</view>
+							<image class="fb_hui_zhang_tu" src="/static/fa_bu/icons/diversity.svg" mode="aspectFit"></image>
+						</view>
+
+						<view class="fb_hero_wen">
+							<text class="fb_hero_biao">创建新群聊 &amp; 协作空间</text>
+							<text class="fb_hero_fu">支持兴趣交流群与带智能合约担保的委托悬赏群</text>
+						</view>
+
+						<view class="fb_xuan_hang">
+							<view class="fb_xuan" :data-type="'bounty'" @click="打开建群">
+								<view class="fb_xuan_tou">
+									<image class="fb_xuan_tu" src="/static/fa_bu/icons/assignment.svg" mode="aspectFit"></image>
+									<image class="fb_xuan_jian" src="/static/fa_bu/icons/arrow_forward.svg" mode="aspectFit"></image>
+								</view>
+								<text class="fb_xuan_ming">委托协作群</text>
+								<text class="fb_xuan_fu fb_xuan_fu_lv">带奖金池 &amp; 履约托管</text>
+							</view>
+							<view class="fb_xuan fb_xuan_you" :data-type="'casual'" @click="打开建群">
+								<view class="fb_xuan_tou">
+									<image class="fb_xuan_tu" src="/static/fa_bu/icons/forum.svg" mode="aspectFit"></image>
+									<image class="fb_xuan_jian" src="/static/fa_bu/icons/arrow_forward.svg" mode="aspectFit"></image>
+								</view>
+								<text class="fb_xuan_ming">普通交流群</text>
+								<text class="fb_xuan_fu">好友速建 · 自由畅聊</text>
+							</view>
+						</view>
+					</view>
+				</view>
+
+				<view class="fb_gong_ju_hang">
+					<view class="fb_gong_ju" @click="雷达">
+						<view class="fb_gong_ju_yuan fb_gong_ju_yuan_lv">
+							<image class="fb_gong_ju_tu" src="/static/fa_bu/icons/radar.svg" mode="aspectFit"></image>
+						</view>
+						<view class="fb_gong_ju_wen">
+							<text class="fb_gong_ju_ming">面对面互助雷达</text>
+							<text class="fb_gong_ju_fu">探寻 500m 内在线赏金客</text>
+						</view>
+					</view>
+					<view class="fb_gong_ju fb_gong_ju_you" @click="名片">
+						<view class="fb_gong_ju_yuan fb_gong_ju_yuan_zi">
+							<image class="fb_gong_ju_tu" src="/static/fa_bu/icons/badge.svg" mode="aspectFit"></image>
+						</view>
+						<view class="fb_gong_ju_wen">
+							<text class="fb_gong_ju_ming">我的专属名片</text>
+							<text class="fb_gong_ju_fu">LinkID: LQ-9821</text>
+						</view>
+					</view>
+				</view>
+			</view>
+
+			<!-- 3. 分段导航 -->
+			<view class="fb_fen_qu">
+				<view class="fb_fen">
+					<view class="fb_fen_an" :class="当前标签 == 'people' ? 'fb_fen_an_ji' : ''" :data-tab="'people'" @click="切换标签">
+						<image
+							class="fb_fen_tu"
+							:src="当前标签 == 'people' ? '/static/fa_bu/icons/person_search_active.svg' : '/static/fa_bu/icons/person_search.svg'"
+							mode="aspectFit"
+						></image>
+						<text class="fb_fen_zi" :class="当前标签 == 'people' ? 'fb_fen_zi_ji' : ''">找互助好友</text>
+						<view class="fb_lv_dian"></view>
+					</view>
+					<view class="fb_fen_an" :class="当前标签 == 'groups' ? 'fb_fen_an_ji' : ''" :data-tab="'groups'" @click="切换标签">
+						<image
+							class="fb_fen_tu"
+							:src="当前标签 == 'groups' ? '/static/fa_bu/icons/groups_active.svg' : '/static/fa_bu/icons/groups.svg'"
+							mode="aspectFit"
+						></image>
+						<text class="fb_fen_zi" :class="当前标签 == 'groups' ? 'fb_fen_zi_ji' : ''">发现活跃群组</text>
+						<view class="fb_shu_jiao">
+							<text class="fb_shu_jiao_zi">48+</text>
+						</view>
+					</view>
+				</view>
+			</view>
+
+			<!-- 4. TAB 1：找互助好友 -->
+			<view v-if="当前标签 == 'people'" class="fb_tab">
+				<scroll-view class="fb_biao_qian_gun" direction="horizontal" :show-scrollbar="false">
+					<view class="fb_biao_qian_hang">
+						<text class="fb_biao_qian_tou">技能检索:</text>
+						<view
+							v-for="标签 in 技术标签"
+							:key="标签"
+							class="fb_biao_qian"
+							:class="选中技术 == 标签 ? 'fb_biao_qian_ji' : ''"
+							:data-name="标签"
+							@click="选技术"
+						>
+							<text class="fb_biao_qian_zi" :class="选中技术 == 标签 ? 'fb_biao_qian_zi_ji' : ''">{{ 标签 }}</text>
+						</view>
+					</view>
+				</scroll-view>
+
+				<view class="fb_lie_tou">
+					<view class="fb_lie_tou_zuo">
+						<image class="fb_lie_tou_tu" src="/static/fa_bu/icons/verified.svg" mode="aspectFit"></image>
+						<text class="fb_lie_tou_zi">高信誉技能接单达人</text>
+					</view>
+					<text class="fb_lie_tou_fu">实时在线推荐</text>
+				</view>
+
+				<view class="fb_ren_lie">
+					<view v-for="项 in 达人列表" :key="项.键" class="fb_ren_ka">
+						<view class="fb_ren_zuo">
+							<view class="fb_ren_tou_qu">
+								<image class="fb_ren_tou" :src="项.头像" mode="aspectFill"></image>
+								<view class="fb_zai_xian" :style="{ backgroundColor: 项.在线 ? '#4edea3' : '#464554' }"></view>
+							</view>
+							<view class="fb_ren_wen">
+								<view class="fb_ren_ming_hang">
+									<text class="fb_ren_ming">{{ 项.名称 }}</text>
+									<text class="fb_xin_yong">{{ 项.信用 }}</text>
+								</view>
+								<text class="fb_ren_jian">{{ 项.简介 }}</text>
+								<view class="fb_biao_zu">
+									<text class="fb_xiao_biao">{{ 项.标签一 }}</text>
+									<text class="fb_xiao_biao">{{ 项.标签二 }}</text>
+									<view v-if="项.单数 != ''" class="fb_dan_shu">
+										<image class="fb_dan_shu_tu" src="/static/fa_bu/icons/coin.svg" mode="aspectFit"></image>
+										<text class="fb_dan_shu_zi">{{ 项.单数 }}</text>
+									</view>
+								</view>
+							</view>
+						</view>
+						<view
+							class="fb_tian_jia"
+							:class="项.已申请 ? 'fb_tian_jia_yi' : ''"
+							:data-key="项.键"
+							@click="切换好友"
+						>
+							<image
+								class="fb_tian_jia_tu"
+								:src="项.已申请 ? '/static/fa_bu/icons/check.svg' : '/static/fa_bu/icons/person_add.svg'"
+								mode="aspectFit"
+							></image>
+							<text class="fb_tian_jia_zi" :class="项.已申请 ? 'fb_tian_jia_zi_yi' : ''">{{ 项.已申请 ? '已申请' : '添加' }}</text>
+						</view>
+					</view>
+				</view>
+			</view>
+
+			<view v-else class="fb_tab">
+				<!-- 5. TAB 2：发现活跃群组 -->
+				<scroll-view class="fb_biao_qian_gun" direction="horizontal" :show-scrollbar="false">
+					<view class="fb_biao_qian_hang">
+						<view
+							v-for="类 in 群分类"
+							:key="类"
+							class="fb_biao_qian"
+							:class="选中群类 == 类 ? 'fb_biao_qian_ji' : ''"
+							:data-name="类"
+							@click="选群类"
+						>
+							<text class="fb_biao_qian_zi" :class="选中群类 == 类 ? 'fb_biao_qian_zi_ji' : ''">{{ 类 }}</text>
+						</view>
+					</view>
+				</scroll-view>
+
+				<view class="fb_lie_tou">
+					<view class="fb_lie_tou_zuo">
+						<image class="fb_lie_tou_tu" src="/static/fa_bu/icons/explore.svg" mode="aspectFit"></image>
+						<text class="fb_lie_tou_zi">高活跃技术互助与赏金群</text>
+					</view>
+					<text class="fb_lie_tou_fu fb_lie_tou_fu_lv">含担保池</text>
+				</view>
+
+				<view class="fb_qun_lie">
+					<view v-for="项 in 群列表" :key="项.键" class="fb_qun_ka">
+						<view class="fb_qun_tou">
+							<view class="fb_qun_zuo">
+								<view class="fb_qun_tu_qu">
+									<image class="fb_qun_tu" :src="项.图标" mode="aspectFit"></image>
+									<view class="fb_qun_di_tiao" :style="{ backgroundColor: 项.底线 }"></view>
+								</view>
+								<view class="fb_qun_wen">
+									<view class="fb_qun_ming_hang">
+										<text class="fb_qun_ming">{{ 项.名称 }}</text>
+										<text class="fb_qun_badge" :style="{ backgroundColor: 项.徽章底, color: 项.徽章字 }">{{ 项.徽章 }}</text>
+									</view>
+									<text class="fb_qun_hao">{{ 项.群号 }}</text>
+								</view>
+							</view>
+							<view
+								class="fb_shen_qing"
+								:class="项.已申请 ? 'fb_shen_qing_yi' : ''"
+								:data-key="项.键"
+								@click="切换加群"
+							>
+								<image
+									class="fb_shen_qing_tu"
+									:src="项.已申请 ? '/static/fa_bu/icons/hourglass.svg' : '/static/fa_bu/icons/group_add.svg'"
+									mode="aspectFit"
+								></image>
+								<text class="fb_shen_qing_zi" :class="项.已申请 ? 'fb_shen_qing_zi_yi' : ''">{{ 项.已申请 ? '审核中' : '申请加入' }}</text>
+							</view>
+						</view>
+						<view class="fb_qun_di">
+							<view class="fb_qun_di_zu">
+								<view class="fb_qun_di_xiang">
+									<image class="fb_qun_di_tu" src="/static/fa_bu/icons/group.svg" mode="aspectFit"></image>
+									<text class="fb_qun_di_zi">{{ 项.人数 }}</text>
+								</view>
+								<view class="fb_qun_di_xiang">
+									<image class="fb_qun_di_tu" src="/static/fa_bu/icons/paid.svg" mode="aspectFit"></image>
+									<text class="fb_qun_di_zi fb_qun_di_zi_lv">{{ 项.悬赏 }}</text>
+								</view>
+							</view>
+							<text class="fb_qun_lei_ji">{{ 项.累计 }}</text>
+						</view>
+					</view>
+				</view>
+			</view>
+		</view>
+
+		<!-- 6. 建群弹窗（底部 sheet） -->
+		<view v-if="显示建群" class="fb_tan_ceng fb_tan_ceng_di">
+			<view class="fb_zhe" @click="显示建群 = false"></view>
+			<view class="fb_sheet">
+				<view class="fb_sheet_tou">
+					<view class="fb_sheet_tou_zuo">
+						<text class="fb_sheet_badge" :class="群类型 == 'casual' ? 'fb_sheet_badge_zi' : ''">{{ 群类型 == 'bounty' ? '委托协作群' : '普通交流群' }}</text>
+						<text class="fb_sheet_biao">创建新群空间</text>
+					</view>
+					<view class="fb_guan" @click="显示建群 = false">
+						<image class="fb_guan_tu" src="/static/fa_bu/icons/close.svg" mode="aspectFit"></image>
+					</view>
+				</view>
+
+				<view class="fb_sheet_nei">
+					<text class="fb_sheet_lab">群组名称</text>
+					<input
+						class="fb_sheet_shu_ru"
+						v-model="新群名"
+						placeholder="例如: 杭州移动端攻坚小队"
+						placeholder-class="fb_zhan_wei"
+						maxlength="40"
+					/>
+					<text class="fb_sheet_lab fb_sheet_lab_jian">群类型与悬赏属性</text>
+					<view class="fb_sheet_lei">
+						<view class="fb_sheet_lei_an" :class="群类型 == 'bounty' ? 'fb_sheet_lei_ji' : ''" :data-type="'bounty'" @click="选群类型">
+							<image class="fb_sheet_lei_tu" src="/static/fa_bu/icons/verified_user.svg" mode="aspectFit"></image>
+							<text class="fb_sheet_lei_zi" :class="群类型 == 'bounty' ? 'fb_sheet_lei_zi_ji' : ''">悬赏担保群</text>
+						</view>
+						<view class="fb_sheet_lei_an" :class="群类型 == 'casual' ? 'fb_sheet_lei_ji' : ''" :data-type="'casual'" @click="选群类型">
+							<image class="fb_sheet_lei_tu" src="/static/fa_bu/icons/chat.svg" mode="aspectFit"></image>
+							<text class="fb_sheet_lei_zi" :class="群类型 == 'casual' ? 'fb_sheet_lei_zi_ji' : ''">普通交流群</text>
+						</view>
+					</view>
+					<view v-if="群类型 == 'bounty'" class="fb_tuo_guan">
+						<view class="fb_tuo_guan_zuo">
+							<image class="fb_tuo_guan_tu" src="/static/fa_bu/icons/lock.svg" mode="aspectFit"></image>
+							<view class="fb_tuo_guan_wen">
+								<text class="fb_tuo_guan_ming">初始托管担保池</text>
+								<text class="fb_tuo_guan_fu">可随时退还或分发</text>
+							</view>
+						</view>
+						<text class="fb_tuo_guan_shu">100 积分</text>
+					</view>
+				</view>
+
+				<view class="fb_sheet_an_hang">
+					<view class="fb_sheet_qu_xiao" @click="显示建群 = false">
+						<text class="fb_sheet_qu_xiao_zi">取消</text>
+					</view>
+					<view class="fb_sheet_que_ren" @click="确认建群">
+						<text class="fb_sheet_que_ren_zi">立即建立并邀请</text>
+					</view>
+				</view>
+			</view>
+		</view>
+
+		<!-- 7. 我的专属名片弹窗 -->
+		<view v-if="显示名片" class="fb_tan_ceng fb_tan_ceng_zhong">
+			<view class="fb_zhe" @click="显示名片 = false"></view>
+			<view class="fb_ming_pian">
+				<view class="fb_ming_pian_tou">
+					<text class="fb_ming_pian_biao">LINKQUEST IDENTITY</text>
+					<view class="fb_guan" @click="显示名片 = false">
+						<image class="fb_guan_tu" src="/static/fa_bu/icons/close.svg" mode="aspectFit"></image>
+					</view>
+				</view>
+				<view class="fb_ma_kuang">
+					<image class="fb_ma_tu" src="/static/fa_bu/icons/qr_art.svg" mode="aspectFit"></image>
+				</view>
+				<view class="fb_ming_pian_wen">
+					<text class="fb_ming_pian_ming">夜莺之翼 · LQ</text>
+					<text class="fb_ming_pian_id">ID: LQ-9821 · 信誉评分 99.9</text>
+				</view>
+				<text class="fb_ming_pian_shuo">出示此码，面对面扫码即可零延迟建立悬赏协作好友</text>
+				<view class="fb_ming_pian_an" @click="显示名片 = false">
+					<text class="fb_ming_pian_an_zi">完成</text>
+				</view>
+			</view>
+		</view>
+
+		<!-- 8. 顶部胶囊 Toast -->
+		<view v-if="提示文字 != ''" class="fb_toast_ceng" :style="{ top: (80 + 状态栏高) + 'px' }">
+			<view class="fb_toast">
+				<image class="fb_toast_tu" :src="提示图标" mode="aspectFit"></image>
+				<text class="fb_toast_zi">{{ 提示文字 }}</text>
+			</view>
+		</view>
+	</view>
+</template>
+
+<style>
+/* 组件与页面里的 text 都不继承字体，按字重指向本地 ttf */
+@font-face { font-family: 'PJS400'; src: url('/static/hui_hua/fonts/PlusJakartaSans-400.ttf'); }
+@font-face { font-family: 'PJS600'; src: url('/static/hui_hua/fonts/PlusJakartaSans-600.ttf'); }
+@font-face { font-family: 'PJS700'; src: url('/static/hui_hua/fonts/PlusJakartaSans-700.ttf'); }
+@font-face { font-family: 'SG600'; src: url('/static/hui_hua/fonts/SpaceGrotesk-600.ttf'); }
+@font-face { font-family: 'SG700'; src: url('/static/hui_hua/fonts/SpaceGrotesk-700.ttf'); }
+
+/* ---------- 页面级滚动 ---------- */
+.fb_ye {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	min-height: 800px;
+	background-color: #0b1326;
+}
+.fb_nei_rong {
+	position: relative;
+	z-index: 1;
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	padding-bottom: 40px;
+}
+
+/* ---------- 顶栏右侧插槽（顶栏本体在 components/ding_lan） ---------- */
+.fb_ding_tou {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	border-radius: 16px;
+	background-color: #c0c1ff;
+}
+.fb_ding_tou_tu { width: 18px; height: 18px; }
+
+/* ---------- 1. 搜索栏 ---------- */
+.fb_sou_qu {
+	padding-top: 8px;
+	padding-bottom: 16px;
+	padding-left: 16px;
+	padding-right: 16px;
+}
+.fb_sou_hang {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	width: 100%;
+}
+.fb_sou_kuang {
+	flex: 1;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	height: 36px;
+	padding-left: 16px;
+	padding-right: 16px;
+	border-radius: 12px;
+	background-color: #131b2e;
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+}
+.fb_sou_tu { flex-shrink: 0; width: 20px; height: 20px; margin-right: 4px; }
+.fb_sou_shu_ru {
+	flex: 1;
+	height: 20px;
+	font-size: 14px;
+	line-height: 20px;
+	font-family: 'PJS400';
+	color: #dae2fd;
+}
+.fb_zhan_wei { color: #908fa0; font-size: 14px; font-family: 'PJS400'; }
+.fb_sou_qing {
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 18px;
+	height: 18px;
+	margin-left: 4px;
+}
+.fb_sou_qing_tu { width: 18px; height: 18px; }
+.fb_sao {
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 44px;
+	height: 44px;
+	margin-left: 8px;
+	border-radius: 12px;
+	background-color: #222a3d;
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+}
+.fb_sao_tu { width: 22px; height: 22px; }
+
+/* ---------- 2. Hero 建群卡 ---------- */
+.fb_hero_qu {
+	padding-left: 16px;
+	padding-right: 16px;
+	margin-bottom: 24px;
+}
+.fb_hero {
+	position: relative;
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+	padding-top: 24px;
+	padding-bottom: 24px;
+	padding-left: 24px;
+	padding-right: 24px;
+	border-radius: 12px;
+	background-color: #222a3d;
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+.fb_guang { position: absolute; }
+.fb_guang_zi { top: -48px; right: -48px; width: 160px; height: 160px; }
+.fb_guang_lv { bottom: -32px; left: -32px; width: 144px; height: 144px; }
+.fb_hero_nei { position: relative; z-index: 2; display: flex; flex-direction: column; }
+
+.fb_hui_zhang_hang {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	height: 22px;
+	margin-bottom: 16px;
+}
+.fb_hui_zhang_zu { display: flex; flex-direction: row; align-items: center; }
+.fb_hui_zhang {
+	padding-left: 8px;
+	padding-right: 8px;
+	padding-top: 2px;
+	padding-bottom: 2px;
+	margin-right: 4px;
+	border-radius: 9999px;
+	font-size: 10px;
+	line-height: 14px;
+	font-family: 'SG700';
+}
+.fb_hui_zhang_zi { background-color: rgba(192, 193, 255, 0.1); color: #c0c1ff; }
+.fb_hui_zhang_lv { background-color: rgba(78, 222, 163, 0.1); color: #4edea3; }
+.fb_hui_zhang_tu { width: 22px; height: 22px; }
+
+.fb_hero_wen { display: flex; flex-direction: column; margin-bottom: 16px; }
+.fb_hero_biao {
+	font-size: 22px;
+	line-height: 28px;
+	font-family: 'PJS700';
+	color: #dae2fd;
+}
+.fb_hero_fu {
+	margin-top: 4px;
+	font-size: 12px;
+	line-height: 16px;
+	font-family: 'PJS400';
+	color: #c7c4d7;
+}
+
+.fb_xuan_hang { display: flex; flex-direction: row; padding-top: 4px; }
+.fb_xuan {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	padding: 8px;
+	margin-right: 8px;
+	border-radius: 12px;
+	background-color: #060e20;
+}
+.fb_xuan_you { margin-right: 0; }
+.fb_xuan_tou {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 4px;
+}
+.fb_xuan_tu { width: 20px; height: 20px; }
+.fb_xuan_jian { width: 16px; height: 16px; }
+.fb_xuan_ming {
+	font-size: 14px;
+	line-height: 20px;
+	font-family: 'PJS600';
+	color: #dae2fd;
+}
+.fb_xuan_fu {
+	font-size: 10px;
+	line-height: 14px;
+	font-family: 'SG700';
+	color: #c7c4d7;
+}
+.fb_xuan_fu_lv { color: #4edea3; }
+
+/* 两枚胶囊工具 */
+.fb_gong_ju_hang { display: flex; flex-direction: row; margin-top: 8px; }
+.fb_gong_ju {
+	flex: 1;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	padding-top: 12px;
+	padding-bottom: 12px;
+	padding-left: 16px;
+	padding-right: 16px;
+	margin-right: 8px;
+	border-radius: 12px;
+	background-color: #131b2e;
+}
+.fb_gong_ju_you { margin-right: 0; }
+.fb_gong_ju_yuan {
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	margin-right: 8px;
+	border-radius: 16px;
+}
+.fb_gong_ju_yuan_lv { background-color: rgba(78, 222, 163, 0.15); }
+.fb_gong_ju_yuan_zi { background-color: rgba(192, 193, 255, 0.15); }
+.fb_gong_ju_tu { width: 18px; height: 18px; }
+.fb_gong_ju_wen { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.fb_gong_ju_ming {
+	font-size: 14px;
+	line-height: 18px;
+	font-family: 'SG600';
+	color: #dae2fd;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.fb_gong_ju_fu {
+	font-size: 10px;
+	line-height: 14px;
+	font-family: 'SG700';
+	color: #908fa0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* ---------- 3. 分段导航 ---------- */
+.fb_fen_qu { padding-left: 16px; padding-right: 16px; margin-bottom: 16px; }
+.fb_fen {
+	display: flex;
+	flex-direction: row;
+	height: 42px;
+	padding: 4px;
+	border-radius: 12px;
+	background-color: #131b2e;
+}
+.fb_fen_an {
+	flex: 1;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+	height: 34px;
+	border-radius: 8px;
+}
+.fb_fen_an_ji { background-color: #31394d; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.22); }
+.fb_fen_tu { width: 18px; height: 18px; margin-right: 6px; }
+.fb_fen_zi {
+	font-size: 14px;
+	line-height: 18px;
+	font-family: 'SG600';
+	color: #c7c4d7;
+	white-space: nowrap;
+}
+.fb_fen_zi_ji { color: #dae2fd; }
+.fb_lv_dian { width: 8px; height: 8px; margin-left: 6px; border-radius: 4px; background-color: #4edea3; }
+.fb_shu_jiao {
+	padding-left: 6px;
+	padding-right: 6px;
+	padding-top: 1px;
+	padding-bottom: 1px;
+	margin-left: 6px;
+	border-radius: 9999px;
+	background-color: rgba(192, 193, 255, 0.15);
+}
+.fb_shu_jiao_zi { font-size: 10px; line-height: 14px; font-family: 'SG700'; color: #c0c1ff; }
+
+/* ---------- 4/5. Tab 内容 ---------- */
+.fb_tab { display: flex; flex-direction: column; padding-left: 16px; padding-right: 16px; }
+.fb_biao_qian_gun { width: 100%; margin-bottom: 24px; }
+.fb_biao_qian_hang {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	padding-bottom: 4px;
+}
+.fb_biao_qian_tou {
+	flex-shrink: 0;
+	margin-right: 4px;
+	padding-right: 4px;
+	font-size: 10px;
+	line-height: 14px;
+	font-family: 'SG700';
+	color: #908fa0;
+}
+.fb_biao_qian {
+	flex-shrink: 0;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	padding-left: 10px;
+	padding-right: 10px;
+	padding-top: 4px;
+	padding-bottom: 4px;
+	margin-right: 4px;
+	border-radius: 9999px;
+	background-color: #222a3d;
+}
+.fb_biao_qian_ji { background-color: #c0c1ff; }
+.fb_biao_qian_zi {
+	font-size: 10px;
+	line-height: 14px;
+	font-family: 'SG700';
+	color: #c7c4d7;
+	white-space: nowrap;
+}
+.fb_biao_qian_zi_ji { color: #1000a9; }
+
+.fb_lie_tou {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	height: 24px;
+	margin-bottom: 8px;
+}
+.fb_lie_tou_zuo { display: flex; flex-direction: row; align-items: center; }
+.fb_lie_tou_tu { width: 20px; height: 20px; margin-right: 6px; }
+.fb_lie_tou_zi { font-size: 18px; line-height: 24px; font-family: 'PJS600'; color: #dae2fd; }
+.fb_lie_tou_fu { font-size: 10px; line-height: 14px; font-family: 'SG700'; color: #908fa0; }
+.fb_lie_tou_fu_lv { color: #4edea3; }
+
+/* 达人卡片 */
+.fb_ren_lie { display: flex; flex-direction: column; margin-bottom: -8px; }
+.fb_ren_ka {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	padding: 16px;
+	margin-bottom: 8px;
+	border-radius: 12px;
+	background-color: #131b2e;
+}
+.fb_ren_zuo { flex: 1; display: flex; flex-direction: row; align-items: center; overflow: hidden; }
+.fb_ren_tou_qu { position: relative; flex-shrink: 0; width: 48px; height: 48px; margin-right: 16px; }
+.fb_ren_tou { width: 48px; height: 48px; border-radius: 24px; }
+.fb_zai_xian {
+	position: absolute;
+	right: 0;
+	bottom: 0;
+	width: 12px;
+	height: 12px;
+	border-radius: 6px;
+	border-width: 2px;
+	border-style: solid;
+	border-color: #131b2e;
+	background-color: #4edea3;
+}
+.fb_ren_wen { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.fb_ren_ming_hang { display: flex; flex-direction: row; align-items: center; overflow: hidden; }
+.fb_ren_ming {
+	font-size: 16px;
+	line-height: 24px;
+	font-family: 'PJS600';
+	color: #dae2fd;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.fb_xin_yong {
+	flex-shrink: 0;
+	padding-left: 6px;
+	padding-right: 6px;
+	padding-top: 2px;
+	padding-bottom: 2px;
+	margin-left: 4px;
+	border-radius: 4px;
+	background-color: rgba(255, 185, 95, 0.15);
+	font-size: 10px;
+	line-height: 14px;
+	font-family: 'SG700';
+	color: #ffb95f;
+}
+.fb_ren_jian {
+	font-size: 12px;
+	line-height: 16px;
+	font-family: 'PJS400';
+	color: #c7c4d7;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.fb_biao_zu { display: flex; flex-direction: row; align-items: center; margin-top: 4px; }
+.fb_xiao_biao {
+	padding-left: 6px;
+	padding-right: 6px;
+	padding-top: 2px;
+	padding-bottom: 2px;
+	margin-right: 6px;
+	border-radius: 4px;
+	background-color: #222a3d;
+	font-size: 10px;
+	line-height: 14px;
+	font-family: 'SG700';
+	color: #c7c4d7;
+	white-space: nowrap;
+}
+.fb_dan_shu { display: flex; flex-direction: row; align-items: center; margin-left: 4px; }
+.fb_dan_shu_tu { width: 12px; height: 12px; margin-right: 2px; }
+.fb_dan_shu_zi { font-size: 10px; line-height: 14px; font-family: 'SG700'; color: #4edea3; white-space: nowrap; }
+.fb_tian_jia {
+	flex-shrink: 0;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	padding-left: 12px;
+	padding-right: 12px;
+	padding-top: 6px;
+	padding-bottom: 6px;
+	margin-left: 8px;
+	border-radius: 9999px;
+	background-color: #c0c1ff;
+}
+.fb_tian_jia_yi { background-color: #222a3d; }
+.fb_tian_jia_tu { width: 16px; height: 16px; margin-right: 4px; }
+.fb_tian_jia_zi { font-size: 12px; line-height: 16px; font-family: 'SG600'; color: #1000a9; white-space: nowrap; }
+.fb_tian_jia_zi_yi { color: #4edea3; }
+
+/* 群组卡片 */
+.fb_qun_lie { display: flex; flex-direction: column; margin-bottom: -8px; }
+.fb_qun_ka {
+	display: flex;
+	flex-direction: column;
+	padding: 16px;
+	margin-bottom: 8px;
+	border-radius: 12px;
+	background-color: #131b2e;
+}
+.fb_qun_tou { display: flex; flex-direction: row; align-items: flex-start; justify-content: space-between; }
+.fb_qun_zuo { flex: 1; display: flex; flex-direction: row; align-items: center; overflow: hidden; }
+.fb_qun_tu_qu {
+	position: relative;
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 48px;
+	height: 48px;
+	margin-right: 8px;
+	border-radius: 12px;
+	background-color: #222a3d;
+	overflow: hidden;
+}
+.fb_qun_tu { width: 26px; height: 26px; }
+.fb_qun_di_tiao { position: absolute; bottom: 0; left: 0; right: 0; height: 4px; }
+.fb_qun_wen { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.fb_qun_ming_hang { display: flex; flex-direction: row; align-items: center; overflow: hidden; }
+.fb_qun_ming {
+	font-size: 16px;
+	line-height: 24px;
+	font-family: 'PJS600';
+	color: #dae2fd;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.fb_qun_badge {
+	flex-shrink: 0;
+	padding-left: 6px;
+	padding-right: 6px;
+	padding-top: 2px;
+	padding-bottom: 2px;
+	margin-left: 4px;
+	border-radius: 4px;
+	font-size: 10px;
+	line-height: 14px;
+	font-family: 'SG700';
+}
+.fb_qun_hao {
+	font-size: 12px;
+	line-height: 16px;
+	font-family: 'PJS400';
+	color: #c7c4d7;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.fb_shen_qing {
+	flex-shrink: 0;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	padding-left: 14px;
+	padding-right: 14px;
+	padding-top: 6px;
+	padding-bottom: 6px;
+	margin-left: 8px;
+	border-radius: 9999px;
+	background-color: #00a572;
+}
+.fb_shen_qing_yi { background-color: #222a3d; }
+.fb_shen_qing_tu { width: 16px; height: 16px; margin-right: 4px; }
+.fb_shen_qing_zi { font-size: 12px; line-height: 16px; font-family: 'SG600'; color: #00311f; white-space: nowrap; }
+.fb_shen_qing_zi_yi { color: #c0c1ff; }
+.fb_qun_di {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	margin-top: 8px;
+	padding-left: 8px;
+	padding-right: 8px;
+	padding-top: 8px;
+	padding-bottom: 6px;
+	border-radius: 8px;
+	background-color: rgba(23, 31, 51, 0.4);
+}
+.fb_qun_di_zu { display: flex; flex-direction: row; align-items: center; }
+.fb_qun_di_xiang { display: flex; flex-direction: row; align-items: center; margin-right: 16px; }
+.fb_qun_di_tu { width: 14px; height: 14px; margin-right: 4px; }
+.fb_qun_di_zi { font-size: 10px; line-height: 14px; font-family: 'SG700'; color: #c7c4d7; white-space: nowrap; }
+.fb_qun_di_zi_lv { color: #4edea3; }
+.fb_qun_lei_ji { font-size: 10px; line-height: 14px; font-family: 'SG700'; color: #ffb95f; white-space: nowrap; }
+
+/* ---------- 6/7. 弹窗 ---------- */
+.fb_tan_ceng {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 60;
+	display: flex;
+	flex-direction: column;
+}
+.fb_tan_ceng_di { justify-content: flex-end; padding-left: 16px; padding-right: 16px; }
+.fb_tan_ceng_zhong { justify-content: center; align-items: center; }
+.fb_zhe { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(6, 14, 32, 0.8); }
+
+.fb_sheet {
+	position: relative;
+	width: 100%;
+	display: flex;
+	flex-direction: column;
+	padding: 24px;
+	border-top-left-radius: 12px;
+	border-top-right-radius: 12px;
+	background-color: #171f33;
+}
+.fb_sheet_tou { display: flex; flex-direction: row; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.fb_sheet_tou_zuo { display: flex; flex-direction: row; align-items: center; }
+.fb_sheet_badge {
+	padding-left: 8px;
+	padding-right: 8px;
+	padding-top: 2px;
+	padding-bottom: 2px;
+	margin-right: 4px;
+	border-radius: 9999px;
+	background-color: rgba(78, 222, 163, 0.15);
+	font-size: 10px;
+	line-height: 14px;
+	font-family: 'SG700';
+	color: #4edea3;
+}
+.fb_sheet_badge_zi { background-color: rgba(192, 193, 255, 0.15); color: #c0c1ff; }
+.fb_sheet_biao { font-size: 18px; line-height: 24px; font-family: 'PJS600'; color: #dae2fd; }
+.fb_guan { display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; }
+.fb_guan_tu { width: 20px; height: 20px; }
+
+.fb_sheet_nei { display: flex; flex-direction: column; margin-bottom: 16px; }
+.fb_sheet_lab { font-size: 10px; line-height: 14px; font-family: 'SG700'; color: #c7c4d7; margin-bottom: 4px; }
+.fb_sheet_lab_jian { margin-top: 8px; }
+.fb_sheet_shu_ru {
+	height: 40px;
+	padding-left: 16px;
+	padding-right: 16px;
+	border-radius: 8px;
+	background-color: #131b2e;
+	font-size: 14px;
+	line-height: 20px;
+	font-family: 'PJS400';
+	color: #dae2fd;
+}
+.fb_sheet_lei { display: flex; flex-direction: row; }
+.fb_sheet_lei_an {
+	flex: 1;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+	padding: 10px;
+	margin-right: 4px;
+	border-radius: 8px;
+	background-color: #131b2e;
+}
+.fb_sheet_lei_ji { background-color: #31394d; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2); }
+.fb_sheet_lei_tu { width: 18px; height: 18px; margin-right: 6px; }
+.fb_sheet_lei_zi { font-size: 12px; line-height: 16px; font-family: 'SG600'; color: #c7c4d7; white-space: nowrap; }
+.fb_sheet_lei_zi_ji { color: #dae2fd; }
+.fb_tuo_guan {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	margin-top: 8px;
+	padding: 8px;
+	border-radius: 8px;
+	background-color: #131b2e;
+}
+.fb_tuo_guan_zuo { display: flex; flex-direction: row; align-items: center; }
+.fb_tuo_guan_tu { width: 20px; height: 20px; margin-right: 8px; }
+.fb_tuo_guan_wen { display: flex; flex-direction: column; }
+.fb_tuo_guan_ming { font-size: 12px; line-height: 16px; font-family: 'SG600'; color: #dae2fd; }
+.fb_tuo_guan_fu { font-size: 10px; line-height: 14px; font-family: 'SG700'; color: #908fa0; }
+.fb_tuo_guan_shu { font-size: 14px; line-height: 20px; font-family: 'PJS600'; color: #4edea3; }
+
+.fb_sheet_an_hang { display: flex; flex-direction: row; padding-top: 4px; }
+.fb_sheet_qu_xiao {
+	flex: 1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	height: 42px;
+	margin-right: 8px;
+	border-radius: 8px;
+	background-color: #222a3d;
+}
+.fb_sheet_qu_xiao_zi { font-size: 14px; line-height: 18px; font-family: 'SG600'; color: #dae2fd; }
+.fb_sheet_que_ren {
+	flex: 1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	height: 42px;
+	border-radius: 8px;
+	background-color: #c0c1ff;
+}
+.fb_sheet_que_ren_zi { font-size: 14px; line-height: 18px; font-family: 'SG600'; color: #1000a9; }
+
+.fb_ming_pian {
+	position: relative;
+	width: 320px;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	padding: 24px;
+	border-radius: 12px;
+	background-color: #171f33;
+}
+.fb_ming_pian_tou { display: flex; flex-direction: row; align-items: center; justify-content: space-between; width: 100%; }
+.fb_ming_pian_biao { font-size: 10px; line-height: 14px; font-family: 'SG700'; color: #4edea3; letter-spacing: 1px; }
+.fb_ma_kuang {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 16px;
+	margin-top: 16px;
+	border-radius: 12px;
+	background-color: #060e20;
+}
+.fb_ma_tu { width: 160px; height: 160px; }
+.fb_ming_pian_wen { display: flex; flex-direction: column; align-items: center; margin-top: 16px; }
+.fb_ming_pian_ming { font-size: 18px; line-height: 24px; font-family: 'PJS600'; color: #dae2fd; }
+.fb_ming_pian_id { margin-top: 2px; font-size: 12px; line-height: 16px; font-family: 'SG600'; color: #c0c1ff; }
+.fb_ming_pian_shuo {
+	margin-top: 16px;
+	font-size: 12px;
+	line-height: 16px;
+	font-family: 'PJS400';
+	color: #c7c4d7;
+	text-align: center;
+}
+.fb_ming_pian_an {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 100%;
+	height: 40px;
+	margin-top: 16px;
+	border-radius: 8px;
+	background-color: #222a3d;
+}
+.fb_ming_pian_an_zi { font-size: 12px; line-height: 16px; font-family: 'SG600'; color: #dae2fd; }
+
+/* ---------- 8. Toast ---------- */
+.fb_toast_ceng {
+	position: fixed;
+	left: 0;
+	right: 0;
+	z-index: 70;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+}
+.fb_toast {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	padding-left: 16px;
+	padding-right: 16px;
+	padding-top: 10px;
+	padding-bottom: 10px;
+	border-radius: 9999px;
+	background-color: #2d3449;
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+.fb_toast_tu { width: 18px; height: 18px; margin-right: 8px; }
+.fb_toast_zi { font-size: 12px; line-height: 16px; font-family: 'SG600'; color: #dae2fd; }
+</style>

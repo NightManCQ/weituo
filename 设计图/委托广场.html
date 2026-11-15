@@ -1,0 +1,295 @@
+<!DOCTYPE html><html class="dark" lang="zh-CN"><head><meta charset="utf-8"><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"><meta content="mobile_tab" name="shell-type"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"><link href="https://fonts.googleapis.com" rel="preconnect"><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"><link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&amp;family=Space+Grotesk:wght@600;700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { colors: { "background": "#0b1326", "surface": "#0b1326", "tertiary": "#ffb95f", "on-tertiary": "#472a00", "surface-container-lowest": "#060e20", "on-surface-variant": "#c7c4d7", "surface-container-low": "#131b2e", "on-secondary-container": "#00311f", "error-container": "#93000a", "secondary-container": "#00a572", "surface-container-highest": "#2d3449", "inverse-on-surface": "#283044", "on-primary": "#1000a9", "inverse-primary": "#494bd6", "secondary-fixed-dim": "#4edea3", "on-tertiary-fixed-variant": "#653e00", "on-error": "#690005", "inverse-surface": "#dae2fd", "primary-container": "#8083ff", "tertiary-container": "#ca8100", "surface-container": "#171f33", "outline": "#908fa0", "primary": "#c0c1ff", "on-secondary-fixed": "#002113", "surface-variant": "#2d3449", "on-primary-fixed-variant": "#2f2ebe", "on-tertiary-fixed": "#2a1700", "surface-tint": "#c0c1ff", "on-background": "#dae2fd", "primary-fixed-dim": "#c0c1ff", "on-secondary-fixed-variant": "#005236", "tertiary-fixed-dim": "#ffb95f", "tertiary-fixed": "#ffddb8", "on-surface": "#dae2fd", "secondary": "#4edea3", "on-primary-container": "#0d0096", "surface-bright": "#31394d", "error": "#ffb4ab", "on-secondary": "#003824", "on-error-container": "#ffdad6", "on-tertiary-container": "#3e2400", "primary-fixed": "#e1e0ff", "surface-dim": "#0b1326", "on-primary-fixed": "#07006c", "outline-variant": "#464554", "secondary-fixed": "#6ffbbe", "surface-container-high": "#222a3d" }, borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, spacing: { "space-xs": "0.25rem", "gutter": "1rem", "space-md": "1rem", "space-xl": "2rem", "gutter-desktop": "1.5rem", "space-lg": "1.5rem", "margin-desktop": "2.5rem", "space-sm": "0.5rem", "margin": "1rem" }, fontFamily: { "body-lg": ["Plus Jakarta Sans"], "label-sm": ["Space Grotesk"], "label-md": ["Space Grotesk"], "display-lg-mobile": ["Plus Jakarta Sans"], "label-lg": ["Space Grotesk"], "body-md": ["Plus Jakarta Sans"], "headline-sm": ["Plus Jakarta Sans"], "body-sm": ["Plus Jakarta Sans"], "headline-lg": ["Plus Jakarta Sans"], "headline-md": ["Plus Jakarta Sans"], "display-lg": ["Plus Jakarta Sans"] }, fontSize: { "body-lg": ["16px", { lineHeight: "24px", letterSpacing: "0", fontWeight: "400" }], "label-sm": ["10px", { lineHeight: "14px", letterSpacing: "0.05em", fontWeight: "700" }], "label-md": ["12px", { lineHeight: "16px", letterSpacing: "0.03em", fontWeight: "600" }], "display-lg-mobile": ["30px", { lineHeight: "36px", letterSpacing: "-0.025em", fontWeight: "800" }], "label-lg": ["14px", { lineHeight: "18px", letterSpacing: "0.02em", fontWeight: "600" }], "body-md": ["14px", { lineHeight: "20px", letterSpacing: "0", fontWeight: "400" }], "headline-sm": ["18px", { lineHeight: "24px", letterSpacing: "-0.01em", fontWeight: "600" }], "body-sm": ["12px", { lineHeight: "16px", letterSpacing: "0.01em", fontWeight: "400" }], "headline-lg": ["28px", { lineHeight: "36px", letterSpacing: "-0.02em", fontWeight: "700" }], "headline-md": ["22px", { lineHeight: "28px", letterSpacing: "-0.015em", fontWeight: "700" }], "display-lg": ["40px", { lineHeight: "48px", letterSpacing: "-0.03em", fontWeight: "800" }] } } } };</script><style>@layer base{html,body{width:100%;margin:0;padding:0;background-color:#0b1326;color:#dae2fd;}body{overscroll-behavior-y:none;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface font-body-md text-on-surface antialiased min-h-screen"><header class="fixed top-0 w-full z-50 pt-safe bg-surface/80 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-16 px-gutter flex items-center justify-between"><div class="flex items-center gap-space-sm"><img alt="LinkQuest Logo" class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDF3u_eND9sQ_QAF2ff0S5jITMlbJSuZv8liZKdxXwq12kHX9updGPHLUmK18lQkBIvnwFY-O_mvVfu_llRksmNpioij2cTeT_DpGhS9PK81kzl4CDw8Hk77GEXeMBkdTXMdCPuZlV9594s02tvznOVAJQ6LZB6HlYRGtX6LC06_d7DD45Rv2I_r6mjLw8hyTBOHYItOwBcr6_aOcxAZ7KlCxhSnj5495ecitWrfQGg"><div class="flex flex-col"><span class="font-label-md text-label-md tracking-wider text-primary font-bold uppercase">LinkQuest</span><span class="font-headline-sm text-headline-sm text-on-surface leading-tight">Bounty Square</span></div></div><div class="flex items-center gap-space-xs"><button aria-label="Add Friend or Quest Group" class="w-11 h-11 flex items-center justify-center rounded-full text-on-surface-variant hover:text-on-surface active:scale-95 transition-all" type="button"><span class="material-symbols-outlined text-[22px]">group_add</span></button><button aria-label="Search or Discover" class="w-11 h-11 flex items-center justify-center rounded-full text-on-surface-variant hover:text-on-surface active:scale-95 transition-all" type="button"><span class="material-symbols-outlined text-[22px]">search</span></button><div class="relative flex items-center justify-center ml-space-xs"><img alt="Profile" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC_UmEt4E5FWoPuAoQzVVHOIbmlpZ8fYelxyLXHuS3wP2WqlDkE0Ikzxd7AaIftv6_f0kmN1Bkacd5P-f0xoSe41QCTXitqg_beh-HzCahxt-xuZnVTeMacobC-GMDJI5HBcakfXIVflZ4gliqUKRc3-GOpxEUlk68LFaIRnVvTBh4Cq2PYdJUEXwGTSDxbrgVI4LHHy-R-bcX_aU9MGGcrYHXPTA1rRENh1t2W2v-6"><span class="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-secondary"></span></div></div></div></header><main class="flex flex-col relative w-full pt-16 pb-24 bg-surface min-h-screen"><div class="flex flex-col w-full">
+<!-- Dynamic Atmospheric Glow Accent -->
+<div class="relative w-full px-gutter pt-space-xs pb-space-lg flex flex-col gap-space-md">
+<!-- 1. Top Points Wallet & Status Widget -->
+<div class="relative overflow-hidden rounded-xl bg-surface-container-high p-space-md shadow-xl">
+<!-- Ambient background visual gradient -->
+<div class="absolute -right-8 -top-8 w-44 h-44 rounded-full bg-primary/10 blur-3xl pointer-events-none"></div>
+<div class="absolute right-12 bottom-0 w-28 h-28 rounded-full bg-secondary/10 blur-2xl pointer-events-none"></div>
+<div class="relative z-10 flex flex-col gap-space-md">
+<!-- Top row: Points tally + Strategy link -->
+<div class="flex items-start justify-between">
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface-variant flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-[16px] text-tertiary">toll</span>
+              我的可用积分
+            </span>
+<div class="flex items-baseline gap-space-xs mt-0.5">
+<span class="font-display-lg-mobile text-display-lg-mobile font-bold tracking-tight text-on-surface">2,450</span>
+<span class="font-label-md text-label-md text-secondary font-bold">PTS</span>
+</div>
+</div>
+<button class="flex items-center gap-1 px-3 py-1.5 rounded-full bg-surface-variant hover:bg-surface-bright active:scale-95 transition-all text-primary font-label-md text-label-md shadow-sm" type="button">
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: &quot;FILL&quot; 1;">lightbulb</span>
+<span class="">赚积分攻略</span>
+</button>
+</div>
+<!-- Bottom row: Daily quest progress quota -->
+<div class="flex items-center justify-between pt-space-xs">
+<div class="flex flex-col gap-1 w-full max-w-[210px]">
+<div class="flex justify-between items-center text-on-surface-variant">
+<span class="font-label-sm text-label-sm">今日已领任务配额</span>
+<span class="font-label-sm text-label-sm font-bold text-on-surface">2 / 5</span>
+</div>
+<!-- Progress Track -->
+<div class="w-full h-2 rounded-full bg-surface-container-lowest overflow-hidden">
+<div class="h-full rounded-full bg-gradient-to-r from-primary to-secondary transition-all duration-500" style="width: 40%;"></div>
+</div>
+</div>
+<div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container-lowest text-secondary-fixed-dim font-label-sm text-label-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse"></span>
+            今日剩余 3 次机会
+          </div>
+</div>
+</div>
+</div>
+<!-- 2. Search & Category Filter Chips -->
+<div class="flex flex-col gap-space-sm -mx-gutter px-gutter">
+<!-- Search Bar -->
+<div class="relative w-full">
+<div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-on-surface-variant">
+<span class="material-symbols-outlined text-[20px]">search</span>
+</div>
+<input class="w-full pl-10 pr-10 py-2.5 rounded-xl bg-surface-container-low text-on-surface placeholder:text-outline font-body-md text-body-md shadow-sm focus:outline-none focus:bg-surface-container transition-all" placeholder="搜索任务关键词、技能、地点..." type="text">
+<button aria-label="Voice or Image Filter" class="absolute inset-y-0 right-0 pr-3.5 flex items-center text-on-surface-variant hover:text-on-surface active:scale-95 transition-all" type="button">
+<span class="material-symbols-outlined text-[18px]">tune</span>
+</button>
+</div>
+<!-- Horizontal Scrollable Chips -->
+<div class="flex items-center gap-space-xs overflow-x-auto no-scrollbar py-1">
+<button class="whitespace-nowrap px-3.5 py-1.5 rounded-full bg-primary text-on-primary font-label-md text-label-md font-bold shadow-md shadow-primary/20 active:scale-95 transition-all" type="button">
+          全部
+        </button>
+<button class="whitespace-nowrap px-3.5 py-1.5 rounded-full bg-surface-container-high hover:bg-surface-bright text-on-surface font-label-md text-label-md active:scale-95 transition-all" type="button">
+          💻 技能开发
+        </button>
+<button class="whitespace-nowrap px-3.5 py-1.5 rounded-full bg-surface-container-high hover:bg-surface-bright text-on-surface font-label-md text-label-md active:scale-95 transition-all" type="button">
+          🎨 视觉设计
+        </button>
+<button class="whitespace-nowrap px-3.5 py-1.5 rounded-full bg-surface-container-high hover:bg-surface-bright text-on-surface font-label-md text-label-md active:scale-95 transition-all" type="button">
+          🏃 跑腿代办
+        </button>
+<button class="whitespace-nowrap px-3.5 py-1.5 rounded-full bg-surface-container-high hover:bg-surface-bright text-on-surface font-label-md text-label-md active:scale-95 transition-all" type="button">
+          📚 学习互助
+        </button>
+<button class="whitespace-nowrap px-3.5 py-1.5 rounded-full bg-surface-container-high hover:bg-surface-bright text-on-surface font-label-md text-label-md active:scale-95 transition-all" type="button">
+          🔍 资料调研
+        </button>
+</div>
+</div>
+<!-- 3. Sort Filter Bar -->
+<div class="flex items-center justify-between pt-0.5">
+<div class="flex items-center gap-space-sm">
+<button class="font-label-md text-label-md font-bold text-primary flex items-center gap-0.5" type="button">
+          最新发布
+          <span class="material-symbols-outlined text-[14px]">arrow_drop_down</span>
+</button>
+<button class="font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors" type="button">
+          积分最高
+        </button>
+<button class="font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors" type="button">
+          距离最近
+        </button>
+<button class="font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors" type="button">
+          即将截止
+        </button>
+</div>
+<div class="flex items-center gap-1 text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px]">view_agenda</span>
+</div>
+</div>
+<!-- 4. Bounty Cards Stream -->
+<div class="flex flex-col gap-space-md w-full">
+<!-- CARD 1 (Featured Hot Bounty) -->
+<div class="relative rounded-xl bg-surface-container-high p-space-md shadow-xl flex flex-col gap-space-sm overflow-hidden">
+<!-- Hot decorative corner badge -->
+<div class="absolute -top-6 -right-6 w-16 h-16 bg-error/20 rounded-full blur-xl pointer-events-none"></div>
+<!-- Header: Tag + Reward -->
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-1.5">
+<span class="px-2.5 py-1 rounded-full bg-surface-container-highest text-primary font-label-sm text-label-sm font-bold flex items-center gap-1">
+<span class="">💻 技能开发</span>
+<span class="text-error font-bold">· 紧急</span>
+</span>
+<span class="px-2 py-0.5 rounded-full bg-error-container text-on-error-container font-label-sm text-label-sm font-bold animate-pulse">
+              HOT
+            </span>
+</div>
+<!-- Points Badge: Emerald glow & tabular -->
+<div class="flex items-center gap-1 px-3 py-1 rounded-full bg-secondary/15 text-secondary font-label-md text-label-md font-bold shadow-sm">
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: &quot;FILL&quot; 1;">monetization_on</span>
+            +600 积分
+          </div>
+</div>
+<!-- Title -->
+<h2 class="font-headline-sm text-headline-sm text-on-surface font-bold leading-snug">
+          急求帮忙排查一段 FastAPI WebSocket 断连报错
+        </h2>
+<!-- Publisher & Trust Metric -->
+<div class="flex items-center justify-between pt-0.5">
+<div class="flex items-center gap-space-xs min-w-0">
+<img class="w-8 h-8 rounded-full object-cover flex-shrink-0" data-alt="Close-up portrait of a thoughtful Asian young male software developer wearing subtle glasses, ambient dark indigo neon reflections, cinematic moody soft lighting, sleek modern aesthetic" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAF6bviqR_6yXPNIRQP3p0KhsTn_Kl6KGtd8thDGyMZlP1DB17eKql-ytj_Y7pbiLJsmTxtLDzTdbuyKL73cgb6x_81NkYhx7UTnCHypVqLxBO6EAwtc7BGDi8dvuzhyOcxFzDLYMBtefkX8403pVEKRvYg0iLAXRvxDMjSX0yqDYmrt6lXT-3_LaaOEbmnNy2q1wjSxFTiszRiaSqa3jvGCrISgMLqGIHWLgzXGpW5">
+<div class="flex flex-col min-w-0">
+<span class="font-label-md text-label-md text-on-surface font-bold truncate">张晓宇</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1">
+<span class="text-tertiary">4.9⭐</span>
+<span class="">(已完成 24 单)</span>
+</span>
+</div>
+</div>
+<div class="flex flex-col items-end text-right">
+<span class="font-label-sm text-label-sm text-error font-bold flex items-center gap-0.5">
+<span class="material-symbols-outlined text-[14px]">timer</span>
+              剩余 3 小时
+            </span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">限 1 人接单</span>
+</div>
+</div>
+<!-- Actions -->
+<div class="flex items-center gap-space-sm pt-space-xs">
+<button class="w-11 h-11 flex items-center justify-center rounded-xl bg-surface-container-highest hover:bg-surface-bright text-on-surface active:scale-95 transition-all flex-shrink-0" type="button">
+<span class="material-symbols-outlined text-[20px]">chat</span>
+</button>
+<button class="flex-1 py-2.5 px-space-md rounded-xl bg-primary hover:bg-primary-container text-on-primary font-label-lg text-label-lg font-bold shadow-lg shadow-primary/25 active:scale-[0.98] transition-all text-center flex items-center justify-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-[18px]">bolt</span>
+            立即抢单
+          </button>
+</div>
+</div>
+<!-- CARD 2 (Visual Design Quest) -->
+<div class="rounded-xl bg-surface-container-high p-space-md shadow-lg flex flex-col gap-space-sm">
+<div class="flex items-center justify-between">
+<span class="px-2.5 py-1 rounded-full bg-surface-container-highest text-primary font-label-sm text-label-sm font-bold">
+            🎨 视觉设计
+          </span>
+<div class="flex items-center gap-1 px-3 py-1 rounded-full bg-secondary/15 text-secondary font-label-md text-label-md font-bold">
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: &quot;FILL&quot; 1;">monetization_on</span>
+            +850 积分
+          </div>
+</div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface font-bold leading-snug">
+          需要设计一套可爱风格的猫咪表情包（6个静态）
+        </h2>
+<!-- Publisher & Progress Indicator -->
+<div class="flex items-center justify-between pt-0.5">
+<div class="flex items-center gap-space-xs min-w-0">
+<img class="w-8 h-8 rounded-full object-cover flex-shrink-0" data-alt="Portrait of an imaginative digital illustrator girl with bob haircut, soft pastel rim-lighting in a dark high-tech studio environment, warm cinematic tones" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCnzQvRXbyKtNhEBT-zn5LKy8Hs215jWkrJ3Ikw-fE23-5_CFGtgNCS5td7q3kkFOeXWipkOEkjYW8GBELQdKD99vrgGdlshWlahFuDSlSMwqefQQQVhJiB-JntGMrNoi4oxd6bv1XSpvaH8CXmfF5Qk4yX8bqb6SUoql-hrYX6aAUAJJiHXiIfNgfmRy0PL2AJmsz4FY6TaxkesV4o-3ccyJge0JSShxjsmYESPnIx">
+<div class="flex flex-col min-w-0">
+<span class="font-label-md text-label-md text-on-surface font-bold truncate">Momo</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1">
+<span class="text-tertiary">5.0⭐</span>
+<span class="">认证创作者</span>
+</span>
+</div>
+</div>
+<div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container text-tertiary-fixed-dim font-label-sm text-label-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+            已报名 3人 / 选人中
+          </div>
+</div>
+<!-- Actions -->
+<div class="flex items-center gap-space-sm pt-space-xs">
+<button class="flex-1 py-2 px-space-md rounded-xl bg-surface-container-highest hover:bg-surface-bright text-on-surface font-label-md text-label-md font-bold active:scale-95 transition-all text-center" type="button">
+            查看详情
+          </button>
+<button class="flex-1 py-2 px-space-md rounded-xl bg-primary-container text-on-primary-container font-label-md text-label-md font-bold shadow-md hover:opacity-90 active:scale-95 transition-all text-center" type="button">
+            申请接单
+          </button>
+</div>
+</div>
+<!-- CARD 3 (Errand / Proximity) -->
+<div class="rounded-xl bg-surface-container-high p-space-md shadow-lg flex flex-col gap-space-sm">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-1.5">
+<span class="px-2.5 py-1 rounded-full bg-surface-container-highest text-secondary-fixed-dim font-label-sm text-label-sm font-bold">
+              🏃 跑腿代办
+            </span>
+<span class="font-label-sm text-label-sm text-on-surface-variant flex items-center gap-0.5">
+<span class="material-symbols-outlined text-[13px] text-secondary">location_on</span>
+              距离 500m
+            </span>
+</div>
+<div class="flex items-center gap-1 px-3 py-1 rounded-full bg-secondary/15 text-secondary font-label-md text-label-md font-bold">
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: &quot;FILL&quot; 1;">monetization_on</span>
+            +150 积分
+          </div>
+</div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface font-bold leading-snug">
+          中区图书馆帮忙代取一本《系统设计面试指南》
+        </h2>
+<div class="flex items-center justify-between pt-0.5">
+<div class="flex items-center gap-space-xs min-w-0">
+<img class="w-8 h-8 rounded-full object-cover flex-shrink-0" data-alt="Avatar portrait of an energetic university student smiling, ambient modern library glass background with deep blue and warm ambient lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAkNbmz9A1qemfUPH-AbrRLv7qgv8jhZHbXzNiHmW3aRaQUXguJT6O3WPZF1DMkI9u_5URNMYGUh0Svwq_eZOYx6rwAMDdTS33iaF-GJfDbsEM42IC_10kHqabrrfqW6iQp4XcOWjDFAZnTgdetz2orFhf1K_EQJ_1RwGmZ82fso8V_rsJ0uEhWngneaT0s7mF2dR-VGtSAJXWGeSPcV79nEuf9TIO8Y4oVENLGUz-Q">
+<div class="flex flex-col min-w-0">
+<span class="font-label-md text-label-md text-on-surface font-bold truncate">陈晨</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">中区教学楼A栋</span>
+</div>
+</div>
+<span class="font-label-sm text-label-sm text-tertiary font-bold flex items-center gap-0.5">
+<span class="material-symbols-outlined text-[14px]">schedule</span>
+            今日 18:00 前
+          </span>
+</div>
+<!-- Action -->
+<div class="pt-space-xs">
+<button class="w-full py-2.5 px-space-md rounded-xl bg-surface-container-highest hover:bg-surface-bright text-on-surface font-label-md text-label-md font-bold flex items-center justify-center gap-1 active:scale-[0.98] transition-all" type="button">
+<span class="material-symbols-outlined text-[18px] text-secondary">directions_walk</span>
+            帮他代取
+          </button>
+</div>
+</div>
+<!-- CARD 4 (Study / Mutual Practice) -->
+<div class="rounded-xl bg-surface-container-high p-space-md shadow-lg flex flex-col gap-space-sm mb-space-lg">
+<div class="flex items-center justify-between">
+<span class="px-2.5 py-1 rounded-full bg-surface-container-highest text-primary font-label-sm text-label-sm font-bold">
+            📚 学习互助
+          </span>
+<div class="flex items-center gap-1 px-3 py-1 rounded-full bg-secondary/15 text-secondary font-label-md text-label-md font-bold">
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: &quot;FILL&quot; 1;">monetization_on</span>
+            +300 积分
+          </div>
+</div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface font-bold leading-snug">
+          求雅思口语 Part 2 模拟对练 40分钟
+        </h2>
+<div class="flex items-center justify-between pt-0.5">
+<div class="flex items-center gap-space-xs min-w-0">
+<img class="w-8 h-8 rounded-full object-cover flex-shrink-0" data-alt="Portrait of an intelligent female graduate student wearing minimalist headphones, stylish dark blue ambient study setup, clean hyper-focused look" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAxFVGYiZygJ_sYpCJCml0DHqxLAfHcG5QbG5xkZ-O-ug79uN-fSaPjFQ-QMtQNTuzfoV6qYe0XL4QpGLe8CR6CJmtjPjLOdCj2Hgrib7A1mpW0f9ySpfcLPaBNqjjw1NHvM5_bWpoEKk1LOROEQXgwtuwHFy0xy2YqK8VVcz4DIfVd49YIWN6WfbA7i8Fkdat3XS8k1P7WyAz6G25omu9fXXJFj7-NsFVsa0kdfnwW">
+<div class="flex flex-col min-w-0">
+<span class="font-label-md text-label-md text-on-surface font-bold truncate">Sarah Lin</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">线上语音 · 随时可约</span>
+</div>
+</div>
+<button class="px-4 py-2 rounded-xl bg-primary hover:bg-primary-container text-on-primary font-label-md text-label-md font-bold active:scale-95 transition-all shadow-md" type="button">
+            参与对练
+          </button>
+</div>
+</div>
+</div>
+</div>
+<!-- 5. Floating / Sticky CTA at bottom right above nav bar -->
+<div class="fixed bottom-24 right-4 z-40">
+
+</div>
+</div>
+<script>
+  // Simple micro-interaction for category chip selection
+  document.querySelectorAll('.no-scrollbar button').forEach(button => {
+    button.addEventListener('click', function() {
+      document.querySelectorAll('.no-scrollbar button').forEach(b => {
+        b.classList.remove('bg-primary', 'text-on-primary', 'shadow-md', 'shadow-primary/20');
+        b.classList.add('bg-surface-container-high', 'text-on-surface');
+      });
+      this.classList.remove('bg-surface-container-high', 'text-on-surface');
+      this.classList.add('bg-primary', 'text-on-primary', 'shadow-md', 'shadow-primary/20');
+    });
+  });
+</script></main><nav class="fixed bottom-0 w-full z-50 pb-safe bg-surface/80 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]" data-active-classes="text-primary font-bold"><div class="flex justify-around items-center h-20 px-space-sm"><a class="flex flex-col items-center justify-center w-16 h-14 text-on-surface-variant hover:text-on-surface transition-colors relative" data-path="messages" href="#"><div class="relative flex items-center justify-center"><span class="material-symbols-outlined text-[24px]">chat_bubble</span><span class="absolute -top-1 -right-2 px-1.5 py-0.2 bg-secondary text-on-secondary rounded-full font-label-sm text-label-sm leading-none">3</span></div><span class="font-label-md text-label-md mt-1">消息</span></a><a aria-current="page" class="flex flex-col items-center justify-center w-16 h-14 transition-colors text-primary font-bold" data-path="bounty-square" href="#"><span class="material-symbols-outlined text-[24px] text-tertiary">local_fire_department</span><span class="font-label-md text-label-md mt-1">委托广场</span></a><a class="flex flex-col items-center justify-center w-16 h-14 -mt-5 group" data-path="create-bounty" href="#"><div class="w-12 h-12 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center shadow-[0_12px_32px_-4px_rgba(99,102,241,0.35)] group-active:scale-95 transition-transform"><span class="material-symbols-outlined text-[28px]">add</span></div><span class="font-label-md text-label-md mt-1 text-on-surface-variant">发布</span></a><a class="flex flex-col items-center justify-center w-16 h-14 text-on-surface-variant hover:text-on-surface transition-colors" data-path="profile" href="#"><span class="material-symbols-outlined text-[24px]">person</span><span class="font-label-md text-label-md mt-1">我的</span></a></div></nav>
+
+</body></html>

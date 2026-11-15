@@ -1,0 +1,960 @@
+<!doctype html>
+<html class="dark" lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport" />
+    <meta content="mobile_tab" name="shell-type" />
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com" rel="preconnect" />
+    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&amp;family=Space+Grotesk:wght@600;700&amp;display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet" />
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              background: "#0b1326",
+              surface: "#0b1326",
+              tertiary: "#ffb95f",
+              "on-tertiary": "#472a00",
+              "surface-container-lowest": "#060e20",
+              "on-surface-variant": "#c7c4d7",
+              "surface-container-low": "#131b2e",
+              "on-secondary-container": "#00311f",
+              "error-container": "#93000a",
+              "secondary-container": "#00a572",
+              "surface-container-highest": "#2d3449",
+              "inverse-on-surface": "#283044",
+              "on-primary": "#1000a9",
+              "inverse-primary": "#494bd6",
+              "secondary-fixed-dim": "#4edea3",
+              "on-tertiary-fixed-variant": "#653e00",
+              "on-error": "#690005",
+              "inverse-surface": "#dae2fd",
+              "primary-container": "#8083ff",
+              "tertiary-container": "#ca8100",
+              "surface-container": "#171f33",
+              outline: "#908fa0",
+              primary: "#c0c1ff",
+              "on-secondary-fixed": "#002113",
+              "surface-variant": "#2d3449",
+              "on-primary-fixed-variant": "#2f2ebe",
+              "on-tertiary-fixed": "#2a1700",
+              "surface-tint": "#c0c1ff",
+              "on-background": "#dae2fd",
+              "primary-fixed-dim": "#c0c1ff",
+              "on-secondary-fixed-variant": "#005236",
+              "tertiary-fixed-dim": "#ffb95f",
+              "tertiary-fixed": "#ffddb8",
+              "on-surface": "#dae2fd",
+              secondary: "#4edea3",
+              "on-primary-container": "#0d0096",
+              "surface-bright": "#31394d",
+              error: "#ffb4ab",
+              "on-secondary": "#003824",
+              "on-error-container": "#ffdad6",
+              "on-tertiary-container": "#3e2400",
+              "primary-fixed": "#e1e0ff",
+              "surface-dim": "#0b1326",
+              "on-primary-fixed": "#07006c",
+              "outline-variant": "#464554",
+              "secondary-fixed": "#6ffbbe",
+              "surface-container-high": "#222a3d",
+            },
+            borderRadius: { DEFAULT: "0.25rem", lg: "0.5rem", xl: "0.75rem", full: "9999px" },
+            spacing: {
+              "space-xs": "0.25rem",
+              gutter: "1rem",
+              "space-md": "1rem",
+              "space-xl": "2rem",
+              "gutter-desktop": "1.5rem",
+              "space-lg": "1.5rem",
+              "margin-desktop": "2.5rem",
+              "space-sm": "0.5rem",
+              margin: "1rem",
+            },
+            fontFamily: {
+              "body-lg": ["Plus Jakarta Sans"],
+              "label-sm": ["Space Grotesk"],
+              "label-md": ["Space Grotesk"],
+              "display-lg-mobile": ["Plus Jakarta Sans"],
+              "label-lg": ["Space Grotesk"],
+              "body-md": ["Plus Jakarta Sans"],
+              "headline-sm": ["Plus Jakarta Sans"],
+              "body-sm": ["Plus Jakarta Sans"],
+              "headline-lg": ["Plus Jakarta Sans"],
+              "headline-md": ["Plus Jakarta Sans"],
+              "display-lg": ["Plus Jakarta Sans"],
+            },
+            fontSize: {
+              "body-lg": ["16px", { lineHeight: "24px", letterSpacing: "0", fontWeight: "400" }],
+              "label-sm": ["10px", { lineHeight: "14px", letterSpacing: "0.05em", fontWeight: "700" }],
+              "label-md": ["12px", { lineHeight: "16px", letterSpacing: "0.03em", fontWeight: "600" }],
+              "display-lg-mobile": ["30px", { lineHeight: "36px", letterSpacing: "-0.025em", fontWeight: "800" }],
+              "label-lg": ["14px", { lineHeight: "18px", letterSpacing: "0.02em", fontWeight: "600" }],
+              "body-md": ["14px", { lineHeight: "20px", letterSpacing: "0", fontWeight: "400" }],
+              "headline-sm": ["18px", { lineHeight: "24px", letterSpacing: "-0.01em", fontWeight: "600" }],
+              "body-sm": ["12px", { lineHeight: "16px", letterSpacing: "0.01em", fontWeight: "400" }],
+              "headline-lg": ["28px", { lineHeight: "36px", letterSpacing: "-0.02em", fontWeight: "700" }],
+              "headline-md": ["22px", { lineHeight: "28px", letterSpacing: "-0.015em", fontWeight: "700" }],
+              "display-lg": ["40px", { lineHeight: "48px", letterSpacing: "-0.03em", fontWeight: "800" }],
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      @layer base {
+        html,
+        body {
+          width: 100%;
+          margin: 0;
+          padding: 0;
+          background-color: #0b1326;
+          color: #dae2fd;
+          scroll-behavior: smooth;
+        }
+        body {
+          overscroll-behavior-y: none;
+        }
+        .pb-safe {
+          padding-bottom: env(safe-area-inset-bottom, 0px);
+        }
+        .pt-safe {
+          padding-top: env(safe-area-inset-top, 0px);
+        }
+        main > :first-child {
+          margin-top: 0 !important;
+        }
+        main > :last-child {
+          margin-bottom: 0 !important;
+        }
+      }
+      ::-webkit-scrollbar {
+        display: none;
+      }
+      .section-group {
+        scroll-margin-top: 4rem;
+      }
+    </style>
+    <style>
+      body {
+        min-height: max(884px, 100dvh);
+      }
+    </style>
+  </head>
+  <body class="bg-surface font-body-md text-on-surface antialiased min-h-screen select-none">
+    <header class="fixed top-0 w-full z-50 pt-safe bg-surface/80 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
+      <div class="h-16 px-gutter flex items-center justify-between">
+        <div class="flex items-center gap-space-sm">
+          <img
+            alt="LinkQuest Logo"
+            class="h-8 w-auto object-contain"
+            src="https://lh3.googleusercontent.com/aida-public/AB6AXuDF3u_eND9sQ_QAF2ff0S5jITMlbJSuZv8liZKdxXwq12kHX9updGPHLUmK18lQkBIvnwFY-O_mvVfu_llRksmNpioij2cTeT_DpGhS9PK81kzl4CDw8Hk77GEXeMBkdTXMdCPuZlV9594s02tvznOVAJQ6LZB6HlYRGtX6LC06_d7DD45Rv2I_r6mjLw8hyTBOHYItOwBcr6_aOcxAZ7KlCxhSnj5495ecitWrfQGg"
+          />
+          <div class="flex flex-col">
+            <span class="font-label-md text-label-md tracking-wider text-primary font-bold uppercase">LinkQuest</span
+            ><span class="font-headline-sm text-headline-sm text-on-surface leading-tight">联系人与群聊 (Contacts)</span>
+          </div>
+        </div>
+        <div class="flex items-center gap-space-xs">
+          <button
+            aria-label="Add Friend or Quest Group"
+            class="w-11 h-11 flex items-center justify-center rounded-full text-on-surface-variant hover:text-on-surface active:scale-95 transition-all"
+            type="button"
+          >
+            <span class="material-symbols-outlined text-[22px]">group_add</span></button
+          ><button
+            aria-label="Search or Discover"
+            class="w-11 h-11 flex items-center justify-center rounded-full text-on-surface-variant hover:text-on-surface active:scale-95 transition-all"
+            type="button"
+          >
+            <span class="material-symbols-outlined text-[22px]">search</span>
+          </button>
+          <div class="relative flex items-center justify-center ml-space-xs">
+            <img
+              alt="Profile"
+              class="w-8 h-8 rounded-full object-cover"
+              src="https://lh3.googleusercontent.com/aida-public/AB6AXuC_UmEt4E5FWoPuAoQzVVHOIbmlpZ8fYelxyLXHuS3wP2WqlDkE0Ikzxd7AaIftv6_f0kmN1Bkacd5P-f0xoSe41QCTXitqg_beh-HzCahxt-xuZnVTeMacobC-GMDJI5HBcakfXIVflZ4gliqUKRc3-GOpxEUlk68LFaIRnVvTBh4Cq2PYdJUEXwGTSDxbrgVI4LHHy-R-bcX_aU9MGGcrYHXPTA1rRENh1t2W2v-6"
+            /><span class="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-secondary"></span>
+          </div>
+        </div>
+      </div>
+    </header>
+    <main class="flex flex-col relative w-full pt-16 pb-24 bg-surface min-h-screen">
+      <div class="flex flex-col w-full text-on-surface">
+        <!-- Dynamic Glow Background Element -->
+        <div class="fixed inset-0 pointer-events-none -z-10 overflow-hidden">
+          <div class="absolute -top-32 -left-20 w-80 h-80 rounded-full bg-primary-container/10 blur-[100px]"></div>
+          <div class="absolute top-1/3 -right-24 w-80 h-80 rounded-full bg-secondary/10 blur-[110px]"></div>
+          <div class="absolute bottom-16 left-1/4 w-72 h-72 rounded-full bg-primary/5 blur-[90px]"></div>
+        </div>
+        <!-- Integrated Top Search Bar & Action Bar -->
+        <div class="w-full px-gutter pt-space-xs pb-space-sm flex flex-col gap-space-sm">
+          <div class="relative flex items-center w-full">
+            <span class="material-symbols-outlined absolute left-3.5 text-on-surface-variant text-[20px] pointer-events-none">search</span>
+            <input
+              class="w-full h-11 pl-11 pr-10 rounded-full bg-surface-container-low/70 focus:bg-surface-container-high/60 text-body-md font-body-md text-on-surface placeholder:text-outline focus:outline-none transition-all duration-200"
+              id="contactSearchInput"
+              placeholder="搜索搭子、代办专员、悬赏群组..."
+              type="search"
+            />
+            <button aria-label="清除搜索" class="absolute right-3 hidden text-outline hover:text-on-surface p-1 rounded-full active:scale-95 transition-all" id="clearSearchBtn" type="button">
+              <span class="material-symbols-outlined text-[18px]">cancel</span>
+            </button>
+          </div>
+          <!-- Minimalist Horizontal Filter Tabs (Chips) -->
+          <div class="flex items-center gap-space-xs overflow-x-auto no-scrollbar py-1">
+            <button
+              class="filter-tab active flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-primary-container text-on-primary-container font-label-md text-label-md whitespace-nowrap active:scale-95 transition-all shadow-sm"
+              data-filter="all"
+              type="button"
+            >
+              <span class="material-symbols-outlined text-[16px]">groups_2</span>
+              全部联系人
+              <span class="px-1.5 py-0.2 rounded-full bg-on-primary-container/15 text-on-primary-container font-label-sm text-label-sm">38</span>
+            </button>
+            <button
+              class="filter-tab flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-surface-container-low text-on-surface-variant hover:text-on-surface font-label-md text-label-md whitespace-nowrap active:scale-95 transition-all"
+              data-filter="partners"
+              type="button"
+            >
+              <span class="material-symbols-outlined text-[16px] text-secondary">handshake</span>
+              任务搭子
+              <span class="px-1.5 py-0.2 rounded-full bg-surface-container-highest text-on-surface-variant font-label-sm text-label-sm">8</span>
+            </button>
+            <button
+              class="filter-tab flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-surface-container-low text-on-surface-variant hover:text-on-surface font-label-md text-label-md whitespace-nowrap active:scale-95 transition-all"
+              data-filter="pros"
+              type="button"
+            >
+              <span class="material-symbols-outlined text-[16px] text-tertiary">bolt</span>
+              接单专家
+              <span class="px-1.5 py-0.2 rounded-full bg-surface-container-highest text-on-surface-variant font-label-sm text-label-sm">14</span>
+            </button>
+            <button
+              class="filter-tab flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-surface-container-low text-on-surface-variant hover:text-on-surface font-label-md text-label-md whitespace-nowrap active:scale-95 transition-all"
+              data-filter="groups"
+              type="button"
+            >
+              <span class="material-symbols-outlined text-[16px] text-primary">diversity_3</span>
+              悬赏群聊
+              <span class="px-1.5 py-0.2 rounded-full bg-surface-container-highest text-on-surface-variant font-label-sm text-label-sm">6</span>
+            </button>
+          </div>
+        </div>
+        <!-- Quick Entry Bar (Flat row style) -->
+        <div class="w-full flex flex-col mt-space-xs">
+          <div class="px-gutter py-2 flex items-center justify-between text-outline">
+            <span class="font-label-sm text-label-sm tracking-wider uppercase">常用联络功能</span>
+            <span class="font-label-sm text-label-sm text-secondary flex items-center gap-1">
+              <span class="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse"></span>
+              当前 19 位在线
+            </span>
+          </div>
+          <!-- Action Rows -->
+          <a class="w-full px-gutter py-3 flex items-center justify-between hover:bg-surface-container-low/40 active:bg-surface-container-low transition-colors" href="#">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-full bg-primary-container/20 text-primary flex items-center justify-center">
+                <!-- <span class="material-symbols-outlined text-[20px]">fitbit_push_ups</span> -->
+              </div>
+              <div class="flex flex-col">
+                <span class="font-label-lg text-label-lg text-on-surface">新的好友与协作请求</span>
+                <span class="font-body-sm text-body-sm text-on-surface-variant">来自同城求助、游戏开黑与设计委托</span>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="px-2 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-label-sm text-label-sm font-bold">+2 新申请</span>
+            </div>
+          </a>
+          <a class="w-full px-gutter py-3 flex items-center justify-between hover:bg-surface-container-low/40 active:bg-surface-container-low transition-colors" href="#">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-full bg-tertiary-container/20 text-tertiary flex items-center justify-center">
+                <span class="material-symbols-outlined text-[20px]">forum</span>
+              </div>
+              <div class="flex flex-col">
+                <span class="font-label-lg text-label-lg text-on-surface">群组协作大厅</span>
+                <span class="font-body-sm text-body-sm text-on-surface-variant">6 个加入的悬赏与公会聊天室</span>
+              </div>
+            </div>
+            <div class="flex items-center">
+              <span class="font-label-md text-label-md text-on-surface-variant">查看</span>
+            </div>
+          </a>
+        </div>
+        <!-- Divider Spacing -->
+        <div class="h-2 w-full bg-surface-container-lowest/80 my-space-xs"></div>
+        <!-- Contacts Flat Directory -->
+        <div class="w-full flex flex-col pr-7" id="contactsDirectory">
+          <!-- Section: PINNED 常联互助搭子 -->
+          <div class="section-group" data-category="pinned" id="section-pinned">
+            <div class="sticky top-16 z-30 px-gutter py-2 bg-surface/90 backdrop-blur-md flex items-center justify-between">
+              <div class="flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-[16px] text-tertiary">star</span>
+                <span class="font-label-sm text-label-sm font-bold text-on-surface-variant tracking-wider uppercase">常联互助搭子 · Pinned</span>
+              </div>
+              <span class="font-label-sm text-label-sm text-outline">3 人</span>
+            </div>
+            <!-- Item 1: Lin (UI/UX) -->
+            <div
+              class="contact-row px-gutter py-3 flex items-center justify-between hover:bg-surface-container-low/40 active:bg-surface-container-low transition-colors cursor-pointer"
+              data-name="林浅浅 Lin"
+              data-type="partner"
+            >
+              <div class="flex items-center gap-3 min-w-0">
+                <div class="relative shrink-0">
+                  <img
+                    class="w-11 h-11 rounded-full object-cover"
+                    data-alt="Digital art avatar of a young female product designer wearing neon futuristic headphones with deep indigo ambient lighting and warm rim light"
+                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuD-KAYgDKbFABHcHTfgCEi3KCnBYNPtQpP0wne0ugjfKW2RduRsjIhW7M6BwB4UBEoSx0REsPcZM0LHv2OnbudBchk-Id8KOBb2ppr0YD3v1BY42D1L2GaZOsRUEE7EKvhBHeYV0TVrQPuS-HUq4k5SGkPlEJZUd5HmQndSIietoTxFUXCP8lkJ8i77pvQTsNfzFEDYYjdwy_bSY0F1QkzuEr54sLBtPVcleStqnLqr"
+                  />
+                  <span class="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-secondary"></span>
+                </div>
+                <div class="flex flex-col min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="font-headline-sm text-headline-sm text-on-surface truncate">林浅浅</span>
+                    <span class="px-1.5 py-0.5 rounded-full bg-primary-container/20 text-primary font-label-sm text-label-sm whitespace-nowrap">设计专家</span>
+                    <span class="px-1.5 py-0.5 rounded-full bg-secondary/15 text-secondary font-label-sm text-label-sm whitespace-nowrap flex items-center gap-0.5">
+                      <span class="material-symbols-outlined text-[10px]">workspace_premium</span>
+                      信誉 99.8
+                    </span>
+                  </div>
+                  <p class="font-body-sm text-body-sm text-on-surface-variant truncate mt-0.5">
+                    <span class="">状态：</span><span class="text-secondary font-semibold">接单中</span> · 承接 Figma 动效与移动端原型开发
+                  </p>
+                </div>
+              </div>
+              <div class="flex items-center gap-2 shrink-0 ml-2">
+                <span class="px-2 py-0.5 rounded-full bg-surface-container-high text-tertiary font-label-sm text-label-sm"> 500 积分协作中 </span>
+              </div>
+            </div>
+            <!-- Item 2: Arthur (Fullstack) -->
+            <div
+              class="contact-row px-gutter py-3 flex items-center justify-between hover:bg-surface-container-low/40 active:bg-surface-container-low transition-colors cursor-pointer"
+              data-name="阿瑟 Arthur"
+              data-type="partner"
+            >
+              <div class="flex items-center gap-3 min-w-0">
+                <div class="relative shrink-0">
+                  <img
+                    class="w-11 h-11 rounded-full object-cover"
+                    data-alt="Futuristic cyber male developer portrait with holographic glasses glowing cyan and dark navy tech background"
+                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuCmmn9fThi5b0ayHIODJJrq5uQr0jjq3F9_H4W9Di5KnkYjPJyxKKj5fki63n03VgkZM_QnhvNoED5jbSrdd567I_jTkBPE9Gn27Ep57Lb8Lx1Gv1RQUuby5SC4WYFiE-s2PsVzAdlLjV6gkFiGSG9tJRS9tmzNi4mnmf915RtABWAbkCFEkjSKgU_BbD11rBDrLkPY9KrFRHTyK3vKEhi_ASNa-4iLb3Jbm5UbzrAb"
+                  />
+                  <span class="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-secondary"></span>
+                </div>
+                <div class="flex flex-col min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="font-headline-sm text-headline-sm text-on-surface truncate">阿瑟 Arthur</span>
+                    <span class="px-1.5 py-0.5 rounded-full bg-tertiary-container/20 text-tertiary font-label-sm text-label-sm whitespace-nowrap">全栈工程师</span>
+                  </div>
+                  <p class="font-body-sm text-body-sm text-on-surface-variant truncate mt-0.5"><span class="">昨日完成：</span>高校代码互助委托 · 获 350 经验</p>
+                </div>
+              </div>
+              <div class="flex items-center shrink-0 ml-2">
+                <span class="text-outline font-label-sm text-label-sm">在线</span>
+              </div>
+            </div>
+            <!-- Item 3: Pinned Group (Hackathon Team) -->
+            <div
+              class="contact-row px-gutter py-3 flex items-center justify-between hover:bg-surface-container-low/40 active:bg-surface-container-low transition-colors cursor-pointer"
+              data-name="黑客松先锋队 Hackathon Team"
+              data-type="groups"
+            >
+              <div class="flex items-center gap-3 min-w-0">
+                <div class="relative shrink-0">
+                  <div class="w-11 h-11 rounded-full bg-surface-container-high flex items-center justify-center text-primary">
+                    <span class="material-symbols-outlined text-[22px]">rocket_launch</span>
+                  </div>
+                  <span class="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-secondary"></span>
+                </div>
+                <div class="flex flex-col min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="font-headline-sm text-headline-sm text-on-surface truncate">黑客松先锋战队 (5/5)</span>
+                    <span class="px-1.5 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-label-sm text-label-sm whitespace-nowrap">组队中</span>
+                  </div>
+                  <p class="font-body-sm text-body-sm text-on-surface-variant truncate mt-0.5"><span class="text-on-surface">林浅浅:</span> 明晚8点进行最后一次提交演练</p>
+                </div>
+              </div>
+              <div class="flex items-center shrink-0 ml-2">
+                <span class="px-2 py-0.5 rounded-full bg-secondary/15 text-secondary font-label-sm text-label-sm"> 奖金池 12,000Q </span>
+              </div>
+            </div>
+          </div>
+          <!-- Section: A -->
+          <div class="section-group" data-category="A" id="section-A">
+            <div class="sticky top-16 z-30 px-gutter py-1.5 bg-surface/90 backdrop-blur-md flex items-center justify-between">
+              <span class="font-label-md text-label-md font-bold text-primary">A</span>
+              <span class="font-label-sm text-label-sm text-outline">2 人</span>
+            </div>
+            <!-- Item: Alan -->
+            <div
+              class="contact-row px-gutter py-3 flex items-center justify-between hover:bg-surface-container-low/40 active:bg-surface-container-low transition-colors cursor-pointer"
+              data-name="艾伦 Alan 3D动画"
+              data-type="pro"
+            >
+              <div class="flex items-center gap-3 min-w-0">
+                <div class="relative shrink-0">
+                  <img
+                    class="w-11 h-11 rounded-full object-cover"
+                    data-alt="Portrait of a modern 3D motion artist male with glasses, sleek studio lighting with cyan and purple gradient background"
+                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuBGQQBafDJUOqcAKYEEGMk2e5VEnss2-Lrm12Zs0V9DtMzDu0vbRvEOmumz81Z52sqZe4dG3QuC1_A8Tjzr45szA7I8qjePnuIGFkRdzdEm5_1TOCBqMgplKyS03z5w_-NuBpeBHfrU_-JrhhACmBL-5fQIYTEwzPDfihFzslO_YWBuN5a2-Bq0rD-IHuB8fdg7lOEfYOxJF28jsOzN-5quelwMze5-to0umRb7EGc4"
+                  />
+                  <span class="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-surface-container-highest"></span>
+                </div>
+                <div class="flex flex-col min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="font-headline-sm text-headline-sm text-on-surface truncate">艾伦 (Alan)</span>
+                    <span class="px-1.5 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm whitespace-nowrap">Blender / 3D</span>
+                  </div>
+                  <p class="font-body-sm text-body-sm text-on-surface-variant truncate mt-0.5">离线 · 15分钟前在线 · 承接短片片头悬赏</p>
+                </div>
+              </div>
+              <div class="flex items-center shrink-0 ml-2">
+                <span class="text-outline/70 font-label-sm text-label-sm">15m 前</span>
+              </div>
+            </div>
+            <!-- Item: 安可儿 -->
+            <div
+              class="contact-row px-gutter py-3 flex items-center justify-between hover:bg-surface-container-low/40 active:bg-surface-container-low transition-colors cursor-pointer"
+              data-name="安可儿 Anke 同城速递"
+              data-type="partner"
+            >
+              <div class="flex items-center gap-3 min-w-0">
+                <div class="relative shrink-0">
+                  <img
+                    class="w-11 h-11 rounded-full object-cover"
+                    data-alt="Portrait of a smiling young athletic woman wearing a tech runner jacket with soft emerald evening neon backdrop"
+                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuAablu4eiT35LZzLugx5Ex12YRWW9etTXcEmlzXGvP1L_ovO6EUrOip1XHXzQ-N0VfcX716N-htS2lk9UAsiAAUQLcU8D8fy2M53G42tK6dtR4ZvHyryCLBqvcc-ZcQIjtjt-I5up58xDR2J_ow2ALwe-p0zDr3Ms3i_4T_ayiGr3NR19q1IT0_AAmyhbJ7lD74iW2LAwpPOCqY-pM4FkMehTUMszfaVPQ1kgUyRhy2"
+                  />
+                  <span class="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-secondary"></span>
+                </div>
+                <div class="flex flex-col min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="font-headline-sm text-headline-sm text-on-surface truncate">安可儿</span>
+                    <span class="px-1.5 py-0.5 rounded-full bg-secondary/15 text-secondary font-label-sm text-label-sm whitespace-nowrap">闪送达人</span>
+                    <span class="px-1.5 py-0.5 rounded-full bg-surface-container-high text-tertiary font-label-sm text-label-sm whitespace-nowrap">信用 100</span>
+                  </div>
+                  <p class="font-body-sm text-body-sm text-on-surface-variant truncate mt-0.5"><span class="">位置：</span>静安寺商圈 · 5分钟内响应代取</p>
+                </div>
+              </div>
+              <div class="flex items-center shrink-0 ml-2">
+                <span class="text-secondary font-label-sm text-label-sm font-semibold">就绪</span>
+              </div>
+            </div>
+          </div>
+          <!-- Section: B (Includes Group & User) -->
+          <div class="section-group" data-category="B" id="section-B">
+            <div class="sticky top-16 z-30 px-gutter py-1.5 bg-surface/90 backdrop-blur-md flex items-center justify-between">
+              <span class="font-label-md text-label-md font-bold text-primary">B</span>
+              <span class="font-label-sm text-label-sm text-outline">3 项</span>
+            </div>
+            <!-- Item: 北极星数码代办 Group -->
+            <div
+              class="contact-row px-gutter py-3 flex items-center justify-between hover:bg-surface-container-low/40 active:bg-surface-container-low transition-colors cursor-pointer"
+              data-name="北极星数码互助群 Polaris Digital Group"
+              data-type="groups"
+            >
+              <div class="flex items-center gap-3 min-w-0">
+                <div class="relative shrink-0">
+                  <div class="w-11 h-11 rounded-full bg-surface-container-high flex items-center justify-center text-tertiary">
+                    <span class="material-symbols-outlined text-[22px]">memory</span>
+                  </div>
+                </div>
+                <div class="flex flex-col min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="font-headline-sm text-headline-sm text-on-surface truncate">北极星数码互助社</span>
+                    <span class="px-1.5 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm whitespace-nowrap">群组 (128人)</span>
+                  </div>
+                  <p class="font-body-sm text-body-sm text-on-surface-variant truncate mt-0.5">硬件求购、装机测评与跑分委托置顶中</p>
+                </div>
+              </div>
+              <div class="flex items-center shrink-0 ml-2">
+                <span class="text-outline font-label-sm text-label-sm">128 人</span>
+              </div>
+            </div>
+            <!-- Item: 白泽 (Contract Specialist) -->
+            <div
+              class="contact-row px-gutter py-3 flex items-center justify-between hover:bg-surface-container-low/40 active:bg-surface-container-low transition-colors cursor-pointer"
+              data-name="白泽 BaiZe 法务审核"
+              data-type="pro"
+            >
+              <div class="flex items-center gap-3 min-w-0">
+                <div class="relative shrink-0">
+                  <img
+                    class="w-11 h-11 rounded-full object-cover"
+                    data-alt="Professional portrait of an Asian legal tech specialist in a modern navy blazer with subtle digital data streaks and soft studio light"
+                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuDpGo6Dag7_fCk51sXdtczj0HCn_wVDzr1WcViHTJ9nxe_qqE1FIYSv9ABC647yzQfXNUDJv7fddOMHWRPyspMVcEYz22a2wu2smM5kd5-esvX7DaQdz5-IthcWj5NlrSJRz3CJv_Ml5dMuqNy-In3A5-gme4VGYTOOWA9HwyoNW-kAV8s1kHpd7JUcSymkBem3ccv9Iou1od505anJsLLwy0m-RFl6FWfSMTeG-V1q"
+                  />
+                  <span class="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-secondary"></span>
+                </div>
+                <div class="flex flex-col min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="font-headline-sm text-headline-sm text-on-surface truncate">白泽</span>
+                    <span class="px-1.5 py-0.5 rounded-full bg-primary-container/20 text-primary font-label-sm text-label-sm whitespace-nowrap">法务合约审阅</span>
+                    <span class="px-1.5 py-0.5 rounded-full bg-secondary/15 text-secondary font-label-sm text-label-sm whitespace-nowrap">认证仲裁员</span>
+                  </div>
+                  <p class="font-body-sm text-body-sm text-on-surface-variant truncate mt-0.5"><span class="">提供：</span>智能合约与自由职业合作协议安全核验</p>
+                </div>
+              </div>
+              <div class="flex items-center shrink-0 ml-2">
+                <span class="text-secondary font-label-sm text-label-sm">认证</span>
+              </div>
+            </div>
+            <!-- Item: 滨仔 (Gaming partner) -->
+            <div
+              class="contact-row px-gutter py-3 flex items-center justify-between hover:bg-surface-container-low/40 active:bg-surface-container-low transition-colors cursor-pointer"
+              data-name="滨仔 Bin 游戏搭子"
+              data-type="partner"
+            >
+              <div class="flex items-center gap-3 min-w-0">
+                <div class="relative shrink-0">
+                  <img
+                    class="w-11 h-11 rounded-full object-cover"
+                    data-alt="Casual esports gamer portrait with gaming room neon ambient lighting in purple and dark slate"
+                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuCaKGC9O8gBeZb7XtDGLPulq7woihP93_QQKrImsDjlxHUuzdwMvtW2qZHQzOz5JiDr_aE3ctMOuczEfxrhYaZqEypVql8JBzzz3Ut1XMpDYc5Kof07Wvat7tN0Duccjbpx6SeTPKCV5cEI5h86SpO8SVrNWOoQN0NUdIr5pR_dKAslCY3-FV0z9jNbWW1JwmKgmIvJKcFQAsgTjXRzb3ThWQ9yDZ5AQnlxhCjAeXQv"
+                  />
+                  <span class="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-tertiary"></span>
+                </div>
+                <div class="flex flex-col min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="font-headline-sm text-headline-sm text-on-surface truncate">滨仔</span>
+                    <span class="px-1.5 py-0.5 rounded-full bg-tertiary/15 text-tertiary font-label-sm text-label-sm whitespace-nowrap">排位互助</span>
+                  </div>
+                  <p class="font-body-sm text-body-sm text-on-surface-variant truncate mt-0.5"><span class="">组队状态：</span>游戏中 · 预计 20 分钟后空闲</p>
+                </div>
+              </div>
+              <div class="flex items-center shrink-0 ml-2">
+                <span class="text-tertiary font-label-sm text-label-sm">游戏中</span>
+              </div>
+            </div>
+          </div>
+          <!-- Section: D -->
+          <div class="section-group" data-category="D" id="section-D">
+            <div class="sticky top-16 z-30 px-gutter py-1.5 bg-surface/90 backdrop-blur-md flex items-center justify-between">
+              <span class="font-label-md text-label-md font-bold text-primary">D</span>
+              <span class="font-label-sm text-label-sm text-outline">2 项</span>
+            </div>
+            <!-- Item: 大道翻译所 Group -->
+            <div
+              class="contact-row px-gutter py-3 flex items-center justify-between hover:bg-surface-container-low/40 active:bg-surface-container-low transition-colors cursor-pointer"
+              data-name="多语言翻译委托组 Dadao Translation"
+              data-type="groups"
+            >
+              <div class="flex items-center gap-3 min-w-0">
+                <div class="relative shrink-0">
+                  <div class="w-11 h-11 rounded-full bg-surface-container-high flex items-center justify-center text-secondary">
+                    <span class="material-symbols-outlined text-[22px]">translate</span>
+                  </div>
+                </div>
+                <div class="flex flex-col min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="font-headline-sm text-headline-sm text-on-surface truncate">多语言文档协同翻译组</span>
+                    <span class="px-1.5 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm whitespace-nowrap">群组 (45人)</span>
+                  </div>
+                  <p class="font-body-sm text-body-sm text-on-surface-variant truncate mt-0.5">中/英/日/法技术白皮书校对实时任务分配中</p>
+                </div>
+              </div>
+              <div class="flex items-center shrink-0 ml-2">
+                <span class="text-outline font-label-sm text-label-sm">45 人</span>
+              </div>
+            </div>
+            <!-- Item: 杜小月 (Event Coordinator) -->
+            <div
+              class="contact-row px-gutter py-3 flex items-center justify-between hover:bg-surface-container-low/40 active:bg-surface-container-low transition-colors cursor-pointer"
+              data-name="杜小月 Du Event Organizer"
+              data-type="pro"
+            >
+              <div class="flex items-center gap-3 min-w-0">
+                <div class="relative shrink-0">
+                  <img
+                    class="w-11 h-11 rounded-cover object-cover w-11 h-11 rounded-full"
+                    data-alt="Warm energetic portrait of an event curator woman smiling with stylish glasses and clean minimal background lighting"
+                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuCAv3dO659RGQGcuQRDZtBe0IYoreOQ_6q0QtCvuJDP0xNnDpeb8oqn08lNWaqfRmWO6PzhSGgRFisaW7Hs8qo4_hvSOVfM7XA4f3GfTQwYLZu3GXL-7GW_2nDF63YdjK-yMpafST0XwLs_4m5QrNpzuvS-ebCqO-fAnv0fzwOLz8gI2hoEfws9wowCGxsLE5cv9IgX8is65z7iLjyLr7et3FMD9dU_xbS8bXrLyJtv"
+                  />
+                  <span class="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-secondary"></span>
+                </div>
+                <div class="flex flex-col min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="font-headline-sm text-headline-sm text-on-surface truncate">杜小月</span>
+                    <span class="px-1.5 py-0.5 rounded-full bg-primary-container/20 text-primary font-label-sm text-label-sm whitespace-nowrap">活动策展搭子</span>
+                  </div>
+                  <p class="font-body-sm text-body-sm text-on-surface-variant truncate mt-0.5"><span class="">常驻：</span>上海创客空间 · 线下签到与物料分发协办</p>
+                </div>
+              </div>
+              <div class="flex items-center shrink-0 ml-2">
+                <span class="text-outline font-label-sm text-label-sm">上海</span>
+              </div>
+            </div>
+          </div>
+          <!-- Section: L -->
+          <div class="section-group" data-category="L" id="section-L">
+            <div class="sticky top-16 z-30 px-gutter py-1.5 bg-surface/90 backdrop-blur-md flex items-center justify-between">
+              <span class="font-label-md text-label-md font-bold text-primary">L</span>
+              <span class="font-label-sm text-label-sm text-outline">1 人</span>
+            </div>
+            <!-- Item: 卢卡斯 -->
+            <div
+              class="contact-row px-gutter py-3 flex items-center justify-between hover:bg-surface-container-low/40 active:bg-surface-container-low transition-colors cursor-pointer"
+              data-name="卢卡斯 Lucas 音频制作"
+              data-type="pro"
+            >
+              <div class="flex items-center gap-3 min-w-0">
+                <div class="relative shrink-0">
+                  <img
+                    class="w-11 h-11 rounded-full object-cover"
+                    data-alt="Sound designer man with studio headphones around neck, dark moody sound engineering booth lighting with purple audio equalizer glowing in distance"
+                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuCRjffxyQNyVgQagc2qNpC7NyMcSBdq_AdYuUXzFEQlJ_ETvvrFv0dTZM5OlIRKla1MSqwmXeDCMbIM3AOmio6eXjFZNDeFOyL7N29PCG3ShH-hxniFJTyGkR5hKP2IA0XFNF341-ZnSEQZ7lYmEvfZGyjeYEMtxI9V9lLjQY2VLDOeF2_mW9PzeZ_BNE-f9zLt5j0SVR-J6-frD0ElGew6QSeW_zxHR-Oe5dIlxQbg"
+                  />
+                  <span class="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-surface-container-highest"></span>
+                </div>
+                <div class="flex flex-col min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="font-headline-sm text-headline-sm text-on-surface truncate">卢卡斯 Lucas</span>
+                    <span class="px-1.5 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm whitespace-nowrap">音效 / 混音</span>
+                  </div>
+                  <p class="font-body-sm text-body-sm text-on-surface-variant truncate mt-0.5">离线 · 承接播客剪辑与游戏音效封装悬赏</p>
+                </div>
+              </div>
+              <div class="flex items-center shrink-0 ml-2">
+                <span class="text-outline/70 font-label-sm text-label-sm">离线</span>
+              </div>
+            </div>
+          </div>
+          <!-- Section: Z -->
+          <div class="section-group" data-category="Z" id="section-Z">
+            <div class="sticky top-16 z-30 px-gutter py-1.5 bg-surface/90 backdrop-blur-md flex items-center justify-between">
+              <span class="font-label-md text-label-md font-bold text-primary">Z</span>
+              <span class="font-label-sm text-label-sm text-outline">1 人</span>
+            </div>
+            <!-- Item: 周木木 -->
+            <div
+              class="contact-row px-gutter py-3 flex items-center justify-between hover:bg-surface-container-low/40 active:bg-surface-container-low transition-colors cursor-pointer"
+              data-name="周木木 Zhou MuMu 摄影师"
+              data-type="partner"
+            >
+              <div class="flex items-center gap-3 min-w-0">
+                <div class="relative shrink-0">
+                  <img
+                    class="w-11 h-11 rounded-full object-cover"
+                    data-alt="Female freelance street photographer carrying a vintage camera, stylish beanie, urban neon lighting at blue hour"
+                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuDmZFJYKH38dxfH8M2EVUc5DtU3awrDKneHON4wYhNkgJf0ejihWwhWmuxNC_MgH-oO5vEnFzU5lDahRtVzZxkTNvtf9i8ZjGhvfdMVza-CfKlnhQkGGJiXSaGLQ7ZiJzzgBYlpN3lzFZsG6pE5MoGDoX1YyfwYaMN0O-tSI3O9ZVSPsfNzILfqpIaXrBBo0CWyLI_rQX8j_fHEi5LuWxgM45b55OjmVFCBM2WJXVEB"
+                  />
+                  <span class="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-secondary"></span>
+                </div>
+                <div class="flex flex-col min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="font-headline-sm text-headline-sm text-on-surface truncate">周木木</span>
+                    <span class="px-1.5 py-0.5 rounded-full bg-tertiary-container/20 text-tertiary font-label-sm text-label-sm whitespace-nowrap">活动跟拍</span>
+                    <span class="px-1.5 py-0.5 rounded-full bg-secondary/15 text-secondary font-label-sm text-label-sm whitespace-nowrap">接单中</span>
+                  </div>
+                  <p class="font-body-sm text-body-sm text-on-surface-variant truncate mt-0.5"><span class="">擅长：</span>展会快剪、Live 摄影与人像精修</p>
+                </div>
+              </div>
+              <div class="flex items-center shrink-0 ml-2">
+                <span class="text-secondary font-label-sm text-label-sm font-semibold">接单中</span>
+              </div>
+            </div>
+          </div>
+          <!-- Empty State Container (Hidden by default, shown when filtering/searching has 0 results) -->
+          <div class="hidden flex-col items-center justify-center py-16 px-gutter text-center" id="noResultsState">
+            <div class="w-16 h-16 rounded-full bg-surface-container-high flex items-center justify-center text-outline mb-3">
+              <span class="material-symbols-outlined text-[32px]">person_search</span>
+            </div>
+            <p class="font-headline-sm text-headline-sm text-on-surface">未找到相关联系人或群组</p>
+            <p class="font-body-sm text-body-sm text-on-surface-variant mt-1">可以尝试搜索技能词（如“设计”、“翻译”、“代办”）或切换筛选标签</p>
+            <button class="mt-4 px-4 py-2 rounded-full bg-primary-container text-on-primary-container font-label-md text-label-md active:scale-95 transition-all" id="resetFilterBtn" type="button">
+              显示全部联系人
+            </button>
+          </div>
+        </div>
+        <!-- Bottom Stats Summary -->
+        <div class="w-full py-8 px-gutter flex flex-col items-center justify-center text-center" id="section-footer">
+          <div class="flex items-center gap-2 text-outline">
+            <span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+            <span class="font-label-sm text-label-sm tracking-wider uppercase">LinkQuest 协同互助网络</span>
+          </div>
+          <p class="font-body-sm text-body-sm text-on-surface-variant mt-1">共 38 位联系人 · 6 个协作群聊 · 信用凭证受智能网络保障</p>
+          <div class="flex items-center gap-4 mt-3">
+            <a class="font-label-sm text-label-sm text-primary hover:underline" href="#">导出通讯录</a>
+            <span class="text-outline/40">·</span>
+            <a class="font-label-sm text-label-sm text-primary hover:underline" href="#">黑名单管理</a>
+            <span class="text-outline/40">·</span>
+            <a class="font-label-sm text-label-sm text-primary hover:underline" href="#">权限与隐私</a>
+          </div>
+        </div>
+        <!-- Central HUD Letter Toast Bubble (for gesture/touch feedback) -->
+        <div class="fixed inset-0 pointer-events-none z-50 flex items-center justify-center transition-all duration-150 ease-out opacity-0 scale-75" id="letterToastHUD">
+          <div class="w-20 h-20 rounded-2xl bg-surface-container-high/90 backdrop-blur-xl border border-primary/30 shadow-[0_8px_32px_rgba(78,222,163,0.25)] flex items-center justify-center">
+            <span class="text-[38px] font-bold text-secondary font-label-lg tracking-wider" id="letterToastText">#</span>
+          </div>
+        </div>
+        <!-- Alphabet Quick Index Sidebar Floating Rail -->
+        <div class="fixed right-1 top-28 bottom-28 z-40 flex flex-col items-center justify-center gap-1.5 py-3 px-1.5 rounded-full select-none touch-none" id="alphabetIndexRail">
+          <button
+            class="index-char font-label-sm text-[10px] text-tertiary hover:scale-125 transition-transform p-0.5 leading-none"
+            data-char="★"
+            data-target="section-pinned"
+            title="置顶"
+            type="button"
+          >
+            ★
+          </button>
+          <button class="index-char font-label-sm text-[10px] text-outline hover:text-primary transition-all p-0.5 leading-none" data-char="A" data-target="section-A" type="button">A</button>
+          <button class="index-char font-label-sm text-[10px] text-outline hover:text-primary transition-all p-0.5 leading-none" data-char="B" data-target="section-B" type="button">B</button>
+          <button class="index-char font-label-sm text-[10px] text-outline/40 transition-all p-0.5 leading-none" data-char="C" data-target="section-D" type="button">C</button>
+          <button class="index-char font-label-sm text-[10px] text-outline hover:text-primary transition-all p-0.5 leading-none" data-char="D" data-target="section-D" type="button">D</button>
+          <button class="index-char font-label-sm text-[10px] text-outline hover:text-primary transition-all p-0.5 leading-none" data-char="L" data-target="section-L" type="button">L</button>
+          <button class="index-char font-label-sm text-[10px] text-outline hover:text-primary transition-all p-0.5 leading-none" data-char="Z" data-target="section-Z" type="button">Z</button>
+          <button class="index-char font-label-sm text-[10px] text-outline hover:text-primary transition-all p-0.5 leading-none" data-char="#" data-target="section-footer" type="button">#</button>
+        </div>
+      </div>
+      <script>
+        (function initContactsDirectory() {
+          const searchInput = document.getElementById("contactSearchInput");
+          const clearBtn = document.getElementById("clearSearchBtn");
+          const filterTabs = document.querySelectorAll(".filter-tab");
+          const contactRows = document.querySelectorAll(".contact-row");
+          const sectionGroups = document.querySelectorAll(".section-group");
+          const noResults = document.getElementById("noResultsState");
+          const resetBtn = document.getElementById("resetFilterBtn");
+
+          let activeFilter = "all";
+
+          function updateView() {
+            const query = (searchInput.value || "").trim().toLowerCase();
+            let visibleCount = 0;
+
+            contactRows.forEach((row) => {
+              const nameAndInfo = (row.getAttribute("data-name") || "").toLowerCase();
+              const rowType = row.getAttribute("data-type") || "";
+
+              // Check text search
+              const matchesQuery = !query || nameAndInfo.includes(query);
+
+              // Check filter category
+              let matchesFilter = false;
+              if (activeFilter === "all") {
+                matchesFilter = true;
+              } else if (activeFilter === "partners") {
+                matchesFilter = rowType === "partner";
+              } else if (activeFilter === "pros") {
+                matchesFilter = rowType === "pro";
+              } else if (activeFilter === "groups") {
+                matchesFilter = rowType === "groups";
+              }
+
+              if (matchesQuery && matchesFilter) {
+                row.classList.remove("hidden");
+                visibleCount++;
+              } else {
+                row.classList.add("hidden");
+              }
+            });
+
+            // Update Section Header Visibility based on visible rows
+            sectionGroups.forEach((group) => {
+              const visibleRowsInside = group.querySelectorAll(".contact-row:not(.hidden)");
+              if (visibleRowsInside.length === 0) {
+                group.classList.add("hidden");
+              } else {
+                group.classList.remove("hidden");
+              }
+            });
+
+            // No results check
+            if (visibleCount === 0) {
+              noResults.classList.remove("hidden");
+              noResults.classList.add("flex");
+            } else {
+              noResults.classList.add("hidden");
+              noResults.classList.remove("flex");
+            }
+
+            // Clear button visibility
+            if (query.length > 0) {
+              clearBtn.classList.remove("hidden");
+            } else {
+              clearBtn.classList.add("hidden");
+            }
+          }
+
+          // Tab Filter Click Handlers
+          filterTabs.forEach((tab) => {
+            tab.addEventListener("click", () => {
+              filterTabs.forEach((t) => {
+                t.classList.remove("bg-primary-container", "text-on-primary-container");
+                t.classList.add("bg-surface-container-low", "text-on-surface-variant");
+              });
+              tab.classList.remove("bg-surface-container-low", "text-on-surface-variant");
+              tab.classList.add("bg-primary-container", "text-on-primary-container");
+
+              activeFilter = tab.getAttribute("data-filter");
+              updateView();
+            });
+          });
+
+          // Search input
+          searchInput.addEventListener("input", updateView);
+
+          // Clear Search
+          clearBtn.addEventListener("click", () => {
+            searchInput.value = "";
+            updateView();
+            searchInput.focus();
+          });
+
+          // Reset button inside empty state
+          if (resetBtn) {
+            resetBtn.addEventListener("click", () => {
+              searchInput.value = "";
+              activeFilter = "all";
+              filterTabs.forEach((t, index) => {
+                if (index === 0) {
+                  t.classList.add("bg-primary-container", "text-on-primary-container");
+                  t.classList.remove("bg-surface-container-low", "text-on-surface-variant");
+                } else {
+                  t.classList.remove("bg-primary-container", "text-on-primary-container");
+                  t.classList.add("bg-surface-container-low", "text-on-surface-variant");
+                }
+              });
+              updateView();
+            });
+          }
+
+          // ==========================================
+          // Alphabet Index Bar 滑动与精确定位交互
+          // ==========================================
+          const rail = document.getElementById("alphabetIndexRail");
+          const toastHUD = document.getElementById("letterToastHUD");
+          const toastText = document.getElementById("letterToastText");
+          const charButtons = rail.querySelectorAll(".index-char");
+          let toastTimer = null;
+          let lastActiveChar = null;
+
+          function showHUD(char) {
+            if (toastTimer) clearTimeout(toastTimer);
+            toastText.textContent = char;
+            toastHUD.classList.remove("opacity-0", "scale-75");
+            toastHUD.classList.add("opacity-100", "scale-100");
+          }
+
+          function hideHUD() {
+            if (toastTimer) clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => {
+              toastHUD.classList.remove("opacity-100", "scale-100");
+              toastHUD.classList.add("opacity-0", "scale-75");
+              charButtons.forEach((btn) => {
+                btn.classList.remove("text-secondary", "scale-150", "font-bold");
+              });
+              lastActiveChar = null;
+            }, 350);
+          }
+
+          function highlightCharButton(activeBtn) {
+            charButtons.forEach((btn) => {
+              if (btn === activeBtn) {
+                btn.classList.add("text-secondary", "scale-150", "font-bold");
+              } else {
+                btn.classList.remove("text-secondary", "scale-150", "font-bold");
+              }
+            });
+          }
+
+          function navigateToTarget(targetId, char, btn) {
+            if (!targetId) return;
+            const targetEl = document.getElementById(targetId);
+            if (targetEl) {
+              targetEl.scrollIntoView({ behavior: "smooth", block: "start" });
+            }
+            showHUD(char);
+            if (btn) highlightCharButton(btn);
+          }
+
+          // 处理滑动/点按坐标对应的字符按钮
+          function handleTouchAtPoint(clientX, clientY) {
+            const element = document.elementFromPoint(clientX, clientY);
+            if (!element) return;
+            const btn = element.closest(".index-char");
+            if (btn && btn !== lastActiveChar) {
+              lastActiveChar = btn;
+              const targetId = btn.getAttribute("data-target");
+              const char = btn.getAttribute("data-char") || btn.textContent.trim();
+              navigateToTarget(targetId, char, btn);
+              if (navigator.vibrate) {
+                navigator.vibrate(10);
+              }
+            }
+          }
+
+          // Touch 事件
+          rail.addEventListener(
+            "touchstart",
+            (e) => {
+              e.preventDefault();
+              const touch = e.touches[0];
+              handleTouchAtPoint(touch.clientX, touch.clientY);
+            },
+            { passive: false },
+          );
+
+          rail.addEventListener(
+            "touchmove",
+            (e) => {
+              e.preventDefault();
+              const touch = e.touches[0];
+              handleTouchAtPoint(touch.clientX, touch.clientY);
+            },
+            { passive: false },
+          );
+
+          rail.addEventListener("touchend", (e) => {
+            hideHUD();
+          });
+
+          rail.addEventListener("touchcancel", (e) => {
+            hideHUD();
+          });
+
+          // 鼠标点击/交互事件
+          charButtons.forEach((btn) => {
+            btn.addEventListener("click", (e) => {
+              e.stopPropagation();
+              const targetId = btn.getAttribute("data-target");
+              const char = btn.getAttribute("data-char") || btn.textContent.trim();
+              navigateToTarget(targetId, char, btn);
+              hideHUD();
+            });
+          });
+        })();
+      </script>
+    </main>
+    <nav class="fixed bottom-0 w-full z-50 pb-safe bg-surface/80 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]" data-active-classes="text-primary font-bold">
+      <div class="flex justify-around items-center h-20 px-space-xs">
+        <a class="flex flex-col items-center justify-center w-14 h-14 text-on-surface-variant hover:text-on-surface transition-colors" data-path="messages" href="#"
+          ><div class="relative flex items-center justify-center">
+            <span class="material-symbols-outlined text-[24px]">chat_bubble</span
+            ><span class="absolute -top-1 -right-2 px-1.5 py-0.2 bg-secondary text-on-secondary rounded-full font-label-sm text-label-sm leading-none">3</span>
+          </div>
+          <span class="font-label-md text-label-md mt-1">消息</span></a
+        ><a class="flex flex-col items-center justify-center w-14 h-14 text-on-surface-variant hover:text-on-surface transition-colors" data-path="contacts" href="#"
+          ><span class="material-symbols-outlined text-[24px]">contacts</span><span class="font-label-md text-label-md mt-1">联系人</span></a
+        ><a class="flex flex-col items-center justify-center w-14 h-14 -mt-5 group" data-path="create-bounty" href="#"
+          ><div
+            class="w-12 h-12 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center shadow-[0_12px_32px_-4px_rgba(99,102,241,0.35)] group-active:scale-95 transition-transform"
+          >
+            <span class="material-symbols-outlined text-[28px]">add</span>
+          </div>
+          <span class="font-label-md text-label-md mt-1 text-on-surface-variant">发布</span></a
+        ><a class="flex flex-col items-center justify-center w-14 h-14 text-on-surface-variant hover:text-on-surface transition-colors" data-path="bounty-square" href="#"
+          ><span class="material-symbols-outlined text-[24px] text-tertiary">local_fire_department</span><span class="font-label-md text-label-md mt-1">委托广场</span></a
+        ><a class="flex flex-col items-center justify-center w-14 h-14 text-on-surface-variant hover:text-on-surface transition-colors" data-path="profile" href="#"
+          ><span class="material-symbols-outlined text-[24px]">person</span><span class="font-label-md text-label-md mt-1">我的</span></a
+        >
+      </div>
+    </nav>
+  </body>
+</html>

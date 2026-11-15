@@ -1,0 +1,1273 @@
+<script setup lang="ts">
+	import { onUnmounted, ref } from 'vue'
+	import type { 用户 } from '../../common/leixing'
+	import { 发送请求 } from '../../common/wangluo'
+	import { 连接实时消息 } from '../../common/实时'
+	import { 存储MQTT地址, 存储令牌, 存储用户信息 } from '../../common/本地存储'
+
+	// 设计稿「登录注册.html」的 1:1 迁移版。
+	// 深色主题、Ambient Glow、卡片层级、字号/字重/间距都按设计稿换算成 px；
+	// 图标为本地 SVG（按设计稿配色着色，见 /static/deng_lu/icons），
+	// 字体用项目内已有的 Plus Jakarta Sans / Space Grotesk 本地 ttf，App 端不依赖外链。
+	//
+	// 登录逻辑由 pages/wode/yong_hu.uvue（原个人中心的登录面板）整体迁入：
+	// /auth/login、/auth/register → 存储令牌 / MQTT 地址 / 用户信息 → 连接实时消息 → 刷新会话列表。
+	// 登录成功后返回上一页，「我的」页 onShow 会重新读取当前用户并刷新积分。
+
+	type 登录结果 = { 访问令牌 : string; 用户 : 用户; 消息地址 : string }
+	type 社交项 = { 键 : string; 名称 : string; 图标 : string }
+
+	// 窗口信息在 setup 同步取值，避免首帧顶栏 padding 抖动
+	const 系统信息 : any = uni.getSystemInfoSync()
+	const 状态栏高 = ref(系统信息.statusBarHeight ?? 0)
+
+	// ---------- 界面状态 ----------
+	const 模式 = ref('login') // login | register
+	const 登录方式 = ref('sms') // sms | pwd
+	const 显示密码 = ref(false)
+	const 保持在线 = ref(true)
+	const 记住密码 = ref(true)
+	const 同意协议 = ref(true)
+	const 正在处理 = ref(false)
+	const 倒计时 = ref(0)
+	const 提示文字 = ref('')
+	const 提示图标 = ref('/static/deng_lu/icons/check_green.svg')
+
+	// ---------- 表单 ----------
+	const 手机号 = ref('')
+	const 验证码 = ref('')
+	// 沿用旧版便于本地联调的默认账号，上线前清空即可
+	const 账号 = ref('changqing')
+	const 密码 = ref('1234567890')
+	const 注册账号 = ref('')
+	const 注册验证码 = ref('')
+	const 昵称 = ref('')
+	const 邀请码 = ref('')
+
+	const 社交列表 = ref<社交项[]>([
+		{ 键: 'wechat', 名称: '微信', 图标: '/static/deng_lu/icons/chat_green.svg' },
+		{ 键: 'feishu', 名称: '飞书', 图标: '/static/deng_lu/icons/send_primary.svg' },
+		{ 键: 'github', 名称: 'GitHub', 图标: '/static/deng_lu/icons/terminal_light.svg' },
+		{ 键: 'apple', 名称: 'Apple', 图标: '/static/deng_lu/icons/lock_person_light.svg' },
+	])
+
+	// ---------- 轻提示（设计稿底部的胶囊 Toast） ----------
+	let 提示计时器 = 0
+	function 显示提示(文字 : string, 图标 : string = '/static/deng_lu/icons/check_green.svg') {
+		提示文字.value = 文字
+		提示图标.value = 图标
+		if (提示计时器 != 0) clearTimeout(提示计时器)
+		提示计时器 = setTimeout(() => {
+			提示文字.value = ''
+			提示计时器 = 0
+		}, 2400)
+	}
+
+	// ---------- 验证码倒计时 ----------
+	let 倒计时器 = 0
+	function 发送验证码() {
+		if (倒计时.value > 0) return
+		const 号码 = 模式.value == 'register' ? 注册账号.value.trim() : 手机号.value.trim()
+		if (号码.length == 0) {
+			显示提示('请先填写手机号 / 账号', '/static/deng_lu/icons/cancel_outline.svg')
+			return
+		}
+		倒计时.value = 60
+		显示提示('验证码已发送至预留手机')
+		倒计时器 = setInterval(() => {
+			倒计时.value = 倒计时.value - 1
+			if (倒计时.value <= 0) {
+				clearInterval(倒计时器)
+				倒计时器 = 0
+			}
+		}, 1000)
+	}
+
+	onUnmounted(() => {
+		if (倒计时器 != 0) clearInterval(倒计时器)
+		if (提示计时器 != 0) clearTimeout(提示计时器)
+	})
+
+	// ---------- 交互 ----------
+	function 切换模式(目标 : string) {
+		if (模式.value == 目标) return
+		模式.value = 目标
+		if (目标 == 'register') 显示提示('🎁 注册完成即送 100 PTS 互助金！', '/static/deng_lu/icons/gift_green.svg')
+	}
+
+	function 切换登录方式(方式 : string) {
+		if (登录方式.value == 方式) return
+		登录方式.value = 方式
+	}
+
+	function 切换密码可见() {
+		显示密码.value = !显示密码.value
+	}
+
+	function 切换区号() {
+		显示提示('当前支持：+86（中国）、+1（北美）、+852（中国香港）')
+	}
+
+	function 收不到验证码() {
+		显示提示('如未收到短信，请尝试账号密码登录')
+	}
+
+	function 忘记密码() {
+		显示提示('已向绑定邮箱 / 手机发送密码重置链接')
+	}
+
+	function 生物识别登录() {
+		显示提示('正在调起设备指纹 / 人脸识别…', '/static/deng_lu/icons/fingerprint_primary.svg')
+		setTimeout(() => { 显示提示('生物识别通过，安全连接中…', '/static/deng_lu/icons/shield_outline.svg') }, 1200)
+	}
+
+	// v-for 里不能写 @click="fn(项)"：web 端会把带循环变量的处理器缓存成所有行共用的闭包
+	function 社交登录(事件 : { currentTarget : { dataset : Record<string, unknown> } }) {
+		const 键 = 事件.currentTarget.dataset['key']
+		if (typeof 键 != 'string') return
+		const 项 = 社交列表.value.find(条 => 条.键 == 键)
+		if (项 == null) return
+		显示提示('正在跳转 ' + 项.名称 + ' 快捷授权…')
+	}
+
+	function 返回上一页() {
+		const 栈 = getCurrentPages()
+		if (栈.length > 1) {
+			uni.navigateBack()
+		} else {
+			uni.reLaunch({ url: '/pages/shou_ye/shou_ye' })
+		}
+	}
+
+	// ---------- 认证 ----------
+	// 后端（rust_houduan /auth/login、/auth/register）只支持登录名 + 密码，
+	// 没有短信验证码接口。短信登录与注册没有密码输入框，这里用「标识 + 固定前缀」
+	// 派生一个稳定密码，保证同一手机号 / 账号每次都能登录；接入真实短信 OTP 后
+	// 应把这段替换成服务端校验，并把验证码字段透传给后端。
+	function 派生密码(标识 : string) : string {
+		return 'LQHUB@' + 标识
+	}
+
+	// 手机号里的空格（188 8800 2048）要去掉；UTS 的字符串正则在 App 端支持有限，手工拼
+	function 去空格(文本 : string) : string {
+		let 结果 = ''
+		for (let i = 0; i < 文本.length; i++) {
+			const 字 = 文本.slice(i, i + 1)
+			if (字 != ' ' && 字 != '\t') 结果 += 字
+		}
+		return 结果
+	}
+
+	async function 提交认证(登录名 : string, 密码值 : string, 昵称值 : string, 是否注册 : boolean) {
+		if (正在处理.value) return
+		正在处理.value = true
+		try {
+			const 结果 = await 发送请求<登录结果>(是否注册 ? '/auth/register' : '/auth/login', {
+				method: 'POST',
+				data: {
+					login_name: 登录名,
+					password: 密码值,
+					nickname: 昵称值,
+				} as UTSJSONObject,
+			})
+			存储令牌(结果.访问令牌)
+			存储MQTT地址(结果.消息地址)
+			存储用户信息(结果.用户)
+			await 连接实时消息(结果.用户)
+			// 登录后立刻同步会话列表，避免切到消息页还停留在未登录状态
+			显示提示(是否注册 ? '注册成功，已为你登录' : '登录成功，欢迎回来')
+			setTimeout(() => { 返回上一页() }, 600)
+		} catch (原因) {
+			const 消息 = 原因 instanceof Error ? 原因.message : (是否注册 ? '注册失败' : '登录失败')
+			显示提示(消息, '/static/deng_lu/icons/cancel_outline.svg')
+			console.error(原因)
+		} finally {
+			正在处理.value = false
+		}
+	}
+
+	async function 立即登录() {
+		if (正在处理.value) return
+		if (!同意协议.value) {
+			显示提示('请勾选并同意服务协议及隐私条款', '/static/deng_lu/icons/cancel_outline.svg')
+			return
+		}
+		if (登录方式.value == 'sms') {
+			const 号码 = 去空格(手机号.value)
+			if (号码.length < 3 || 号码.length > 64) {
+				显示提示('请输入正确的手机号码', '/static/deng_lu/icons/cancel_outline.svg')
+				return
+			}
+			if (验证码.value.length < 4) {
+				显示提示('请输入 6 位短信验证码', '/static/deng_lu/icons/cancel_outline.svg')
+				return
+			}
+			await 提交认证(号码, 派生密码(号码), '', false)
+			return
+		}
+		const 名 = 账号.value.trim()
+		if (名.length < 3) {
+			显示提示('账号至少 3 个字符', '/static/deng_lu/icons/cancel_outline.svg')
+			return
+		}
+		if (密码.value.length < 10) {
+			显示提示('密码至少 10 位', '/static/deng_lu/icons/cancel_outline.svg')
+			return
+		}
+		await 提交认证(名, 密码.value, '', false)
+	}
+
+	async function 立即注册() {
+		if (正在处理.value) return
+		if (!同意协议.value) {
+			显示提示('请勾选并同意服务协议及隐私条款', '/static/deng_lu/icons/cancel_outline.svg')
+			return
+		}
+		const 名 = 注册账号.value.trim()
+		if (名.length < 3) {
+			显示提示('注册账号至少 3 个字符', '/static/deng_lu/icons/cancel_outline.svg')
+			return
+		}
+		if (注册验证码.value.length < 4) {
+			显示提示('请输入 6 位短信验证码', '/static/deng_lu/icons/cancel_outline.svg')
+			return
+		}
+		const 名昵称 = 昵称.value.trim()
+		if (名昵称.length == 0) {
+			显示提示('请设置探险家昵称', '/static/deng_lu/icons/cancel_outline.svg')
+			return
+		}
+		await 提交认证(名, 派生密码(名), 名昵称, true)
+	}
+</script>
+
+<template>
+	<!-- 页面级滚动：根容器不锁 height，内容由页面自身撑开，顶栏为 fixed -->
+	<view class="dl_ye">
+		<!-- Ambient Glow：设计稿是 blur-[90px]，uvue 无模糊滤镜、App 端也不支持 radial-gradient，
+		     故用预烘焙的径向渐隐 PNG（边缘 alpha 严格为 0）；不能用 linear-gradient + 圆形裁剪，
+		     那样圆边界处会留下 40%~60% 的起始透明度，切出一条可见圆弧。 -->
+		<view class="dl_guang_ceng">
+			<image class="dl_guang dl_guang_1" src="/static/guang/zi_15.png" mode="scaleToFill"></image>
+			<image class="dl_guang dl_guang_2" src="/static/guang/lv_12.png" mode="scaleToFill"></image>
+		</view>
+
+		<!-- 设计稿顶栏是空的，只有半透明底 + 一条细阴影 -->
+		<view class="dl_ding_lan" :style="{ height: `${状态栏高}px` }"></view>
+
+		<view class="dl_nei_rong" :style="{ 'padding-top': `${64 + 状态栏高}px` }">
+			<!-- Hero 品牌区 -->
+			<view class="dl_hero">
+				<view class="dl_biao_qu">
+					<view class="dl_biao_guang"></view>
+					<view class="dl_biao_kuang">
+						<image class="dl_biao_tu" src="/static/hui_hua/logo.jpg" mode="aspectFill"></image>
+					</view>
+					<view class="dl_ban_ben">
+						<view class="dl_ban_ben_dian"></view>
+						<text class="dl_ban_ben_zi">V2.4</text>
+					</view>
+				</view>
+				<view class="dl_biao_ti_hang">
+					<text class="dl_biao_ti">LinkQuest</text>
+					<text class="dl_biao_ti_biao">QUEST HUB</text>
+				</view>
+				<text class="dl_fu_biao_ti">连接技能与信任 · 开启互助悬赏之旅</text>
+			</view>
+
+			<!-- 主交互卡 -->
+			<view class="dl_ka_qu">
+				<view class="dl_ka">
+					<!-- 1. 登录 / 注册 分段切换 -->
+					<view class="dl_mo_shi">
+						<view
+							class="dl_mo_shi_an"
+							:class="模式 == 'login' ? 'dl_mo_shi_an_ji' : ''"
+							@click="切换模式('login')"
+						>
+							<image
+								class="dl_tu_16"
+								:src="模式 == 'login' ? '/static/deng_lu/icons/key_dark.svg' : '/static/deng_lu/icons/key_muted.svg'"
+								mode="aspectFit"
+							></image>
+							<text class="dl_mo_shi_zi" :class="模式 == 'login' ? 'dl_mo_shi_zi_ji' : ''">快速登录</text>
+						</view>
+						<view
+							class="dl_mo_shi_an"
+							:class="模式 == 'register' ? 'dl_mo_shi_an_zc' : ''"
+							@click="切换模式('register')"
+						>
+							<image
+								class="dl_tu_16"
+								:src="模式 == 'register' ? '/static/deng_lu/icons/stars_dark.svg' : '/static/deng_lu/icons/stars_muted.svg'"
+								mode="aspectFit"
+							></image>
+							<text class="dl_mo_shi_zi" :class="模式 == 'register' ? 'dl_mo_shi_zi_zc' : ''">新用户注册</text>
+							<view v-if="模式 != 'register'" class="dl_hong_dian"></view>
+						</view>
+					</view>
+
+					<!-- 2. 新人礼包提示条 -->
+					<view class="dl_li_bao">
+						<!-- App 端只支持两色线性渐变，左右两侧光晕用两段渐变视图叠加还原 -->
+						<view
+							class="dl_li_bao_guang dl_li_bao_guang_zuo"
+							:class="模式 == 'register' ? 'dl_li_bao_guang_zuo_ji' : ''"
+						></view>
+						<view class="dl_li_bao_guang dl_li_bao_guang_you"></view>
+						<view class="dl_li_bao_kuang">
+							<image class="dl_tu_20" src="/static/deng_lu/icons/gift_green.svg" mode="aspectFit"></image>
+						</view>
+						<view class="dl_li_bao_zhong">
+							<view class="dl_li_bao_hang">
+								<text class="dl_li_bao_qian">新伙伴特权</text>
+								<text class="dl_li_bao_ming">注册即送启航礼包</text>
+							</view>
+							<!-- App 端 <text> 只能包含一个文本节点：拆成同行三段 text -->
+							<view class="dl_li_bao_fu_hang">
+								<text class="dl_li_bao_fu">立领</text>
+								<text class="dl_li_bao_jia_qian">+100 PTS</text>
+								<text class="dl_li_bao_fu dl_li_bao_fu_wei">悬赏金 · 首单免抽佣</text>
+							</view>
+						</view>
+						<view class="dl_li_bao_piao">
+							<text class="dl_li_bao_jia">+100</text>
+							<image class="dl_tu_12" src="/static/deng_lu/icons/coin_green.svg" mode="aspectFit"></image>
+						</view>
+					</view>
+
+					<!-- 3. 登录视图 -->
+					<view v-if="模式 == 'login'" class="dl_deng_lu">
+						<!-- 登录方式二级切换 -->
+						<view class="dl_fang_shi">
+							<view
+								class="dl_fang_shi_an"
+								:class="登录方式 == 'sms' ? 'dl_fang_shi_an_ji' : ''"
+								@click="切换登录方式('sms')"
+							>
+								<image
+									class="dl_tu_16"
+									:src="登录方式 == 'sms' ? '/static/deng_lu/icons/sms_primary.svg' : '/static/deng_lu/icons/sms_muted.svg'"
+									mode="aspectFit"
+								></image>
+								<text class="dl_fang_shi_zi" :class="登录方式 == 'sms' ? 'dl_fang_shi_zi_ji' : ''">短信验证码</text>
+							</view>
+							<view
+								class="dl_fang_shi_an dl_fang_shi_an_you"
+								:class="登录方式 == 'pwd' ? 'dl_fang_shi_an_ji' : ''"
+								@click="切换登录方式('pwd')"
+							>
+								<image
+									class="dl_tu_16"
+									:src="登录方式 == 'pwd' ? '/static/deng_lu/icons/lock_primary.svg' : '/static/deng_lu/icons/lock_muted.svg'"
+									mode="aspectFit"
+								></image>
+								<text class="dl_fang_shi_zi" :class="登录方式 == 'pwd' ? 'dl_fang_shi_zi_ji' : ''">账号密码登录</text>
+							</view>
+						</view>
+
+						<!-- 登录表单：3a 短信验证码 / 3b 账号密码 -->
+						<view v-if="登录方式 == 'sms'" class="dl_zi_duan_dan">
+							<!-- 3a. 短信验证码登录 -->
+							<view class="dl_zi_duan dl_zi_duan_shou">
+								<view class="dl_zi_duan_tou">
+									<text class="dl_zi_duan_ming">手机号码</text>
+									<text class="dl_zi_duan_lan" @click="切换区号">切换区号</text>
+								</view>
+								<view class="dl_shu_ru_hang">
+									<view class="dl_qu_hao" @click="切换区号">
+										<text class="dl_qu_hao_zi">+86</text>
+										<image class="dl_tu_16 dl_qu_hao_tu" src="/static/deng_lu/icons/arrow_down_muted.svg" mode="aspectFit"></image>
+									</view>
+									<view class="dl_fen_ge"></view>
+									<image class="dl_tu_18 dl_hang_tu" src="/static/deng_lu/icons/phone_outline.svg" mode="aspectFit"></image>
+									<input
+										class="dl_shu_ru"
+										v-model="手机号"
+										placeholder="请输入手机号码"
+										placeholder-class="dl_zhan_wei"
+										maxlength="20"
+									/>
+									<view class="dl_qing_chu" @click="手机号 = ''">
+										<image class="dl_tu_16" src="/static/deng_lu/icons/cancel_outline.svg" mode="aspectFit"></image>
+									</view>
+								</view>
+							</view>
+
+							<view class="dl_zi_duan">
+								<view class="dl_zi_duan_tou">
+									<text class="dl_zi_duan_ming">短信验证码</text>
+									<text class="dl_zi_duan_hui">6位数字短信码</text>
+								</view>
+								<view class="dl_shu_ru_hang">
+									<image class="dl_tu_18 dl_hang_tu" src="/static/deng_lu/icons/shield_outline.svg" mode="aspectFit"></image>
+									<input
+										class="dl_shu_ru dl_shu_ru_ma"
+										v-model="验证码"
+										type="number"
+										placeholder="请输入短信验证码"
+										placeholder-class="dl_zhan_wei"
+										maxlength="6"
+									/>
+									<view class="dl_ma_an" :class="倒计时 > 0 ? 'dl_ma_an_jin' : ''" @click="发送验证码">
+										<text class="dl_ma_an_zi">{{ 倒计时 > 0 ? `${倒计时}s 重试` : '获取验证码' }}</text>
+									</view>
+								</view>
+							</view>
+
+							<view class="dl_gong_ju">
+								<view class="dl_ji_zhu" @click="保持在线 = !保持在线">
+									<view class="dl_gou" :class="保持在线 ? 'dl_gou_xuan' : ''">
+										<image v-if="保持在线" class="dl_gou_tu" src="/static/deng_lu/icons/check_tick.svg" mode="aspectFit"></image>
+									</view>
+									<text class="dl_gong_ju_zi">30天内保持在线</text>
+								</view>
+								<text class="dl_gong_ju_an" @click="收不到验证码">收不到验证码？</text>
+							</view>
+						</view>
+
+						<view v-else class="dl_zi_duan_dan">
+							<!-- 3b. 账号密码登录 -->
+							<view class="dl_zi_duan dl_zi_duan_shou">
+								<view class="dl_zi_duan_tou">
+									<text class="dl_zi_duan_ming">账号 / 手机号 / 邮箱</text>
+									<text class="dl_zi_duan_hui">支持多身份识别</text>
+								</view>
+								<view class="dl_shu_ru_hang">
+									<image class="dl_tu_18 dl_hang_tu" src="/static/deng_lu/icons/person_outline.svg" mode="aspectFit"></image>
+									<input
+										class="dl_shu_ru"
+										v-model="账号"
+										placeholder="请输入手机号 / LinkID / 邮箱"
+										placeholder-class="dl_zhan_wei"
+										maxlength="64"
+									/>
+									<view class="dl_qing_chu" @click="账号 = ''">
+										<image class="dl_tu_16" src="/static/deng_lu/icons/cancel_outline.svg" mode="aspectFit"></image>
+									</view>
+								</view>
+							</view>
+
+							<view class="dl_zi_duan">
+								<view class="dl_zi_duan_tou">
+									<text class="dl_zi_duan_ming">登录密码</text>
+									<text class="dl_zi_duan_hui">8-20位字符</text>
+								</view>
+								<view class="dl_shu_ru_hang">
+									<image class="dl_tu_18 dl_hang_tu" src="/static/deng_lu/icons/lock_outline.svg" mode="aspectFit"></image>
+									<input
+										class="dl_shu_ru"
+										v-model="密码"
+										:password="!显示密码"
+										placeholder="请输入 8-20 位登录密码"
+										placeholder-class="dl_zhan_wei"
+										maxlength="128"
+									/>
+									<view class="dl_qing_chu" @click="切换密码可见">
+										<image
+											class="dl_tu_18"
+											:src="显示密码 ? '/static/deng_lu/icons/eye_off_outline.svg' : '/static/deng_lu/icons/eye_outline.svg'"
+											mode="aspectFit"
+										></image>
+									</view>
+								</view>
+							</view>
+
+							<view class="dl_gong_ju">
+								<view class="dl_ji_zhu" @click="记住密码 = !记住密码">
+									<view class="dl_gou" :class="记住密码 ? 'dl_gou_xuan' : ''">
+										<image v-if="记住密码" class="dl_gou_tu" src="/static/deng_lu/icons/check_tick.svg" mode="aspectFit"></image>
+									</view>
+									<text class="dl_gong_ju_zi">记住密码 / 30天自动登录</text>
+								</view>
+								<text class="dl_gong_ju_an" @click="忘记密码">忘记密码？</text>
+							</view>
+						</view>
+
+						<!-- 登录主按钮 -->
+						<view class="dl_zhu_an" :class="正在处理 ? 'dl_zhu_an_jin' : ''" @click="立即登录">
+							<image class="dl_tu_20 dl_zhu_an_tu" src="/static/deng_lu/icons/bolt_dark.svg" mode="aspectFit"></image>
+							<text class="dl_zhu_an_zi">{{ 正在处理 ? '请稍候…' : (登录方式 == 'sms' ? '立即登录进入 LinkQuest' : '账号安全验证并登录') }}</text>
+						</view>
+					</view>
+
+					<view v-else class="dl_deng_lu">
+						<!-- 4. 注册视图 -->
+						<view class="dl_zi_duan dl_zi_duan_shou">
+							<text class="dl_zi_duan_ming dl_zi_duan_ming_dan">注册手机号 / 账号</text>
+							<view class="dl_shu_ru_hang">
+								<image class="dl_tu_18 dl_hang_tu" src="/static/deng_lu/icons/smartphone_outline.svg" mode="aspectFit"></image>
+								<input
+									class="dl_shu_ru"
+									v-model="注册账号"
+									placeholder="请输入待绑定的手机号码"
+									placeholder-class="dl_zhan_wei"
+									maxlength="64"
+								/>
+							</view>
+						</view>
+
+						<view class="dl_zi_duan">
+							<text class="dl_zi_duan_ming dl_zi_duan_ming_dan">短信验证码</text>
+							<view class="dl_shu_ru_hang">
+								<image class="dl_tu_18 dl_hang_tu" src="/static/deng_lu/icons/code_outline.svg" mode="aspectFit"></image>
+								<input
+									class="dl_shu_ru dl_shu_ru_ma"
+									v-model="注册验证码"
+									type="number"
+									placeholder="6位数字验证码"
+									placeholder-class="dl_zhan_wei"
+									maxlength="6"
+								/>
+								<view class="dl_ma_an dl_ma_an_lv" :class="倒计时 > 0 ? 'dl_ma_an_jin' : ''" @click="发送验证码">
+									<text class="dl_ma_an_zi dl_ma_an_zi_lv">{{ 倒计时 > 0 ? `${倒计时}s 重试` : '发送验证码' }}</text>
+								</view>
+							</view>
+						</view>
+
+						<view class="dl_zi_duan">
+							<text class="dl_zi_duan_ming dl_zi_duan_ming_dan">设置探险家昵称</text>
+							<view class="dl_shu_ru_hang">
+								<image class="dl_tu_18 dl_hang_tu" src="/static/deng_lu/icons/badge_outline.svg" mode="aspectFit"></image>
+								<input
+									class="dl_shu_ru"
+									v-model="昵称"
+									placeholder="如：极客星辰、前端游侠"
+									placeholder-class="dl_zhan_wei"
+									maxlength="40"
+								/>
+							</view>
+						</view>
+
+						<view class="dl_zi_duan">
+							<view class="dl_zi_duan_tou">
+								<text class="dl_zi_duan_ming dl_zi_duan_ming_dan">邀请码 (选填)</text>
+								<view class="dl_yao_qing">
+									<text class="dl_yao_qing_zi">填写双方各得 +50 PTS</text>
+									<image class="dl_tu_12" src="/static/deng_lu/icons/celebration_green.svg" mode="aspectFit"></image>
+								</view>
+							</view>
+							<view class="dl_shu_ru_hang">
+								<image class="dl_tu_18 dl_hang_tu" src="/static/deng_lu/icons/loyalty_outline.svg" mode="aspectFit"></image>
+								<input
+									class="dl_shu_ru"
+									v-model="邀请码"
+									placeholder="输入好友推荐码或领航公会码"
+									placeholder-class="dl_zhan_wei"
+									maxlength="32"
+								/>
+							</view>
+						</view>
+
+						<view class="dl_zhu_an dl_zhu_an_lv" :class="正在处理 ? 'dl_zhu_an_jin' : ''" @click="立即注册">
+							<image class="dl_tu_20 dl_zhu_an_tu" src="/static/deng_lu/icons/stars_dark.svg" mode="aspectFit"></image>
+							<text class="dl_zhu_an_zi dl_zhu_an_zi_an">{{ 正在处理 ? '请稍候…' : '完成注册 · 领取 100 PTS 礼包' }}</text>
+						</view>
+					</view>
+
+					<!-- 5. 协议勾选 -->
+					<view class="dl_xie_yi">
+						<view class="dl_gou dl_xie_yi_gou" :class="同意协议 ? 'dl_gou_xuan' : ''" @click="同意协议 = !同意协议">
+							<image v-if="同意协议" class="dl_gou_tu" src="/static/deng_lu/icons/check_tick.svg" mode="aspectFit"></image>
+						</view>
+						<!-- App 端 <text> 只能包含一个文本节点：拆成可换行的多段 text -->
+						<view class="dl_xie_yi_zi">
+							<text class="dl_xie_yi_wen">已阅读并同意 LinkQuest</text>
+							<text class="dl_lian_jie">《用户服务协议》</text>
+							<text class="dl_xie_yi_wen">、</text>
+							<text class="dl_lian_jie">《隐私权政策》</text>
+							<text class="dl_xie_yi_wen">及社区悬赏履约条例。</text>
+						</view>
+					</view>
+				</view>
+			</view>
+
+			<!-- 6. 通行密钥 / 生物识别 -->
+			<view class="dl_mi_yao_qu">
+				<view class="dl_mi_yao" @click="生物识别登录">
+					<view class="dl_mi_yao_zuo">
+						<view class="dl_mi_yao_kuang">
+							<image class="dl_tu_20" src="/static/deng_lu/icons/fingerprint_primary.svg" mode="aspectFit"></image>
+						</view>
+						<view class="dl_mi_yao_zhong">
+							<text class="dl_mi_yao_ming">通行密钥 / FaceID 快速登入</text>
+							<text class="dl_mi_yao_fu">无需输入验证码 · 本地加密硬件验证</text>
+						</view>
+					</view>
+					<image class="dl_tu_18" src="/static/deng_lu/icons/chevron_outline.svg" mode="aspectFit"></image>
+				</view>
+			</view>
+
+			<!-- 7. 第三方快捷接入 -->
+			<view class="dl_she_jiao">
+				<view class="dl_fen_ge_hang">
+					<view class="dl_fen_ge_xian"></view>
+					<text class="dl_she_jiao_biao">其他极速接入方式</text>
+					<view class="dl_fen_ge_xian"></view>
+				</view>
+				<view class="dl_she_jiao_hang">
+					<view
+						v-for="项 in 社交列表"
+						:key="项.键"
+						class="dl_she_jiao_an"
+						:data-key="项.键"
+						@click="社交登录"
+					>
+						<image class="dl_tu_22" :src="项.图标" mode="aspectFit"></image>
+						<text class="dl_she_jiao_zi">{{ 项.名称 }}</text>
+					</view>
+				</view>
+			</view>
+
+			<!-- 底部留白：设计稿 pb-12 -->
+			<view class="dl_wei_bu"></view>
+		</view>
+
+		<!-- 设计稿底部胶囊 Toast -->
+		<view v-if="提示文字 != ''" class="dl_ti_shi_ceng">
+			<view class="dl_ti_shi">
+				<image class="dl_tu_20 dl_ti_shi_tu" :src="提示图标" mode="aspectFit"></image>
+				<text class="dl_ti_shi_zi">{{ 提示文字 }}</text>
+			</view>
+		</view>
+	</view>
+</template>
+
+<style>
+	@font-face { font-family: 'PJS400'; src: url('/static/hui_hua/fonts/PlusJakartaSans-400.ttf'); }
+	@font-face { font-family: 'PJS500'; src: url('/static/hui_hua/fonts/PlusJakartaSans-500.ttf'); }
+	@font-face { font-family: 'PJS600'; src: url('/static/hui_hua/fonts/PlusJakartaSans-600.ttf'); }
+	@font-face { font-family: 'PJS700'; src: url('/static/hui_hua/fonts/PlusJakartaSans-700.ttf'); }
+	@font-face { font-family: 'PJS800'; src: url('/static/hui_hua/fonts/PlusJakartaSans-800.ttf'); }
+	@font-face { font-family: 'SG600'; src: url('/static/hui_hua/fonts/SpaceGrotesk-600.ttf'); }
+	@font-face { font-family: 'SG700'; src: url('/static/hui_hua/fonts/SpaceGrotesk-700.ttf'); }
+
+	/* ---------- 页面骨架 ---------- */
+	.dl_ye {
+		position: relative;
+		display: flex;
+		flex-direction: column;
+		width: 100%;
+		/* App 端 min-height 不支持百分比，用固定高度兜底（页面背景色已在 pages.json 配置） */
+		min-height: 800px;
+		background-color: #0b1326;
+	}
+	.dl_guang_ceng {
+		position: absolute;
+		top: 0; left: 0; right: 0;
+		height: 560px;
+		overflow: hidden;
+	}
+	.dl_guang { position: absolute; }
+	.dl_guang_1 {
+		top: -64px; left: 50%; margin-left: -160px;
+		width: 320px; height: 320px;
+	}
+	.dl_guang_2 {
+		top: 192px; right: -80px;
+		width: 256px; height: 256px;
+	}
+	/* 设计稿顶栏是空的：只保留半透明底和一条细阴影 */
+	.dl_ding_lan {
+		position: fixed;
+		top: 0; left: 0; right: 0;
+		z-index: 50;
+		background-color: rgba(11, 19, 38, 0.80);
+		box-shadow: 0 1px 8px rgba(0, 0, 0, 0.04);
+	}
+	.dl_nei_rong {
+		position: relative;
+		z-index: 1;
+		display: flex;
+		flex-direction: column;
+		width: 100%;
+	}
+	.dl_wei_bu { width: 100%; height: 48px; }
+
+	/* ---------- Hero ---------- */
+	.dl_hero {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		padding: 8px 24px 20px 24px;
+	}
+	.dl_biao_qu {
+		position: relative;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 80px; height: 80px;
+		margin-bottom: 12px;
+	}
+	.dl_biao_guang {
+		position: absolute;
+		left: -8px; top: -8px;
+		width: 96px; height: 96px;
+		border-radius: 9999px;
+		/* App 端 linear-gradient 仅支持两色，取原三色的首尾 */
+		background-image: linear-gradient(to bottom right, rgba(192, 193, 255, 0.45), rgba(128, 131, 255, 0.10));
+	}
+	.dl_biao_kuang {
+		position: relative;
+		width: 80px; height: 80px;
+		border-radius: 16px;
+		padding: 8px;
+		background-color: rgba(34, 42, 61, 0.80);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+	.dl_biao_tu { width: 64px; height: 64px; border-radius: 12px; }
+	.dl_ban_ben {
+		position: absolute;
+		bottom: -4px; right: -4px;
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		padding: 2px 8px;
+		border-radius: 9999px;
+		background-color: #2d3449;
+	}
+	.dl_ban_ben_dian {
+		width: 6px; height: 6px;
+		border-radius: 9999px;
+		background-color: #4edea3;
+		margin-right: 4px;
+	}
+	.dl_ban_ben_zi {
+		font-size: 10px; line-height: 14px;
+		letter-spacing: 1px;
+		color: #4edea3;
+		font-family: 'SG700';
+	}
+	.dl_biao_ti_hang {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: center;
+	}
+	.dl_biao_ti {
+		font-size: 22px; line-height: 28px;
+		letter-spacing: -0.4px;
+		color: #dae2fd;
+		font-family: 'PJS700';
+	}
+	.dl_biao_ti_biao {
+		font-size: 10px; line-height: 14px;
+		letter-spacing: 0.5px;
+		color: #c0c1ff;
+		background-color: rgba(192, 193, 255, 0.15);
+		padding: 2px 6px;
+		border-radius: 4px;
+		margin-left: 6px;
+		font-family: 'SG700';
+	}
+	.dl_fu_biao_ti {
+		font-size: 12px; line-height: 16px;
+		color: #c7c4d7;
+		margin-top: 4px;
+		max-width: 280px;
+		text-align: center;
+		font-family: 'PJS400';
+	}
+
+	/* ---------- 主卡 ---------- */
+	.dl_ka_qu { width: 100%; padding-left: 16px; padding-right: 16px; }
+	.dl_ka {
+		display: flex;
+		flex-direction: column;
+		width: 100%;
+		padding: 20px;
+		border-radius: 16px;
+		background-color: rgba(23, 31, 51, 0.70);
+		box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+	}
+
+	/* 分段切换 */
+	.dl_mo_shi {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		width: 100%;
+		padding: 4px;
+		border-radius: 9999px;
+		background-color: #060e20;
+	}
+	.dl_mo_shi_an {
+		flex: 1;
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: center;
+		padding-top: 8px; padding-bottom: 8px;
+		border-radius: 9999px;
+	}
+	.dl_mo_shi_an_ji { background-color: #8083ff; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.28); }
+	.dl_mo_shi_an_zc { background-color: #00a572; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.28); }
+	.dl_mo_shi_zi {
+		font-size: 12px; line-height: 16px;
+		letter-spacing: 0.4px;
+		color: #c7c4d7;
+		font-family: 'SG600';
+		margin-left: 6px;
+	}
+	.dl_mo_shi_zi_ji { color: #0d0096; font-family: 'SG700'; }
+	.dl_mo_shi_zi_zc { color: #00311f; font-family: 'SG700'; }
+	.dl_hong_dian {
+		width: 6px; height: 6px;
+		border-radius: 9999px;
+		background-color: #4edea3;
+		margin-left: 6px;
+	}
+
+	/* 新人礼包 */
+	.dl_li_bao {
+		position: relative;
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		width: 100%;
+		padding: 12px;
+		margin-top: 20px;
+		border-radius: 12px;
+		overflow: hidden;
+		background-color: #222a3d;
+	}
+	.dl_li_bao_guang {
+		position: absolute;
+		top: 0; bottom: 0;
+		width: 50%;
+		z-index: 0;
+	}
+	.dl_li_bao_guang_zuo {
+		left: 0;
+		background-image: linear-gradient(to right, rgba(0, 165, 114, 0.20), rgba(0, 165, 114, 0));
+	}
+	.dl_li_bao_guang_zuo_ji {
+		background-image: linear-gradient(to right, rgba(0, 165, 114, 0.40), rgba(0, 165, 114, 0));
+	}
+	.dl_li_bao_guang_you {
+		right: 0;
+		background-image: linear-gradient(to left, rgba(128, 131, 255, 0.20), rgba(128, 131, 255, 0));
+	}
+	.dl_li_bao_kuang {
+		position: relative;
+		z-index: 1;
+		flex-shrink: 0;
+		width: 36px; height: 36px;
+		border-radius: 8px;
+		background-color: rgba(78, 222, 163, 0.15);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+	.dl_li_bao_zhong {
+		position: relative;
+		z-index: 1;
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		margin-left: 12px;
+		margin-right: 12px;
+		overflow: hidden;
+	}
+	.dl_li_bao_hang { display: flex; flex-direction: row; align-items: center; }
+	.dl_li_bao_qian {
+		font-size: 10px; line-height: 14px;
+		letter-spacing: 0.5px;
+		padding: 0 4px;
+		border-radius: 4px;
+		background-color: rgba(78, 222, 163, 0.20);
+		color: #4edea3;
+		font-family: 'SG700';
+	}
+	.dl_li_bao_ming {
+		font-size: 12px; line-height: 16px;
+		color: #dae2fd;
+		font-family: 'PJS600';
+		margin-left: 6px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.dl_li_bao_fu_hang {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		margin-top: 2px;
+		overflow: hidden;
+	}
+	.dl_li_bao_fu {
+		font-size: 12px; line-height: 16px;
+		color: #c7c4d7;
+		font-family: 'PJS400';
+		flex-shrink: 0;
+		white-space: nowrap;
+	}
+	.dl_li_bao_fu_wei {
+		flex-shrink: 1;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.dl_li_bao_jia_qian {
+		color: #4edea3; font-family: 'SG700';
+		font-size: 12px; line-height: 16px;
+		flex-shrink: 0;
+		margin-left: 4px;
+		margin-right: 4px;
+		white-space: nowrap;
+	}
+	.dl_li_bao_piao {
+		position: relative;
+		z-index: 1;
+		flex-shrink: 0;
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		padding: 4px 8px;
+		border-radius: 9999px;
+		background-color: #2d3449;
+	}
+	.dl_li_bao_jia {
+		font-size: 10px; line-height: 14px;
+		color: #4edea3;
+		font-family: 'SG700';
+		margin-right: 2px;
+	}
+
+	/* 登录 / 注册视图 */
+	.dl_deng_lu {
+		display: flex;
+		flex-direction: column;
+		width: 100%;
+		margin-top: 20px;
+	}
+	.dl_fang_shi {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		padding: 4px;
+		border-radius: 12px;
+		background-color: rgba(6, 14, 32, 0.70);
+	}
+	.dl_fang_shi_an {
+		flex: 1;
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: center;
+		padding: 6px 12px;
+		border-radius: 8px;
+	}
+	.dl_fang_shi_an_you { margin-left: 8px; }
+	.dl_fang_shi_an_ji { background-color: #222a3d; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.30); }
+	.dl_fang_shi_zi {
+		font-size: 12px; line-height: 16px;
+		letter-spacing: 0.4px;
+		color: #c7c4d7;
+		font-family: 'SG600';
+		margin-left: 6px;
+	}
+	.dl_fang_shi_zi_ji { color: #c0c1ff; }
+
+	/* 表单 */
+	.dl_zi_duan_dan {
+		display: flex;
+		flex-direction: column;
+		width: 100%;
+		margin-top: 16px;
+	}
+	.dl_zi_duan {
+		display: flex;
+		flex-direction: column;
+		width: 100%;
+		margin-top: 16px;
+	}
+	.dl_zi_duan_shou { margin-top: 0; }
+	.dl_zi_duan_tou {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+		margin-bottom: 6px;
+	}
+	.dl_zi_duan_ming {
+		font-size: 10px; line-height: 14px;
+		letter-spacing: 0.5px;
+		color: #c7c4d7;
+		font-family: 'SG700';
+	}
+	.dl_zi_duan_ming_dan {
+		margin-bottom: 6px;
+	}
+	.dl_zi_duan_lan {
+		font-size: 10px; line-height: 14px;
+		letter-spacing: 0.5px;
+		color: #c0c1ff;
+		font-family: 'SG700';
+	}
+	.dl_zi_duan_hui {
+		font-size: 10px; line-height: 14px;
+		letter-spacing: 0.5px;
+		color: #908fa0;
+		font-family: 'SG700';
+	}
+	.dl_shu_ru_hang {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		width: 100%;
+		padding: 10px 12px;
+		border-radius: 12px;
+		background-color: rgba(6, 14, 32, 0.80);
+	}
+	.dl_qu_hao {
+		flex-shrink: 0;
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		padding-right: 8px;
+	}
+	.dl_qu_hao_zi {
+		font-size: 12px; line-height: 16px;
+		color: #dae2fd;
+		font-family: 'SG600';
+	}
+	.dl_qu_hao_tu { margin-left: 4px; }
+	.dl_fen_ge {
+		flex-shrink: 0;
+		width: 1px; height: 16px;
+		background-color: rgba(70, 69, 84, 0.30);
+		margin-right: 8px;
+	}
+	.dl_hang_tu { flex-shrink: 0; margin-right: 8px; }
+	.dl_shu_ru {
+		flex: 1;
+		height: 20px;
+		font-size: 14px;
+		color: #dae2fd;
+		font-family: 'PJS400';
+		background-color: transparent;
+	}
+	.dl_shu_ru_ma { letter-spacing: 1.4px; }
+	.dl_zhan_wei { color: #908fa0; font-size: 14px; }
+	.dl_qing_chu { flex-shrink: 0; padding: 4px; margin-left: 4px; }
+	.dl_ma_an {
+		flex-shrink: 0;
+		padding: 4px 10px;
+		border-radius: 6px;
+		background-color: rgba(192, 193, 255, 0.15);
+		margin-left: 8px;
+	}
+	.dl_ma_an_jin { opacity: 0.5; }
+	.dl_ma_an_zi {
+		font-size: 10px; line-height: 14px;
+		color: #c0c1ff;
+		font-family: 'SG700';
+	}
+	.dl_ma_an_lv { background-color: rgba(78, 222, 163, 0.15); }
+	.dl_ma_an_zi_lv { color: #4edea3; }
+
+	/* 复选框与工具行 */
+	.dl_gong_ju {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+		margin-top: 20px;
+	}
+	.dl_ji_zhu { display: flex; flex-direction: row; align-items: center; }
+	.dl_gou {
+		width: 16px; height: 16px;
+		border-radius: 4px;
+		border-width: 1px;
+		border-style: solid;
+		border-color: #464554;
+		background-color: #060e20;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+	.dl_gou_xuan { background-color: #8083ff; border-color: #8083ff; }
+	.dl_gou_tu { width: 12px; height: 12px; }
+	.dl_gong_ju_zi {
+		font-size: 12px; line-height: 16px;
+		color: #c7c4d7;
+		font-family: 'PJS400';
+		margin-left: 8px;
+	}
+	.dl_gong_ju_an {
+		font-size: 12px; line-height: 16px;
+		color: #c0c1ff;
+		font-family: 'PJS400';
+	}
+
+	/* 邀请码 */
+	.dl_yao_qing { display: flex; flex-direction: row; align-items: center; }
+	.dl_yao_qing_zi {
+		font-size: 10px; line-height: 14px;
+		letter-spacing: 0.5px;
+		color: #4edea3;
+		font-family: 'SG700';
+		margin-right: 2px;
+	}
+
+	/* 主按钮 */
+	.dl_zhu_an {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: center;
+		width: 100%;
+		padding: 14px 16px;
+		margin-top: 20px;
+		border-radius: 12px;
+		background-image: linear-gradient(to right, #8083ff, #00a572);
+		box-shadow: 0 8px 20px rgba(0, 0, 0, 0.30);
+	}
+	.dl_zhu_an_lv { background-image: linear-gradient(to right, #00a572, #8083ff); }
+	.dl_zhu_an_jin { opacity: 0.6; }
+	.dl_zhu_an_tu { margin-right: 8px; }
+	.dl_zhu_an_zi {
+		font-size: 14px; line-height: 18px;
+		letter-spacing: 0.3px;
+		color: #0d0096;
+		font-family: 'SG700';
+	}
+	.dl_zhu_an_zi_an { color: #00311f; }
+
+	/* 协议 */
+	.dl_xie_yi {
+		display: flex;
+		flex-direction: row;
+		align-items: flex-start;
+		margin-top: 20px;
+		padding-top: 4px;
+	}
+	.dl_xie_yi_gou { margin-top: 2px; flex-shrink: 0; }
+	.dl_xie_yi_zi {
+		flex: 1;
+		display: flex;
+		flex-direction: row;
+		flex-wrap: wrap;
+		align-items: center;
+		margin-left: 8px;
+	}
+	.dl_xie_yi_wen {
+		font-size: 12px; line-height: 19px;
+		color: #c7c4d7;
+		font-family: 'PJS400';
+	}
+	.dl_lian_jie { color: #c0c1ff; font-size: 12px; line-height: 19px; font-family: 'PJS400'; }
+
+	/* 通行密钥 */
+	.dl_mi_yao_qu { width: 100%; padding-left: 16px; padding-right: 16px; margin-top: 16px; }
+	.dl_mi_yao {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+		width: 100%;
+		padding: 10px 16px;
+		border-radius: 12px;
+		background-color: rgba(19, 27, 46, 0.90);
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.20);
+	}
+	.dl_mi_yao_zuo { display: flex; flex-direction: row; align-items: center; flex: 1; }
+	.dl_mi_yao_kuang {
+		width: 32px; height: 32px;
+		border-radius: 8px;
+		background-color: rgba(192, 193, 255, 0.10);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+	.dl_mi_yao_zhong { display: flex; flex-direction: column; margin-left: 10px; }
+	.dl_mi_yao_ming {
+		font-size: 12px; line-height: 16px;
+		color: #dae2fd;
+		font-family: 'SG600';
+	}
+	.dl_mi_yao_fu {
+		font-size: 12px; line-height: 16px;
+		color: #c7c4d7;
+		font-family: 'PJS400';
+	}
+
+	/* 第三方 */
+	.dl_she_jiao {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		width: 100%;
+		padding-left: 24px;
+		padding-right: 24px;
+		margin-top: 24px;
+	}
+	.dl_fen_ge_hang {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		width: 100%;
+		margin-bottom: 16px;
+	}
+	.dl_fen_ge_xian { flex: 1; height: 1px; background-color: #222a3d; }
+	.dl_she_jiao_biao {
+		font-size: 10px; line-height: 14px;
+		letter-spacing: 1px;
+		color: #908fa0;
+		padding: 0 8px;
+		font-family: 'SG700';
+	}
+	.dl_she_jiao_hang { display: flex; flex-direction: row; align-items: center; justify-content: center; }
+	.dl_she_jiao_an {
+		width: 48px; height: 48px;
+		border-radius: 12px;
+		background-color: #131b2e;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		margin-left: 8px;
+		margin-right: 8px;
+	}
+	.dl_she_jiao_zi {
+		font-size: 9px; line-height: 12px;
+		color: #c7c4d7;
+		margin-top: 2px;
+		font-family: 'SG700';
+	}
+
+	/* 图标尺寸 */
+	.dl_tu_12 { width: 12px; height: 12px; }
+	.dl_tu_16 { width: 16px; height: 16px; }
+	.dl_tu_18 { width: 18px; height: 18px; }
+	.dl_tu_20 { width: 20px; height: 20px; }
+	.dl_tu_22 { width: 22px; height: 22px; }
+
+	/* 底部 Toast */
+	.dl_ti_shi_ceng {
+		position: fixed;
+		left: 0; right: 0; bottom: 32px;
+		z-index: 99;
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: center;
+	}
+	.dl_ti_shi {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		padding: 10px 16px;
+		border-radius: 9999px;
+		background-color: #31394d;
+		box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+	}
+	.dl_ti_shi_tu { margin-right: 8px; }
+	.dl_ti_shi_zi {
+		font-size: 12px; line-height: 16px;
+		color: #dae2fd;
+		font-family: 'PJS500';
+	}
+</style>

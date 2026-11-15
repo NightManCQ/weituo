@@ -1,0 +1,2043 @@
+<script setup lang="ts">
+import { onShow } from '@dcloudio/uni-app'
+import { computed, onMounted, ref } from 'vue'
+import type { 积分账户, 任务位置, 用户 } from '../../common/leixing'
+import { 发布委托 as 提交委托, 发送请求, 读取当前用户, 读取委托位置 } from '../../common/wangluo'
+import { 移除委托位置 } from '../../common/本地存储'
+
+/**
+ * 设计图/发布委托.html 的迁移版（深色 Bounty Square 发单页）。
+ *
+ * 界面严格按设计稿落地，自上而下 6 个模块 + 底部固定发布坞 + 发布成功弹窗：
+ *   ① 草稿同步条 / ② 可用赏金池横幅 / ③ 委托模式（抢单 · 竞标）
+ *   ④ 委托分类胶囊 / ⑤ 悬赏内容（标题·模板·描述·附件）/ ⑥ 时间与排期
+ *   ⑦ 履约地点（线上 / 线下）/ ⑧ 悬赏金额与门槛
+ * 顶栏由本页自渲染 components/ding_lan（「委托详情」外观 = Connect & Create /
+ * LINKQUEST NET，带返回按钮与右侧圆形头像，与设计稿 header 一致），底栏不渲染：
+ * 本页是 pages.json 注册的独立页面（navigationStyle custom），由世界页右下悬浮按钮 /
+ * 委托广场「去发布」等入口 uni.navigateTo 打开，不再作为首页 v-if 组件挂载；
+ * 顶栏 fixed 由组件负责，本页只留顶部 / 底部占位与坞底距做避让。
+ *
+ * 页面级滚动：根容器不锁死高度，内容自然撑开，滚动发生在页面上。
+ *
+ * 后端 POST /tasks 只接受 title / description / deadline / bidding_deadline /
+ * reward_points / location，所以：
+ *   · 委托模式 → 决定投标截止时间的取值（抢单 = 发布即截止，仍要一个合法的未来时间）
+ *   · 委托分类 → 驱动「快速导入需求模板」预填，不写库（后端无分类字段）
+ *   · 参考附件 → 仅本地预览（后端无附件接口），模块头部提示已如实改为「本地预览」
+ *   · 信用分门槛 / 实名认证 → 仅本页开关状态（后端无对应字段）
+ */
+
+
+type 分类项类型 = { 键 : string; 图开 : string; 图关 : string }
+type 附件项 = { 路径 : string; 名称 : string }
+type 附件槽类型 = { 键 : string; 类型 : string; 路径 : string }
+
+// 窗口信息在 setup 期间同步取值，保证首帧顶部/底部占位就位
+const 系统信息 : any = uni.getSystemInfoSync()
+const 状态栏高 = ref(系统信息.statusBarHeight ?? 0)
+const 窗口底高 = ref(系统信息.windowBottom ?? 0)
+
+const 图 = '/static/fabuweituo/icons/'
+
+// 分类顺序与图标按设计稿固定；开/关两套图标是同一 symbol 的两种配色（预着色 SVG）
+const 分类项 : 分类项类型[] = [
+	{ 键: '视觉设计', 图开: 图 + 'palette_on.svg', 图关: 图 + 'palette_off.svg' },
+	{ 键: '技能开发', 图开: 图 + 'code_on.svg', 图关: 图 + 'code_off.svg' },
+	{ 键: '跑腿代办', 图开: 图 + 'wheel_on.svg', 图关: 图 + 'wheel_off.svg' },
+	{ 键: '学业答疑', 图开: 图 + 'school_on.svg', 图关: 图 + 'school_off.svg' },
+	{ 键: '文案翻译', 图开: 图 + 'translate_on.svg', 图关: 图 + 'translate_off.svg' },
+	{ 键: '线下搭子', 图开: 图 + 'diversity_on.svg', 图关: 图 + 'diversity_off.svg' },
+]
+
+// 设计稿的三个「快速导入需求模板」
+const 模板视觉 = '【视觉交付标准】\n1. 规格尺寸：PNG 透明底 1024x1024 / 支持矢量源文件。\n2. 配色基调：深冷霓虹高反差，赛博风。\n3. 阶段节点：提交草稿选拔 -> 确认方向 -> 终稿完工。'
+const 模板源码 = '【开发协作规范】\n1. 技术栈：Vue3 / TypeScript / Tailwind CSS。\n2. 验收指标：完整复现 Bug 修复、附带单测与 GitHub PR。\n3. 交付期限：48 小时内给出解决原型方案。'
+const 模板跑腿 = '【跑腿代送清单】\n1. 取件点：软件园 3 号楼前台。\n2. 送达点：中区图书馆 B 座 203 研修室。\n3. 物品类型：书籍资料与密封信封，请轻拿轻放。'
+
+// 1 PTS 按设计稿的估值口径 ≈ ¥0.1
+const 估值系数 = 0.1
+const 积分上限 = 1000000000
+const 附件上限 = 9
+// 抢单模式下投标窗口只留这么久（先到先得），仍满足后端「必须晚于当前时间」
+const 抢单窗口毫秒 = 5 * 60 * 1000
+
+const 当前用户 = ref<用户 | null>(null)
+const 积分 = ref<积分账户 | null>(null)
+const 积分错误 = ref('')
+
+const 模式 = ref('竞标')
+const 分类 = ref('视觉设计')
+
+const 标题 = ref('')
+const 描述 = ref('')
+const 金额文案 = ref('0')
+
+const 投标日期 = ref('')
+const 投标时分 = ref('18:00')
+const 交付日期 = ref('')
+const 交付时分 = ref('22:00')
+
+const 地点模式 = ref('线上')
+const 位置 = ref<任务位置 | null>(null)
+
+const 信用门槛 = ref(true)
+const 实名要求 = ref(true)
+
+const 附件列表 = ref<附件项[]>([])
+const 草稿时间 = ref('')
+
+const 正在提交 = ref(false)
+const 显示成功 = ref(false)
+const 成功金额 = ref(0)
+
+/* ---------------- 小工具 ---------------- */
+
+function 两位数(值 : number) : string {
+	return 值 < 10 ? '0' + 值 : '' + 值
+}
+
+/** 2026-11-06 */
+function 日期文本(时 : Date) : string {
+	return 时.getFullYear() + '-' + 两位数(时.getMonth() + 1) + '-' + 两位数(时.getDate())
+}
+
+/** 11-06（时间轴用短日期，和设计稿一致） */
+function 短日期(期 : string) : string {
+	return 期.length >= 10 ? 期.slice(5, 10) : 期
+}
+
+function 时分文本(时 : Date) : string {
+	return 两位数(时.getHours()) + ':' + 两位数(时.getMinutes())
+}
+
+/** 以「今天」为基准偏移天数后得到某天某时某分，跨月交给 Date 归一化 */
+function 偏移时刻(起 : Date, 天 : number, 时 : number, 分 : number) : Date {
+	return new Date(起.getFullYear(), 起.getMonth(), 起.getDate() + 天, 时, 分, 0, 0)
+}
+
+/** 850 -> 850，2450 -> 2,450 */
+function 千分位(值 : number) : string {
+	const 原样 = '' + Math.round(值)
+	let 结果 = ''
+	let 计数 = 0
+	for (let i = 原样.length - 1; i >= 0; i--) {
+		结果 = 原样.slice(i, i + 1) + 结果
+		计数++
+		if (计数 % 3 == 0 && i > 0) 结果 = ',' + 结果
+	}
+	return 结果
+}
+
+function 提示(文 : string) {
+	uni.showToast({ title: 文, icon: 'none' })
+}
+
+/* ---------------- 派生状态 ---------------- */
+
+const 可用积分 = computed(() : number => {
+	const 账户 = 积分.value
+	if (账户 == null) return 0
+	return 账户.可用积分
+})
+
+const 积分文本 = computed(() : string => {
+	if (积分.value == null) return '—'
+	return 千分位(可用积分.value)
+})
+
+const 金额数 = computed(() : number => {
+	const 原 = 金额文案.value
+	if (原 == '') return 0
+	const 值 = parseInt(原)
+	if (Number.isNaN(值)) return 0
+	return 值
+})
+
+const 金额文本 = computed(() : string => 千分位(金额数.value))
+
+const 估值文本 = computed(() : string => '≈ ¥' + (金额数.value * 估值系数).toFixed(2))
+
+const 标题字数 = computed(() : number => 标题.value.length)
+
+const 抢单中 = computed(() : boolean => 模式.value == '抢单')
+
+// 时间轴三个节点：即刻发布 → 截标选人 → 成果验收（都取真实选择的日期）
+const 即刻文案 = computed(() : string => 短日期(日期文本(new Date())) + ' 即刻发布')
+const 截标文案 = computed(() : string => 短日期(投标日期.value) + ' 截标选人')
+const 验收文案 = computed(() : string => 短日期(交付日期.value) + ' 成果验收')
+// 「开始生效时间」写死在首帧：发布后立即生效，不随页面停留时间漂移
+const 即刻值文案 = computed(() : string => '今天（' + 短日期(日期文本(new Date())) + '）' + 时分文本(new Date()) + ' 即刻')
+
+const 草稿文案 = computed(() : string => 草稿时间.value == '' ? '尚未保存草稿' : '草稿已同步 ' + 草稿时间.value)
+
+const 地点文本 = computed(() : string => {
+	const 当前 = 位置.value
+	if (当前 == null) return '输入具体面交 / 协作地址（如中区图书馆 B1 创意舱）'
+	if (当前.地址 != null && 当前.地址 != '') return 当前.地址
+	return [当前.省, 当前.市, 当前.县].filter((段 : string | null) : boolean => 段 != null && 段 != '').join(' · ')
+})
+
+// 附件格固定三列：先排已有图，再排一个「添加」位，最后补空位凑满整行
+const 附件槽 = computed(() => {
+	const 结果 : 附件槽类型[] = []
+	const 已有 = 附件列表.value
+	for (let i = 0; i < 已有.length; i++) {
+		const 项 = 已有[i]
+		结果.push({ 键: '图_' + i, 类型: '图', 路径: 项.路径 })
+	}
+	if (已有.length < 附件上限) 结果.push({ 键: '添加', 类型: '加', 路径: '' })
+	while (结果.length % 3 != 0) 结果.push({ 键: '空_' + 结果.length, 类型: '空', 路径: '' })
+	return 结果
+})
+
+// 底部坞里的「预估冻结托管」跟着金额走，和设计稿的联动一致
+const 坞金额文本 = computed(() : string => 金额文本.value)
+
+const 能提交 = computed(() : boolean => {
+	if (正在提交.value) return false
+	if (当前用户.value == null) return true
+	if (标题.value.trim() == '') return false
+	const 金额 = 金额数.value
+	if (金额 < 0 || 金额 > 积分上限) return false
+	return true
+})
+
+/* ---------------- 时间 ---------------- */
+
+function 设置投标日期(事件 : { detail : { value : string } }) {
+	投标日期.value = 事件.detail.value
+}
+
+function 设置投标时分(事件 : { detail : { value : string } }) {
+	投标时分.value = 事件.detail.value
+}
+
+function 设置交付日期(事件 : { detail : { value : string } }) {
+	交付日期.value = 事件.detail.value
+}
+
+function 设置交付时分(事件 : { detail : { value : string } }) {
+	交付时分.value = 事件.detail.value
+}
+
+function 初始化时间() {
+	const 现在 = new Date()
+	const 投标 = 偏移时刻(现在, 1, 18, 0)
+	const 交付 = 偏移时刻(现在, 4, 22, 0)
+	投标日期.value = 日期文本(投标)
+	投标时分.value = '18:00'
+	交付日期.value = 日期文本(交付)
+	交付时分.value = '22:00'
+}
+
+/* ---------------- 交互 ---------------- */
+
+function 选模式(键 : string) {
+	模式.value = 键
+}
+
+// v-for 里的 @click="选分类(项.键)" 在 web 端会命中第一项（闭包被复用），
+// 改成 dataset 取值，和委托广场页保持同一种写法。
+function 选分类(事件 : { currentTarget : { dataset : Record<string, unknown> } }) {
+	const 键 = 事件.currentTarget.dataset['key']
+	if (typeof 键 != 'string') return
+	分类.value = 键
+	// 跑腿 / 线下搭子天然要见面，顺手把履约地点切到线下（与描述是否已填无关）
+	if (键 == '跑腿代办' || 键 == '线下搭子') 地点模式.value = '线下'
+	// 分类只做写作引导：描述还空着时，套用这一类的模板（后端没有分类字段，不写库）
+	if (描述.value.trim() != '') return
+	if (键 == '视觉设计') 描述.value = 模板视觉
+	else if (键 == '技能开发') 描述.value = 模板源码
+	else if (键 == '跑腿代办') 描述.value = 模板跑腿
+}
+
+function 套模板(类型 : string) {
+	if (类型 == '视觉') 描述.value = 模板视觉
+	else if (类型 == '源码') 描述.value = 模板源码
+	else 描述.value = 模板跑腿
+	提示('已导入需求模板')
+}
+
+function 加金额(增量 : number) {
+	const 现值 = 金额数.value
+	const 结果 = 现值 + 增量
+	金额文案.value = '' + 结果
+}
+
+function 选地点模式(键 : string) {
+	地点模式.value = 键
+}
+
+function 选位置() {
+	uni.navigateTo({ url: '/pages/xuanzedizhi/xuanzedizhi' })
+}
+
+function 加附件() {
+	const 剩余 = 附件上限 - 附件列表.value.length
+	if (剩余 <= 0) {
+		提示('最多 ' + 附件上限 + ' 张参考图')
+		return
+	}
+	uni.chooseImage({
+		count: 剩余,
+		success: (结果 : any) => {
+			const 路径表 = 结果.tempFilePaths as string[]
+			if (路径表 == null) return
+			const 新表 = 附件列表.value.slice()
+			for (let i = 0; i < 路径表.length; i++) {
+				const 序 = 新表.length + 1
+				新表.push({ 路径: 路径表[i], 名称: '参考图 ' + 序 + '.png' })
+			}
+			附件列表.value = 新表
+		},
+		fail: () => { 提示('选择图片已取消') },
+	})
+}
+
+// 同样避免 v-for 闭包：删附件按 data-idx 定位
+function 删附件(事件 : { currentTarget : { dataset : Record<string, unknown> } }) {
+	const 原 = 事件.currentTarget.dataset['idx']
+	const 序 = typeof 原 == 'string' ? parseInt(原) : -1
+	if (Number.isNaN(序) || 序 < 0) return
+	const 新表 = 附件列表.value.slice()
+	新表.splice(序, 1)
+	附件列表.value = 新表
+}
+
+function 附件名(序 : number) : string {
+	const 表 = 附件列表.value
+	if (序 < 0 || 序 >= 表.length) return ''
+	return 表[序].名称
+}
+
+function 看规则() {
+	uni.showModal({
+		title: '发单规则',
+		content: '1. 赏金在发布时冻结，验收通过后才打给接单方。\n2. 竞标模式截止后进入 24 小时选人期。\n3. 逾期未验收将自动进入维权仲裁。\n4. 平台零抽成，赏金 100% 直达履约方。',
+		showCancel: false,
+		confirmText: '知道了',
+	})
+}
+
+/* ---------------- 草稿 ---------------- */
+
+function 存草稿() {
+	uni.setStorageSync('fb_cg_biao_ti', 标题.value)
+	uni.setStorageSync('fb_cg_miao_shu', 描述.value)
+	uni.setStorageSync('fb_cg_jin_e', 金额文案.value)
+	uni.setStorageSync('fb_cg_fen_lei', 分类.value)
+	uni.setStorageSync('fb_cg_mo_shi', 模式.value)
+	const 时刻 = 时分文本(new Date())
+	uni.setStorageSync('fb_cg_shi_jian', 时刻)
+	草稿时间.value = 时刻
+	提示('草稿已保存到本机')
+}
+
+function 读草稿() {
+	const 时刻 = uni.getStorageSync('fb_cg_shi_jian') as string
+	if (时刻 == null || 时刻 == '') return
+	const 旧标题 = uni.getStorageSync('fb_cg_biao_ti') as string
+	const 旧描述 = uni.getStorageSync('fb_cg_miao_shu') as string
+	const 旧金额 = uni.getStorageSync('fb_cg_jin_e') as string
+	const 旧分类 = uni.getStorageSync('fb_cg_fen_lei') as string
+	const 旧模式 = uni.getStorageSync('fb_cg_mo_shi') as string
+	if (旧标题 != null) 标题.value = 旧标题
+	if (旧描述 != null) 描述.value = 旧描述
+	if (旧金额 != null && 旧金额 != '') 金额文案.value = 旧金额
+	if (旧分类 != null && 旧分类 != '') 分类.value = 旧分类
+	if (旧模式 != null && 旧模式 != '') 模式.value = 旧模式
+	草稿时间.value = 时刻
+}
+
+function 清空表单() {
+	标题.value = ''
+	描述.value = ''
+	金额文案.value = '0'
+	附件列表.value = []
+	位置.value = null
+	信用门槛.value = true
+	实名要求.value = true
+	初始化时间()
+	uni.removeStorageSync('fb_cg_shi_jian')
+	草稿时间.value = ''
+}
+
+/* ---------------- 数据 ---------------- */
+
+async function 加载积分() {
+	积分错误.value = ''
+	try {
+		积分.value = await 发送请求<积分账户>('/my/points')
+	} catch (原因) {
+		积分错误.value = 原因 instanceof Error ? 原因.message : '积分账户加载失败'
+	}
+}
+
+/** 发布成功后 5 分钟内的真实投标窗口（抢单模式用） */
+function 抢单截止文本() : string {
+	const 截止 = new Date(Date.now() + 抢单窗口毫秒)
+	return 日期文本(截止) + 'T' + 时分文本(截止) + ':00'
+}
+
+function 组合时间(日期 : string, 时分 : string) : string {
+	if (日期 == '') return ''
+	return 日期 + 'T' + (时分 == '' ? '18:00' : 时分) + ':00'
+}
+
+async function 提交() {
+	if (正在提交.value) return
+	if (当前用户.value == null) {
+		提示('请先登录后再发布委托')
+		return
+	}
+	const 清理标题 = 标题.value.trim()
+	if (清理标题 == '') {
+		提示('请填写委托标题')
+		return
+	}
+	const 分段 = 金额数.value
+	if (!Number.isInteger(分段) || 分段 < 0 || 分段 > 积分上限) {
+		提示('积分必须是 0 到 10 亿之间的整数')
+		return
+	}
+	if (积分.value != null && 分段 > 可用积分.value) {
+		提示('赏金不能超过可用积分 ' + 积分文本.value)
+		return
+	}
+	// 抢单模式：投标窗口只留 5 分钟，先到先得
+	const 投标时间 = 抢单中.value ? 抢单截止文本() : 组合时间(投标日期.value, 投标时分.value)
+	if (投标时间 == '') {
+		提示('请选择投标截止时间')
+		return
+	}
+	if (new Date(投标时间).getTime() <= Date.now()) {
+		提示('投标截止时间必须晚于当前时间')
+		return
+	}
+	const 交付时间 = 组合时间(交付日期.value, 交付时分.value)
+	if (交付时间 == '') {
+		提示('请选择最终交付时间')
+		return
+	}
+	if (new Date(交付时间).getTime() <= new Date(投标时间).getTime()) {
+		提示('最终交付时间必须晚于投标截止时间')
+		return
+	}
+	正在提交.value = true
+	try {
+		await 提交委托(清理标题, 描述.value.trim(), 交付时间, 投标时间, 分段, 地点模式.value == '线下' ? 位置.value : null)
+		成功金额.value = 分段
+		显示成功.value = true
+	} catch (原因) {
+		提示(原因 instanceof Error ? 原因.message : '发布失败')
+	} finally {
+		正在提交.value = false
+	}
+}
+
+/** 发布成功后用 redirectTo 替换当前发布页，返回时不会再回到已提交的表单 */
+function 去委托广场() {
+	显示成功.value = false
+	清空表单()
+	uni.redirectTo({ url: '/pages/weituo/wei_tuo_guang_chang' })
+}
+
+function 回主看板() {
+	显示成功.value = false
+	清空表单()
+	uni.reLaunch({ url: '/pages/shou_ye/shou_ye?tab=消息' })
+}
+
+// onShow 覆盖「选完地址返回」，onMounted 覆盖页面首次载入
+let 上次初始化 = 0
+function 初始化页面() {
+	const 现在 = Date.now()
+	if (现在 - 上次初始化 < 400) return
+	上次初始化 = 现在
+	// 顶栏与占位共用状态栏高，从后台返回 / 状态栏变化时同步刷新（与首页一致）
+	const 信息 : any = uni.getSystemInfoSync()
+	状态栏高.value = 信息.statusBarHeight ?? 0
+	窗口底高.value = 信息.windowBottom ?? 0
+	当前用户.value = 读取当前用户()
+	const 结果 = 读取委托位置()
+	if (结果 != null) {
+		位置.value = 结果
+		移除委托位置()
+		地点模式.value = '线下'
+	}
+	if (当前用户.value != null) void 加载积分()
+	else {
+		积分.value = null
+		积分错误.value = ''
+	}
+}
+
+/** 顶栏右侧圆形头像：设计稿是静态头像，这里补一个轻提示避免死按钮 */
+function 点头像() {
+	uni.showToast({ title: '个人主页与信誉档案', icon: 'none' })
+}
+
+// 窗口信息与时间默认值在 setup 里一次到位，避免首帧跳动
+初始化时间()
+onShow(初始化页面)
+onMounted(() => {
+	读草稿()
+	初始化页面()
+})
+
+// 顶部让出 fixed 顶栏：64px 内容行 + 状态栏（顶栏组件用同一个 状态栏高，两者严格对齐）。
+// 底部发布坞按设计稿「fixed bottom-0」贴页面底部：本页是独立页面，
+// 不再有首页底栏 / 中间凸起发布胶囊，所以不再额外抬高 86px。
+// 内容底部占位 = 坞高 72 + 系统安全区 + 12 余量，保证滚到底不被坞遮住。
+const 顶部占位 = computed(() : number => 64 + 状态栏高.value)
+const 底部占位 = computed(() : number => 72 + 窗口底高.value + 12)
+const 坞底距 = computed(() : number => 窗口底高.value)
+</script>
+
+<template>
+	<view class="fb_ye">
+		<!-- 固定顶栏：共用 components/ding_lan 的「委托详情」外观（设计稿 Connect & Create / LINKQUEST NET）。
+		     显示返回给独立页提供屏内返回入口（组件内按页面栈 navigateBack），右侧插槽放圆形头像按钮 -->
+		<ding_lan 外观="委托详情" :显示返回="true" :状态栏高="状态栏高">
+			<view class="fb_ding_tou" @click="点头像">
+				<image class="fb_ding_tou_tu" src="/static/fabuweituo/icons/person.svg" mode="aspectFit"></image>
+			</view>
+		</ding_lan>
+
+		<view class="fb_nei" :style="{ paddingTop: 顶部占位 + 'px', paddingBottom: 底部占位 + 'px' }">
+
+			<!-- ① 草稿同步条 -->
+			<view class="fb_fu_tiao">
+				<view class="fb_cao_gao">
+					<view class="fb_cao_dian"></view>
+					<text class="fb_cao_zi">{{ 草稿文案 }}</text>
+				</view>
+				<view class="fb_fu_you">
+					<view class="fb_fu_an" @click="存草稿">
+						<image class="fb_fu_tu" src="/static/fabuweituo/icons/save.svg" mode="aspectFit"></image>
+						<text class="fb_fu_zi">存草稿</text>
+					</view>
+					<view class="fb_fu_an" @click="看规则">
+						<image class="fb_fu_tu" src="/static/fabuweituo/icons/help.svg" mode="aspectFit"></image>
+						<text class="fb_fu_zi">发单规则</text>
+					</view>
+				</view>
+			</view>
+
+			<!-- ② 可用赏金池 -->
+			<view class="fb_qian_bao">
+				<image class="fb_qian_guang" src="/static/guang/zi_08.png" mode="scaleToFill"></image>
+				<view class="fb_qian_zuo">
+					<view class="fb_qian_tu_kuang">
+						<image class="fb_qian_tu" src="/static/fabuweituo/icons/wallet.svg" mode="aspectFit"></image>
+					</view>
+					<view class="fb_qian_wen">
+						<text class="fb_qian_biao">当前可用赏金池</text>
+						<view class="fb_qian_shu_hang">
+							<text class="fb_qian_shu">{{ 积分文本 }}</text>
+							<text class="fb_qian_dan">PTS 积分</text>
+						</view>
+					</view>
+				</view>
+				<view class="fb_qian_you">
+					<view class="fb_tuo_guan">
+						<image class="fb_tuo_tu" src="/static/fabuweituo/icons/verified.svg" mode="aspectFit"></image>
+						<text class="fb_tuo_zi">智能托管保障中</text>
+					</view>
+					<text class="fb_tuo_fu">发单即冻结 · 验收后结算</text>
+				</view>
+			</view>
+
+			<!-- ③ 选择委托模式 -->
+			<view class="fb_mo">
+				<view class="fb_mo_biao">
+					<text class="fb_mo_biao_zhu">选择委托模式</text>
+					<text class="fb_mo_biao_fu">决定接单者与您的协作流转</text>
+				</view>
+				<view class="fb_mo_ge">
+					<view class="fb_mo_ka" :class="模式 == '抢单' ? 'fb_mo_ka_xuan' : ''" @click="选模式('抢单')">
+						<view v-if="模式 == '抢单'" class="fb_mo_hui">
+							<text class="fb_mo_hui_zi">已选</text>
+						</view>
+						<view class="fb_mo_nei">
+							<view class="fb_mo_tu_kuang fb_mo_tu_cheng">
+								<image class="fb_mo_tu" src="/static/fabuweituo/icons/bolt.svg" mode="aspectFit"></image>
+							</view>
+							<text class="fb_mo_ka_biao">抢单模式</text>
+							<text class="fb_mo_ka_shuo">先到先得，一人极速锁定任务，立竿见影。</text>
+							<view class="fb_mo_jiao">
+								<image class="fb_mo_jiao_tu" src="/static/fabuweituo/icons/speed.svg" mode="aspectFit"></image>
+								<text class="fb_mo_jiao_zi fb_mo_jiao_cheng">适合跑腿 / 紧急修Bug</text>
+							</view>
+						</view>
+					</view>
+					<view class="fb_mo_ka" :class="模式 == '竞标' ? 'fb_mo_ka_xuan' : ''" @click="选模式('竞标')">
+						<view v-if="模式 == '竞标'" class="fb_mo_hui fb_mo_hui_pu">
+							<text class="fb_mo_hui_zi fb_mo_hui_zi_pu">推荐 · 方案优选</text>
+						</view>
+						<view class="fb_mo_nei">
+							<view class="fb_mo_ding"></view>
+							<view class="fb_mo_tu_kuang fb_mo_tu_zi">
+								<image class="fb_mo_tu" src="/static/fabuweituo/icons/medal.svg" mode="aspectFit"></image>
+							</view>
+							<text class="fb_mo_ka_biao">竞标模式</text>
+							<text class="fb_mo_ka_shuo">多方提交报价与样稿，截止前选定最优人选。</text>
+							<view class="fb_mo_jiao">
+								<image class="fb_mo_jiao_tu" src="/static/fabuweituo/icons/auto_awesome.svg" mode="aspectFit"></image>
+								<text class="fb_mo_jiao_zi fb_mo_jiao_zi">适合设计 / 定制方案</text>
+							</view>
+						</view>
+					</view>
+				</view>
+			</view>
+
+			<!-- ④ 委托分类 -->
+			<view class="fb_mo">
+				<text class="fb_fen_biao">委托分类</text>
+				<scroll-view class="fb_fen_gun" direction="horizontal" :show-scrollbar="false">
+					<view class="fb_fen_hang">
+						<view
+							v-for="项 in 分类项"
+							:key="项.键"
+							class="fb_fen"
+							:class="分类 == 项.键 ? 'fb_fen_xuan' : ''"
+							:data-key="项.键"
+							@click="选分类"
+						>
+							<image class="fb_fen_tu" :src="分类 == 项.键 ? 项.图开 : 项.图关" mode="aspectFit"></image>
+							<text class="fb_fen_zi" :class="分类 == 项.键 ? 'fb_fen_zi_xuan' : ''">{{ 项.键 }}</text>
+						</view>
+					</view>
+				</scroll-view>
+			</view>
+
+			<!-- ⑤ 悬赏内容 -->
+			<view class="fb_mo">
+				<view class="fb_ka">
+					<!-- 标题 -->
+					<view class="fb_kuai fb_kuai_shou">
+						<view class="fb_biao_hang">
+							<view class="fb_biao_zuo">
+								<text class="fb_biao_zi">委托标题</text>
+								<text class="fb_biao_xing">*</text>
+							</view>
+							<text class="fb_biao_fu">{{ 标题字数 }}/40 字</text>
+						</view>
+						<input
+							v-model="标题"
+							class="fb_shu_ru"
+							placeholder="清晰一句话阐述需求，如：协助调试Python脚本"
+							placeholder-class="fb_zhan_wei"
+							:maxlength="40"
+						/>
+					</view>
+
+					<!-- 快速导入需求模板 -->
+					<view class="fb_kuai">
+						<text class="fb_mu_biao">快速导入需求模板：</text>
+						<view class="fb_mu_hang">
+							<view class="fb_mu" @click="套模板('视觉')">
+								<text class="fb_mu_zi fb_mu_zi_zi">+ 视觉创作标准</text>
+							</view>
+							<view class="fb_mu" @click="套模板('源码')">
+								<text class="fb_mu_zi fb_mu_zi_lv">+ 源码联调规范</text>
+							</view>
+							<view class="fb_mu" @click="套模板('跑腿')">
+								<text class="fb_mu_zi fb_mu_zi_cheng">+ 跑腿代送清单</text>
+							</view>
+						</view>
+					</view>
+
+					<!-- 详细需求描述 -->
+					<view class="fb_kuai">
+						<view class="fb_biao_hang">
+							<view class="fb_biao_zuo">
+								<text class="fb_biao_zi">详细需求描述与验收标准</text>
+								<text class="fb_biao_xing">*</text>
+							</view>
+							<text class="fb_biao_fu">建议说明格式与尺寸</text>
+						</view>
+						<textarea
+							v-model="描述"
+							class="fb_duo"
+							placeholder="1. 交付标准：尺寸 512x512 PNG，透明底色。&#10;2. 风格参考：复古像素/霓虹渐变。&#10;3. 沟通流程：草稿选拔确认后 3 天内产出终稿。"
+							placeholder-class="fb_zhan_wei"
+						/>
+					</view>
+
+					<!-- 参考示例与附件 -->
+					<view class="fb_kuai fb_kuai_jian">
+						<view class="fb_biao_hang">
+							<text class="fb_biao_zi">参考示例与附件</text>
+							<text class="fb_biao_fu">支持 PNG / JPG（本地预览）</text>
+						</view>
+						<view class="fb_jian_ge">
+							<view
+								v-for="(槽, 序) in 附件槽"
+								:key="槽.键"
+								class="fb_jian_wei"
+								:class="(序 % 3) == 2 ? 'fb_jian_wei_wei' : ''"
+							>
+								<view v-if="槽.类型 == '图'" class="fb_jian">
+									<image class="fb_jian_tu" :src="槽.路径" mode="aspectFill"></image>
+									<view class="fb_jian_zhe">
+										<text class="fb_jian_ming">{{ 附件名(序) }}</text>
+										<view class="fb_jian_cha" :data-idx="序" @click="删附件">
+											<image class="fb_jian_cha_tu" src="/static/fabuweituo/icons/close_err.svg" mode="aspectFit"></image>
+										</view>
+									</view>
+								</view>
+								<view v-else-if="槽.类型 == '加'" class="fb_tian_jia" @click="加附件">
+									<image class="fb_tian_tu" src="/static/fabuweituo/icons/add_photo.svg" mode="aspectFit"></image>
+									<text class="fb_tian_zi">添加附件</text>
+									<text class="fb_tian_fu">或草稿样例</text>
+								</view>
+							</view>
+						</view>
+					</view>
+				</view>
+			</view>
+
+			<!-- ⑥ 时间与排期规划 -->
+			<view class="fb_mo">
+				<view class="fb_mo_biao">
+					<text class="fb_mo_biao_zhu">时间与排期规划</text>
+					<text class="fb_mo_biao_fu fb_mo_biao_lv">自动触发节点守护</text>
+				</view>
+				<view class="fb_ka">
+					<!-- 迷你时间轴 -->
+					<view class="fb_zhou">
+						<view class="fb_zhou_hang">
+							<view class="fb_zhou_xiang">
+								<view class="fb_zhou_dian fb_dian_lv"></view>
+								<text class="fb_zhou_zi fb_zhou_lv">{{ 即刻文案 }}</text>
+							</view>
+							<view class="fb_zhou_xiang">
+								<view class="fb_zhou_dian fb_dian_zi"></view>
+								<text class="fb_zhou_zi fb_zhou_zi"> {{ 截标文案 }}</text>
+							</view>
+							<view class="fb_zhou_xiang">
+								<view class="fb_zhou_dian fb_dian_cheng"></view>
+								<text class="fb_zhou_zi fb_zhou_cheng"> {{ 验收文案 }}</text>
+							</view>
+						</view>
+						<view class="fb_zhou_tiao">
+							<view class="fb_zhou_duan fb_duan_lv"></view>
+							<view class="fb_zhou_duan fb_duan_pu"></view>
+							<view class="fb_zhou_duan fb_duan_cheng"></view>
+						</view>
+					</view>
+
+					<view class="fb_shu_zu">
+						<!-- 开始生效时间 -->
+						<view class="fb_shu_hang fb_shu_hang_shou">
+							<view class="fb_shu_zuo">
+								<view class="fb_shu_tu_kuang">
+									<image class="fb_shu_tu" src="/static/fabuweituo/icons/play.svg" mode="aspectFit"></image>
+								</view>
+								<view class="fb_shu_wen">
+									<text class="fb_shu_biao">开始生效时间</text>
+									<text class="fb_shu_fu">发单审核通过后立即展示</text>
+								</view>
+							</view>
+							<view class="fb_zhi" @click="提示('发布后立即生效')">
+								<text class="fb_zhi_zi">{{ 即刻值文案 }}</text>
+								<image class="fb_zhi_tu" src="/static/fabuweituo/icons/edit_calendar.svg" mode="aspectFit"></image>
+							</view>
+						</view>
+
+						<!-- 投标截止时间（竞标专有） -->
+						<view class="fb_shu_hang fb_shu_hang_pu" :class="抢单中 ? 'fb_shu_hang_jin' : ''">
+							<view class="fb_shu_zuo">
+								<view class="fb_shu_tu_kuang fb_shu_tu_pu">
+									<image class="fb_shu_tu" src="/static/fabuweituo/icons/how_to_reg.svg" mode="aspectFit"></image>
+								</view>
+								<view class="fb_shu_wen">
+									<view class="fb_shu_biao_hang">
+										<text class="fb_shu_biao fb_shu_biao_pu">投标截止时间</text>
+										<text class="fb_shu_zhuan">竞标专有</text>
+									</view>
+									<text class="fb_shu_fu">截止后停止投标并启动24h选人</text>
+								</view>
+							</view>
+							<view v-if="抢单中" class="fb_zhi fb_zhi_pu">
+								<text class="fb_zhi_zi fb_zhi_zi_pu">发布即截止 · 先到先得</text>
+							</view>
+							<view v-else class="fb_zhi fb_zhi_pu">
+								<picker mode="date" :value="投标日期" @change="设置投标日期">
+									<text class="fb_zhi_zi fb_zhi_zi_pu">{{ 投标日期 }}</text>
+								</picker>
+								<view class="fb_zhi_ge"></view>
+								<picker mode="time" :value="投标时分" @change="设置投标时分">
+									<text class="fb_zhi_zi fb_zhi_zi_pu">{{ 投标时分 }}</text>
+								</picker>
+								<image class="fb_zhi_tu" src="/static/fabuweituo/icons/schedule.svg" mode="aspectFit"></image>
+							</view>
+						</view>
+
+						<!-- 最终交付截止时间 -->
+						<view class="fb_shu_hang">
+							<view class="fb_shu_zuo">
+								<view class="fb_shu_tu_kuang">
+									<image class="fb_shu_tu" src="/static/fabuweituo/icons/flag.svg" mode="aspectFit"></image>
+								</view>
+								<view class="fb_shu_wen">
+									<text class="fb_shu_biao">最终交付截止时间</text>
+									<text class="fb_shu_fu">逾期将自动启动超时维权仲裁</text>
+								</view>
+							</view>
+							<view class="fb_zhi">
+								<picker mode="date" :value="交付日期" @change="设置交付日期">
+									<text class="fb_zhi_zi">{{ 交付日期 }}</text>
+								</picker>
+								<view class="fb_zhi_ge"></view>
+								<picker mode="time" :value="交付时分" @change="设置交付时分">
+									<text class="fb_zhi_zi">{{ 交付时分 }}</text>
+								</picker>
+								<image class="fb_zhi_tu" src="/static/fabuweituo/icons/event_busy.svg" mode="aspectFit"></image>
+							</view>
+						</view>
+					</view>
+				</view>
+			</view>
+
+			<!-- ⑦ 履约地点设置 -->
+			<view class="fb_mo">
+				<view class="fb_mo_biao">
+					<text class="fb_mo_biao_zhu">履约地点设置</text>
+					<text class="fb_mo_biao_fu">保障协作沟通空间</text>
+				</view>
+				<view class="fb_ka">
+					<view class="fb_duan">
+						<view class="fb_duan_an" :class="地点模式 == '线上' ? 'fb_duan_xuan' : ''" @click="选地点模式('线上')">
+							<image
+								class="fb_duan_tu"
+								:src="地点模式 == '线上' ? '/static/fabuweituo/icons/devices_on.svg' : '/static/fabuweituo/icons/devices_off.svg'"
+								mode="aspectFit"
+							></image>
+							<text class="fb_duan_zi" :class="地点模式 == '线上' ? 'fb_duan_zi_xuan' : ''">线上协作 (无空间限制)</text>
+						</view>
+						<view class="fb_duan_an" :class="地点模式 == '线下' ? 'fb_duan_xuan' : ''" @click="选地点模式('线下')">
+							<image
+								class="fb_duan_tu"
+								:src="地点模式 == '线下' ? '/static/fabuweituo/icons/near_on.svg' : '/static/fabuweituo/icons/near_off.svg'"
+								mode="aspectFit"
+							></image>
+							<text class="fb_duan_zi" :class="地点模式 == '线下' ? 'fb_duan_zi_xuan' : ''">线下到场 · 同城面对面</text>
+						</view>
+					</view>
+
+					<view v-if="地点模式 == '线上'" class="fb_xian_shang">
+						<image class="fb_xs_tu" src="/static/fabuweituo/icons/cloud_done.svg" mode="aspectFit"></image>
+						<text class="fb_xs_zi">云端在线协作 / 平台加密即时通讯交付</text>
+						<text class="fb_xs_fu">支持音视频/白板</text>
+					</view>
+
+					<view v-else>
+						<view class="fb_xian_xia">
+							<image class="fb_xx_tu" src="/static/fabuweituo/icons/location_t.svg" mode="aspectFit"></image>
+							<text class="fb_xx_zi" :class="位置 == null ? 'fb_xx_zhan' : ''">{{ 地点文本 }}</text>
+							<view class="fb_xx_an" @click="选位置">
+								<image class="fb_xx_an_tu" src="/static/fabuweituo/icons/my_location.svg" mode="aspectFit"></image>
+								<text class="fb_xx_an_zi">重新定位</text>
+							</view>
+						</view>
+						<view v-if="位置 != null" class="fb_di_tu_kuang">
+							<map class="fb_di_tu" :latitude="位置.纬度" :longitude="位置.经度" :scale="15" :show-location="false"></map>
+							<view class="fb_di_tu_zhe">
+								<view class="fb_ban_jing">
+									<image class="fb_ban_tu" src="/static/fabuweituo/icons/location_t.svg" mode="aspectFit"></image>
+									<text class="fb_ban_zi">同城辐射半径: 5km</text>
+								</view>
+							</view>
+						</view>
+					</view>
+				</view>
+			</view>
+
+			<!-- ⑧ 悬赏金额与门槛 -->
+			<view class="fb_mo">
+				<view class="fb_mo_biao">
+					<text class="fb_mo_biao_zhu">悬赏金额与门槛</text>
+					<text class="fb_mo_biao_fu">零抽成 · 100% 履约直达</text>
+				</view>
+				<view class="fb_ka">
+					<view class="fb_jin_kuai">
+						<text class="fb_jin_biao">悬赏总赏金 (PTS 积分)</text>
+						<view class="fb_jin_hang">
+							<view class="fb_jin_zuo">
+								<view class="fb_jin_tu_kuang">
+									<image class="fb_jin_tu" src="/static/fabuweituo/icons/monetization.svg" mode="aspectFit"></image>
+								</view>
+								<input v-model="金额文案" class="fb_jin_shu" type="number" placeholder="0" placeholder-class="fb_jin_zhan" />
+								<text class="fb_jin_dan">PTS 积分</text>
+							</view>
+							<text class="fb_jin_gu">估值 {{ 估值文本 }}</text>
+						</view>
+						<view class="fb_chong_hang">
+							<text class="fb_chong_biao">快捷充能:</text>
+							<view class="fb_chong" @click="加金额(100)">
+								<text class="fb_chong_zi">+100</text>
+							</view>
+							<view class="fb_chong" @click="加金额(200)">
+								<text class="fb_chong_zi">+200</text>
+							</view>
+							<view class="fb_chong" @click="加金额(500)">
+								<text class="fb_chong_zi">+500</text>
+							</view>
+							<view class="fb_chong" @click="加金额(1000)">
+								<text class="fb_chong_zi">+1000</text>
+							</view>
+						</view>
+						<text v-if="积分错误 != ''" class="fb_jin_cuo">{{ 积分错误 }}</text>
+					</view>
+
+					<view class="fb_men_kuai">
+						<view class="fb_men_hang fb_men_hang_shou">
+							<view class="fb_men_zuo">
+								<image class="fb_men_tu" src="/static/fabuweituo/icons/shield.svg" mode="aspectFit"></image>
+								<view class="fb_men_wen">
+									<text class="fb_men_biao">仅限信用分 ≥ 700 参与</text>
+									<text class="fb_men_fu">过滤低活跃或有超时纠纷记录者</text>
+								</view>
+							</view>
+							<view class="fb_kai" :class="信用门槛 ? 'fb_kai_kai' : ''" @click="信用门槛 = !信用门槛">
+								<view class="fb_kai_qiu" :class="信用门槛 ? 'fb_kai_qiu_kai' : ''"></view>
+							</view>
+						</view>
+						<view class="fb_men_hang">
+							<view class="fb_men_zuo">
+								<image class="fb_men_tu" src="/static/fabuweituo/icons/badge.svg" mode="aspectFit"></image>
+								<view class="fb_men_wen">
+									<text class="fb_men_biao">开启实名认证要求</text>
+									<text class="fb_men_fu">仅允许通过学籍/机构实名登记的探索者接单</text>
+								</view>
+							</view>
+							<view class="fb_kai" :class="实名要求 ? 'fb_kai_kai' : ''" @click="实名要求 = !实名要求">
+								<view class="fb_kai_qiu" :class="实名要求 ? 'fb_kai_qiu_kai' : ''"></view>
+							</view>
+						</view>
+					</view>
+
+					<view class="fb_tuo_shuo">
+						<image class="fb_tuo_shuo_tu" src="/static/fabuweituo/icons/lock_clock.svg" mode="aspectFit"></image>
+						<!-- App 端 <text> 只能包含一个文本节点：拆成首句三段 + 次句一段 -->
+						<view class="fb_tuo_shuo_zi">
+							<view class="fb_tuo_shuo_hang">
+								<text class="fb_tuo_shuo_wen">发布确认后，系统将自动从可用资产冻结</text>
+								<text class="fb_tuo_shuo_shu">{{ 金额文本 }} PTS</text>
+								<text class="fb_tuo_shuo_wen">至专属智能托管合约。</text>
+							</view>
+							<text class="fb_tuo_shuo_wen">在您确认满意并验收之前，任何一方均无法提前支取，确保履约无忧。</text>
+						</view>
+					</view>
+				</view>
+			</view>
+		</view>
+
+		<!-- 底部固定发布坞 -->
+		<view class="fb_wu" :style="{ bottom: 坞底距 + 'px' }">
+			<view class="fb_wu_nei">
+				<view class="fb_wu_zuo">
+					<text class="fb_wu_biao">预估冻结托管</text>
+					<view class="fb_wu_shu_hang">
+						<text class="fb_wu_shu">{{ 坞金额文本 }}</text>
+						<text class="fb_wu_dan">PTS</text>
+					</view>
+				</view>
+				<view class="fb_wu_an" :class="能提交 ? '' : 'fb_wu_an_jin'" @click="提交">
+					<image class="fb_wu_tu" src="/static/fabuweituo/icons/rocket.svg" mode="aspectFit"></image>
+					<text class="fb_wu_zi">{{ 正在提交 ? '正在发布…' : '确认托管并发布委托' }}</text>
+				</view>
+			</view>
+		</view>
+
+		<!-- 发布成功弹窗 -->
+		<view v-if="显示成功" class="fb_tan">
+			<view class="fb_tan_ka">
+				<view class="fb_tan_tu_kuang">
+					<image class="fb_tan_tu" src="/static/fabuweituo/icons/check_circle.svg" mode="aspectFit"></image>
+				</view>
+				<text class="fb_tan_biao">委托发布成功！</text>
+				<text class="fb_tan_shuo">已成功冻结 {{ 千分位(成功金额) }} PTS 积分至托管池，当前{{ 模式 }}模式已广播至全网探索者网络。</text>
+				<view class="fb_tan_an" @click="去委托广场">
+					<text class="fb_tan_an_zi">进入委托管理频道</text>
+				</view>
+				<view class="fb_tan_an2" @click="回主看板">
+					<text class="fb_tan_an2_zi">返回主看板</text>
+				</view>
+			</view>
+		</view>
+	</view>
+</template>
+
+<style>
+	/* 设计稿字体：Plus Jakarta Sans（标题/正文）、Space Grotesk（标签/按钮）。
+	   按字重落地为本地 ttf，web 与 App 都不依赖 Google Fonts 外链。 */
+@font-face { font-family: 'PJS400'; src: url('/static/hui_hua/fonts/PlusJakartaSans-400.ttf'); }
+@font-face { font-family: 'PJS600'; src: url('/static/hui_hua/fonts/PlusJakartaSans-600.ttf'); }
+@font-face { font-family: 'PJS700'; src: url('/static/hui_hua/fonts/PlusJakartaSans-700.ttf'); }
+@font-face { font-family: 'PJS800'; src: url('/static/hui_hua/fonts/PlusJakartaSans-800.ttf'); }
+@font-face { font-family: 'SG600'; src: url('/static/hui_hua/fonts/SpaceGrotesk-600.ttf'); }
+@font-face { font-family: 'SG700'; src: url('/static/hui_hua/fonts/SpaceGrotesk-700.ttf'); }
+
+	/* uni-app x 的 text 不继承父 view 字体，每类文字单独指定 */
+	.fb_mo_biao_zhu, .fb_mo_ka_biao, .fb_fen_biao, .fb_qian_shu, .fb_tan_biao {
+		font-family: 'PJS600';
+	}
+	.fb_jin_shu, .fb_wu_shu, .fb_wu_zi, .fb_tan_an_zi {
+		font-family: 'PJS700';
+	}
+	.fb_shu_ru, .fb_duo, .fb_mo_ka_shuo, .fb_xs_zi, .fb_xx_zi, .fb_tan_shuo, .fb_jin_dan {
+		font-family: 'PJS400';
+	}
+	.fb_cao_zi, .fb_fu_zi, .fb_qian_biao, .fb_qian_dan, .fb_tuo_zi, .fb_tuo_fu,
+	.fb_mo_biao_fu, .fb_mo_hui_zi, .fb_mo_jiao_zi, .fb_fen_zi, .fb_biao_zi, .fb_biao_xing,
+	.fb_biao_fu, .fb_mu_biao, .fb_mu_zi, .fb_fu_jian_ming, .fb_tian_zi, .fb_tian_fu,
+	.fb_zhou_zi, .fb_shu_biao, .fb_shu_fu, .fb_shu_zhuan, .fb_zhi_zi, .fb_duan_zi,
+	.fb_xs_fu, .fb_xx_an_zi, .fb_ban_zi, .fb_jin_biao, .fb_jin_gu, .fb_chong_biao,
+	.fb_chong_zi, .fb_men_biao, .fb_men_fu, .fb_tuo_shuo_zi, .fb_tuo_shuo_shu,
+	.fb_wu_biao, .fb_wu_dan, .fb_tan_an2_zi, .fb_jin_cuo {
+		font-family: 'SG700';
+	}
+
+	/* ---------- 顶栏右侧插槽（顶栏本体样式在 components/ding_lan） ----------
+	   插槽内容属于本页作用域，类名必须定义在本页；对应设计稿 w-8 h-8 rounded-full bg-primary */
+	.fb_ding_tou {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 32px;
+		height: 32px;
+		border-radius: 16px;
+		background-color: #c0c1ff;
+	}
+	.fb_ding_tou_tu { width: 18px; height: 18px; }
+
+	/* ---------- 页面骨架（页面级滚动，不锁死高度） ---------- */
+	.fb_ye {
+		display: flex;
+		flex-direction: column;
+		width: 100%;
+		background-color: #0b1326;
+	}
+	.fb_nei {
+		display: flex;
+		flex-direction: column;
+		width: 100%;
+		padding-left: 16px;
+		padding-right: 16px;
+		/* 上下留白由模板绑定：顶部让出 64 顶栏 + 状态栏，底部让出 72 贴底发布坞 + 12 余量 */
+	}
+
+	/* ---------- ① 草稿同步条 ---------- */
+	.fb_fu_tiao {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+		padding-top: 8px;
+		padding-bottom: 4px;
+	}
+	.fb_cao_gao {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		height: 18px;
+		padding: 0 8px;
+		border-radius: 9px;
+		background-color: #2d3449;
+	}
+	.fb_cao_dian {
+		width: 6px;
+		height: 6px;
+		margin-right: 4px;
+		border-radius: 3px;
+		background-color: #4edea3;
+	}
+	.fb_cao_zi {
+		color: #4edea3;
+		font-size: 10px;
+		line-height: 14px;
+		letter-spacing: 0.5px;
+	}
+	.fb_fu_you {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+	}
+	.fb_fu_an {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		margin-left: 8px;
+	}
+	.fb_fu_tu { width: 16px; height: 16px; margin-right: 4px; }
+	.fb_fu_zi {
+		color: #c7c4d7;
+		font-size: 12px;
+		line-height: 16px;
+	}
+
+	/* ---------- ② 可用赏金池 ---------- */
+	.fb_qian_bao {
+		position: relative;
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+		overflow: hidden;
+		padding: 17px 16px;
+		margin-bottom: 16px;
+		border-radius: 12px;
+		background-color: #131b2e;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+	}
+	/* 设计稿是 bg-primary/10 + blur-2xl，uvue 没有滤镜，用预烘焙径向渐隐 PNG 等价实现 */
+	.fb_qian_guang {
+		position: absolute;
+		top: -40px;
+		right: -40px;
+		width: 176px;
+		height: 176px;
+	}
+	.fb_qian_zuo {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+	}
+	.fb_qian_tu_kuang {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 40px;
+		height: 40px;
+		margin-right: 8px;
+		border-radius: 8px;
+		background-color: #222a3d;
+	}
+	.fb_qian_tu { width: 22px; height: 22px; }
+	.fb_qian_wen {
+		display: flex;
+		flex-direction: column;
+	}
+	.fb_qian_biao {
+		color: #c7c4d7;
+		font-size: 10px;
+		line-height: 14px;
+	}
+	.fb_qian_shu_hang {
+		display: flex;
+		flex-direction: row;
+		align-items: flex-end;
+		margin-top: 2px;
+	}
+	.fb_qian_shu {
+		color: #dae2fd;
+		font-size: 18px;
+		line-height: 24px;
+	}
+	.fb_qian_dan {
+		margin-left: 4px;
+		margin-bottom: 3px;
+		color: #4edea3;
+		font-size: 10px;
+		line-height: 14px;
+	}
+	.fb_qian_you {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-end;
+	}
+	.fb_tuo_guan {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		height: 22px;
+		padding: 0 10px;
+		border-radius: 11px;
+		background-color: rgba(78, 222, 163, 0.1);
+	}
+	.fb_tuo_tu { width: 14px; height: 14px; margin-right: 4px; }
+	.fb_tuo_zi {
+		color: #4edea3;
+		font-size: 10px;
+		line-height: 14px;
+	}
+	.fb_tuo_fu {
+		margin-top: 4px;
+		color: #c7c4d7;
+		font-size: 10px;
+		line-height: 14px;
+	}
+
+	/* ---------- 模块通用标题 ---------- */
+	.fb_mo { display: flex; flex-direction: column; margin-bottom: 24px; }
+	.fb_mo_biao {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+		margin-bottom: 4px;
+	}
+	.fb_mo_biao_zhu {
+		color: #dae2fd;
+		font-size: 18px;
+		line-height: 24px;
+	}
+	.fb_mo_biao_fu {
+		color: #c7c4d7;
+		font-size: 10px;
+		line-height: 14px;
+	}
+	.fb_mo_biao_lv { color: #4edea3; }
+
+	.fb_ka {
+		display: flex;
+		flex-direction: column;
+		padding: 16px;
+		border-radius: 12px;
+		background-color: #131b2e;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+	}
+
+	/* ---------- ③ 委托模式 ---------- */
+	.fb_mo_ge {
+		display: flex;
+		flex-direction: row;
+		justify-content: space-between;
+	}
+	.fb_mo_ka {
+		position: relative;
+		display: flex;
+		flex-direction: column;
+		justify-content: center;
+		width: 195px;
+		min-height: 171px;
+		padding: 16px;
+		border-radius: 12px;
+		background-color: #131b2e;
+	}
+	.fb_mo_ka_xuan {
+		background-color: #222a3d;
+		box-shadow: 0 10px 15px rgba(0, 0, 0, 0.35);
+	}
+	.fb_mo_hui {
+		position: absolute;
+		top: 8px;
+		right: 8px;
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		height: 18px;
+		padding: 0 6px;
+		border-radius: 9px;
+		background-color: #4edea3;
+	}
+	.fb_mo_hui_pu {
+		padding: 0 8px;
+		background-color: rgba(78, 222, 163, 0.2);
+	}
+	.fb_mo_hui_zi {
+		color: #00311f;
+		font-size: 10px;
+		line-height: 14px;
+	}
+	.fb_mo_hui_zi_pu { color: #4edea3; }
+	.fb_mo_nei { display: flex; flex-direction: column; }
+	.fb_mo_ding { width: 100%; height: 16px; }
+	.fb_mo_tu_kuang {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 32px;
+		height: 32px;
+		margin-bottom: 8px;
+		border-radius: 8px;
+	}
+	.fb_mo_tu_cheng { background-color: rgba(202, 129, 0, 0.3); }
+	.fb_mo_tu_zi { background-color: rgba(128, 131, 255, 0.3); }
+	.fb_mo_tu { width: 20px; height: 20px; }
+	.fb_mo_ka_biao {
+		color: #dae2fd;
+		font-size: 18px;
+		line-height: 24px;
+	}
+	.fb_mo_ka_shuo {
+		margin-top: 4px;
+		margin-bottom: 8px;
+		color: #c7c4d7;
+		font-size: 12px;
+		line-height: 17px;
+	}
+	.fb_mo_jiao {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+	}
+	.fb_mo_jiao_tu { width: 14px; height: 14px; margin-right: 4px; }
+	.fb_mo_jiao_zi {
+		font-size: 10px;
+		line-height: 14px;
+		color: #c0c1ff;
+	}
+	.fb_mo_jiao_cheng { color: #ffb95f; }
+
+	/* ---------- ④ 委托分类 ---------- */
+	.fb_fen_biao {
+		color: #dae2fd;
+		font-size: 18px;
+		line-height: 24px;
+		margin-bottom: 4px;
+	}
+	.fb_fen_gun {
+		width: 100%;
+		height: 32px;
+	}
+	.fb_fen_hang {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		height: 28px;
+	}
+	.fb_fen {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		height: 28px;
+		padding: 0 14px;
+		margin-right: 8px;
+		border-radius: 14px;
+		background-color: #171f33;
+	}
+	.fb_fen_xuan { background-color: #c0c1ff; }
+	.fb_fen_tu { width: 16px; height: 16px; margin-right: 4px; }
+	.fb_fen_zi {
+		color: #c7c4d7;
+		font-size: 12px;
+		line-height: 16px;
+	}
+	.fb_fen_zi_xuan { color: #1000a9; }
+
+	/* ---------- ⑤ 悬赏内容 ---------- */
+	.fb_kuai {
+		display: flex;
+		flex-direction: column;
+		margin-top: 16px;
+	}
+	/* 附件块与描述框之间按设计稿留 22px，比其它块多 6px */
+	.fb_kuai_jian { margin-top: 22px; }
+	.fb_kuai_shou { margin-top: 0px; }
+	.fb_biao_hang {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+		margin-bottom: 6px;
+	}
+	.fb_biao_zuo {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+	}
+	.fb_biao_zi {
+		color: #dae2fd;
+		font-size: 12px;
+		line-height: 16px;
+	}
+	.fb_biao_xing {
+		margin-left: 2px;
+		color: #4edea3;
+		font-size: 12px;
+		line-height: 16px;
+	}
+	.fb_biao_fu {
+		color: #c7c4d7;
+		font-size: 10px;
+		line-height: 14px;
+	}
+	.fb_shu_ru {
+		width: 100%;
+		height: 40px;
+		padding: 0 16px;
+		border-radius: 8px;
+		background-color: #222a3d;
+		color: #dae2fd;
+		font-size: 14px;
+	}
+	.fb_zhan_wei { color: #908fa0; }
+	.fb_mu_biao {
+		color: #c7c4d7;
+		font-size: 10px;
+		line-height: 14px;
+		margin-bottom: 4px;
+	}
+	.fb_mu_hang {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+	}
+	.fb_mu {
+		height: 22px;
+		padding: 0 10px;
+		margin-right: 6px;
+		border-radius: 4px;
+		background-color: #222a3d;
+		display: flex;
+		align-items: center;
+	}
+	.fb_mu_zi {
+		font-size: 10px;
+		line-height: 14px;
+	}
+	.fb_mu_zi_zi { color: #c0c1ff; }
+	.fb_mu_zi_lv { color: #4edea3; }
+	.fb_mu_zi_cheng { color: #ffb95f; }
+	.fb_duo {
+		width: 100%;
+		height: 123px;
+		padding: 16px;
+		border-radius: 8px;
+		background-color: #222a3d;
+		color: #dae2fd;
+		font-size: 14px;
+		line-height: 23px;
+	}
+
+	.fb_jian_ge {
+		display: flex;
+		flex-direction: row;
+		flex-wrap: wrap;
+		/* 每格自带 7px 下边距用作行间距，末行也带，用负外边距抵掉，否则卡片底部会多出 7px */
+		margin-bottom: -7px;
+	}
+	.fb_jian_wei {
+		width: 117px;
+		height: 117px;
+		margin-right: 7px;
+		margin-bottom: 7px;
+	}
+	.fb_jian_wei_wei { margin-right: 0px; }
+	.fb_jian {
+		position: relative;
+		overflow: hidden;
+		width: 117px;
+		height: 117px;
+		border-radius: 8px;
+		background-color: #222a3d;
+	}
+	.fb_jian_tu { width: 117px; height: 117px; }
+	.fb_jian_zhe {
+		position: absolute;
+		top: 0;
+		right: 0;
+		bottom: 0;
+		left: 0;
+		display: flex;
+		flex-direction: column;
+		justify-content: space-between;
+		align-items: flex-end;
+		padding: 6px;
+		background-color: rgba(6, 14, 32, 0.5);
+	}
+	.fb_jian_ming {
+		align-self: flex-start;
+		padding: 0 4px;
+		border-radius: 4px;
+		background-color: rgba(6, 14, 32, 0.8);
+		color: #4edea3;
+		font-size: 10px;
+		line-height: 14px;
+	}
+	.fb_jian_cha {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 20px;
+		height: 20px;
+		border-radius: 10px;
+		background-color: #93000a;
+	}
+	.fb_jian_cha_tu { width: 14px; height: 14px; }
+	.fb_tian_jia {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		width: 117px;
+		height: 117px;
+		border-radius: 8px;
+		background-color: #171f33;
+	}
+	.fb_tian_tu { width: 24px; height: 24px; margin-bottom: 4px; }
+	.fb_tian_zi {
+		color: #dae2fd;
+		font-size: 10px;
+		line-height: 14px;
+	}
+	.fb_tian_fu {
+		color: #c7c4d7;
+		font-size: 10px;
+		line-height: 14px;
+	}
+
+	/* ---------- ⑥ 时间与排期 ---------- */
+	.fb_zhou {
+		display: flex;
+		flex-direction: column;
+		padding: 12px;
+		border-radius: 8px;
+		background-color: #171f33;
+	}
+	.fb_zhou_hang {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+		margin-bottom: 8px;
+	}
+	.fb_zhou_xiang {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+	}
+	.fb_zhou_dian {
+		width: 8px;
+		height: 8px;
+		margin-right: 4px;
+		border-radius: 4px;
+	}
+	.fb_dian_lv { background-color: #4edea3; }
+	.fb_dian_zi { background-color: #c0c1ff; }
+	.fb_dian_cheng { background-color: #ffb95f; }
+	.fb_zhou_zi {
+		font-size: 10px;
+		line-height: 14px;
+		color: #c0c1ff;
+	}
+	.fb_zhou_lv { color: #4edea3; }
+	.fb_zhou_cheng { color: #ffb95f; }
+	.fb_zhou_tiao {
+		display: flex;
+		flex-direction: row;
+		width: 100%;
+		height: 6px;
+		border-radius: 3px;
+		overflow: hidden;
+		background-color: #2d3449;
+	}
+	.fb_zhou_duan { flex: 1; height: 6px; }
+	.fb_duan_lv { background-color: #4edea3; }
+	.fb_duan_pu { background-color: #c0c1ff; }
+	.fb_duan_cheng { background-color: #ffb95f; }
+
+	.fb_shu_zu {
+		display: flex;
+		flex-direction: column;
+		margin-top: 16px;
+	}
+	.fb_shu_hang {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+		height: 48px;
+		padding: 0 8px;
+		margin-top: 8px;
+		border-radius: 8px;
+		background-color: #222a3d;
+	}
+	.fb_shu_hang_pu { background-color: rgba(192, 193, 255, 0.1); }
+	.fb_shu_hang_shou { margin-top: 0px; }
+	.fb_shu_hang_jin { opacity: 0.4; }
+	.fb_shu_zuo {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+	}
+	.fb_shu_tu_kuang {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 32px;
+		height: 32px;
+		margin-right: 8px;
+		border-radius: 8px;
+		background-color: #171f33;
+	}
+	.fb_shu_tu_pu { background-color: rgba(128, 131, 255, 0.3); }
+	.fb_shu_tu { width: 18px; height: 18px; }
+	.fb_shu_wen { display: flex; flex-direction: column; }
+	.fb_shu_biao_hang {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+	}
+	.fb_shu_biao {
+		color: #dae2fd;
+		font-size: 12px;
+		line-height: 16px;
+	}
+	.fb_shu_biao_pu { color: #c0c1ff; }
+	.fb_shu_zhuan {
+		margin-left: 4px;
+		padding: 0 6px;
+		border-radius: 4px;
+		background-color: #c0c1ff;
+		color: #1000a9;
+		font-size: 10px;
+		line-height: 16px;
+	}
+	.fb_shu_fu {
+		color: #c7c4d7;
+		font-size: 10px;
+		line-height: 14px;
+	}
+	.fb_zhi {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		height: 28px;
+		padding: 0 10px;
+		border-radius: 8px;
+		background-color: #171f33;
+	}
+	.fb_zhi_pu { background-color: #222a3d; }
+	.fb_zhi_zi {
+		color: #dae2fd;
+		font-size: 12px;
+		line-height: 16px;
+	}
+	.fb_zhi_zi_pu { color: #c0c1ff; }
+	/* 日期 picker 与时间 picker 之间留一个字距，否则会连成 2026-11-0718:00 */
+	.fb_zhi_ge { width: 6px; }
+	.fb_zhi_tu { width: 16px; height: 16px; margin-left: 4px; }
+
+	/* ---------- ⑦ 履约地点 ---------- */
+	.fb_duan {
+		display: flex;
+		flex-direction: row;
+		height: 38px;
+		padding: 4px;
+		border-radius: 8px;
+		background-color: #171f33;
+	}
+	.fb_duan_an {
+		flex: 1;
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: center;
+		height: 30px;
+		border-radius: 6px;
+	}
+	.fb_duan_xuan { background-color: #4edea3; }
+	.fb_duan_tu { width: 18px; height: 18px; margin-right: 4px; }
+	.fb_duan_zi {
+		color: #c7c4d7;
+		font-size: 12px;
+		line-height: 16px;
+	}
+	.fb_duan_zi_xuan { color: #00311f; }
+	.fb_xian_shang, .fb_xian_xia {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		margin-top: 16px;
+		padding: 8px;
+		border-radius: 8px;
+		background-color: #222a3d;
+	}
+	.fb_xs_tu { width: 20px; height: 20px; margin-right: 8px; }
+	.fb_xs_zi {
+		flex: 1;
+		color: #dae2fd;
+		font-size: 14px;
+		line-height: 20px;
+	}
+	.fb_xs_fu {
+		margin-left: 8px;
+		color: #c7c4d7;
+		font-size: 10px;
+		line-height: 14px;
+	}
+	.fb_xx_tu { width: 20px; height: 20px; margin-right: 8px; }
+	.fb_xx_zi {
+		flex: 1;
+		color: #dae2fd;
+		font-size: 14px;
+		line-height: 20px;
+	}
+	.fb_xx_zhan { color: #908fa0; }
+	.fb_xx_an {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		margin-left: 8px;
+	}
+	.fb_xx_an_tu { width: 14px; height: 14px; margin-right: 2px; }
+	.fb_xx_an_zi {
+		color: #4edea3;
+		font-size: 10px;
+		line-height: 14px;
+	}
+	.fb_di_tu_kuang {
+		position: relative;
+		overflow: hidden;
+		width: 100%;
+		height: 128px;
+		margin-top: 8px;
+		border-radius: 8px;
+		background-color: #171f33;
+	}
+	.fb_di_tu { width: 100%; height: 128px; }
+	.fb_di_tu_zhe {
+		position: absolute;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		display: flex;
+		flex-direction: row;
+		align-items: flex-end;
+		padding: 8px;
+	}
+	.fb_ban_jing {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		height: 20px;
+		padding: 0 8px;
+		border-radius: 4px;
+		background-color: rgba(11, 19, 38, 0.9);
+	}
+	.fb_ban_tu { width: 14px; height: 14px; margin-right: 4px; }
+	.fb_ban_zi {
+		color: #dae2fd;
+		font-size: 10px;
+		line-height: 14px;
+	}
+
+	/* ---------- ⑧ 金额与门槛 ---------- */
+	.fb_jin_kuai { display: flex; flex-direction: column; }
+	.fb_jin_biao {
+		color: #dae2fd;
+		font-size: 12px;
+		line-height: 16px;
+		margin-bottom: 6px;
+	}
+	.fb_jin_hang {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+		height: 56px;
+		padding: 0 16px;
+		border-radius: 8px;
+		background-color: #222a3d;
+	}
+	.fb_jin_zuo {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		flex: 1;
+	}
+	.fb_jin_tu_kuang {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 28px;
+		height: 28px;
+		margin-right: 8px;
+		border-radius: 14px;
+		background-color: rgba(0, 165, 114, 0.4);
+	}
+	.fb_jin_tu { width: 18px; height: 18px; }
+	.fb_jin_shu {
+		width: 128px;
+		height: 36px;
+		padding: 0;
+		color: #4edea3;
+		font-size: 28px;
+		background-color: rgba(0, 0, 0, 0);
+	}
+	.fb_jin_zhan { color: #908fa0; }
+	.fb_jin_dan {
+		margin-left: 8px;
+		color: #c7c4d7;
+		font-size: 12px;
+		line-height: 16px;
+	}
+	.fb_jin_gu {
+		color: #c7c4d7;
+		font-size: 10px;
+		line-height: 14px;
+	}
+	.fb_chong_hang {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		margin-top: 8px;
+	}
+	.fb_chong_biao {
+		color: #c7c4d7;
+		font-size: 10px;
+		line-height: 14px;
+		margin-right: 8px;
+	}
+	.fb_chong {
+		display: flex;
+		align-items: center;
+		height: 18px;
+		padding: 0 8px;
+		margin-right: 8px;
+		border-radius: 9px;
+		background-color: #222a3d;
+	}
+	.fb_chong_zi {
+		color: #dae2fd;
+		font-size: 10px;
+		line-height: 14px;
+	}
+	.fb_jin_cuo {
+		margin-top: 6px;
+		color: #ffb4ab;
+		font-size: 10px;
+		line-height: 14px;
+	}
+
+	.fb_men_kuai {
+		display: flex;
+		flex-direction: column;
+		margin-top: 16px;
+		padding-top: 4px;
+	}
+	.fb_men_hang {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+		height: 30px;
+		margin-top: 12px;
+	}
+	/* 门槛块内部已有 padding-top 4，首行不再叠加 12 */
+	.fb_men_hang_shou { margin-top: 0; }
+	.fb_men_zuo {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		flex: 1;
+	}
+	.fb_men_tu { width: 20px; height: 20px; margin-right: 8px; }
+	.fb_men_wen { display: flex; flex-direction: column; }
+	.fb_men_biao {
+		color: #dae2fd;
+		font-size: 12px;
+		line-height: 16px;
+	}
+	.fb_men_fu {
+		color: #c7c4d7;
+		font-size: 10px;
+		line-height: 14px;
+	}
+	.fb_kai {
+		position: relative;
+		width: 44px;
+		height: 24px;
+		border-radius: 12px;
+		background-color: #2d3449;
+	}
+	.fb_kai_kai { background-color: #4edea3; }
+	.fb_kai_qiu {
+		position: absolute;
+		top: 2px;
+		left: 2px;
+		width: 20px;
+		height: 20px;
+		border-radius: 10px;
+		background-color: #ffffff;
+	}
+	.fb_kai_qiu_kai { left: 22px; }
+
+	.fb_tuo_shuo {
+		display: flex;
+		flex-direction: row;
+		align-items: flex-start;
+		margin-top: 24px;
+		padding: 8px;
+		border-radius: 8px;
+		background-color: #171f33;
+	}
+	.fb_tuo_shuo_tu {
+		width: 18px;
+		height: 18px;
+		margin-top: 2px;
+		margin-right: 8px;
+	}
+	.fb_tuo_shuo_zi {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+	}
+	.fb_tuo_shuo_hang {
+		display: flex;
+		flex-direction: row;
+		flex-wrap: wrap;
+		align-items: center;
+	}
+	.fb_tuo_shuo_wen {
+		color: #c7c4d7;
+		font-size: 10px;
+		line-height: 16px;
+	}
+	.fb_tuo_shuo_shu {
+		color: #4edea3;
+		font-size: 10px;
+		line-height: 16px;
+		margin-left: 3px;
+		margin-right: 3px;
+	}
+
+	/* ---------- 底部发布坞（设计稿 aside.fixed.bottom-0） ---------- */
+	.fb_wu {
+		position: fixed;
+		left: 0;
+		right: 0;
+		bottom: 0; /* 兜底值；模板内联 :style 用 窗口底高 补系统安全区 */
+		z-index: 40;
+		padding: 12px 16px;
+		background-color: rgba(11, 19, 38, 0.94);
+		box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.5);
+	}
+	.fb_wu_nei {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+	}
+	.fb_wu_zuo {
+		display: flex;
+		flex-direction: column;
+		margin-right: 16px;
+	}
+	.fb_wu_biao {
+		color: #c7c4d7;
+		font-size: 10px;
+		line-height: 14px;
+	}
+	.fb_wu_shu_hang {
+		display: flex;
+		flex-direction: row;
+		align-items: flex-end;
+	}
+	.fb_wu_shu {
+		color: #4edea3;
+		font-size: 22px;
+		line-height: 28px;
+	}
+	.fb_wu_dan {
+		margin-left: 4px;
+		margin-bottom: 4px;
+		color: #4edea3;
+		font-size: 10px;
+		line-height: 14px;
+	}
+	.fb_wu_an {
+		flex: 1;
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: center;
+		height: 48px;
+		border-radius: 12px;
+		background-color: #c0c1ff;
+	}
+	.fb_wu_an_jin { opacity: 0.55; }
+	.fb_wu_tu { width: 20px; height: 20px; margin-right: 8px; }
+	.fb_wu_zi {
+		color: #1000a9;
+		font-size: 18px;
+		line-height: 24px;
+	}
+
+	/* ---------- 成功弹窗 ---------- */
+	/* z-index 200 压住 fixed 顶栏(50)与贴底的发布坞(40)，否则弹窗时上下会亮着穿帮 */
+	.fb_tan {
+		position: fixed;
+		top: 0;
+		right: 0;
+		bottom: 0;
+		left: 0;
+		z-index: 200;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		padding: 16px;
+		background-color: rgba(6, 14, 32, 0.82);
+	}
+	.fb_tan_ka {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		width: 100%;
+		max-width: 384px;
+		padding: 24px;
+		border-radius: 12px;
+		background-color: #222a3d;
+		box-shadow: 0 24px 48px rgba(0, 0, 0, 0.5);
+	}
+	.fb_tan_tu_kuang {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 64px;
+		height: 64px;
+		margin-bottom: 8px;
+		border-radius: 32px;
+		background-color: rgba(78, 222, 163, 0.2);
+	}
+	.fb_tan_tu { width: 36px; height: 36px; }
+	.fb_tan_biao {
+		color: #dae2fd;
+		font-size: 22px;
+		line-height: 28px;
+		margin-bottom: 4px;
+	}
+	.fb_tan_shuo {
+		margin-bottom: 16px;
+		color: #c7c4d7;
+		font-size: 12px;
+		line-height: 16px;
+		text-align: center;
+	}
+	.fb_tan_an {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 100%;
+		height: 44px;
+		border-radius: 8px;
+		background-color: #c0c1ff;
+	}
+	.fb_tan_an_zi {
+		color: #1000a9;
+		font-size: 18px;
+		line-height: 24px;
+	}
+	.fb_tan_an2 {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 100%;
+		height: 32px;
+		margin-top: 8px;
+		border-radius: 8px;
+		background-color: #171f33;
+	}
+	.fb_tan_an2_zi {
+		color: #c7c4d7;
+		font-size: 12px;
+		line-height: 16px;
+	}
+</style>

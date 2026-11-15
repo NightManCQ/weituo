@@ -1,0 +1,1358 @@
+<script setup lang="ts">
+import { onShow } from '@dcloudio/uni-app'
+import { computed, onMounted, ref } from 'vue'
+import type { 积分账户, 任务, 用户, 用户详细信息 } from '../../common/leixing'
+import { 发送请求, 读取当前用户 } from '../../common/wangluo'
+// 分类推断与头像散列和委托详情页共用，避免列表与详情的分类对不上
+import { 推断分类, 推断分类名, 取头像 } from './分类'
+
+/**
+ * 设计图/委托广场.html 的迁移版（深色 Bounty Square）。
+ *
+ * 界面严格按设计稿落地：积分配额卡 → 搜索 + 分类胶囊 → 排序条 → 委托卡流。
+ * 顶栏 / 底栏不在本页渲染：本页是 pages.json 注册的独立页面（navigationStyle custom），
+ * 由世界页 / 会话列表等入口 uni.navigateTo 打开，不再作为首页 v-if 组件挂载；
+ * 本页只留顶部 / 底部占位做内容避让，返回依赖系统返回键 / 手势。
+ *
+ * 数据接真实接口：
+ *   委托列表 → GET /tasks（只返回投标中的委托，和旧版 zhuye.uvue 一致）
+ *   可用积分 → GET /my/points
+ *   委托人昵称 → GET /users/{编号}（任务表只有发布者编号，逐条补齐，失败就用编号兜底）
+ * 后端没有「技能 / 设计 / 跑腿」这类分类字段，所以分类按标题与描述里的关键词推断：
+ * 同一个推断结果既给卡片打标签，也给顶部胶囊做筛选，两边永远一致。
+ *
+ * 页面级滚动：根容器不锁死高度，由卡片流自然撑开，滚动发生在页面上。
+ * 图标本地化为 static/wei_tuo/guang_chang/icons/*.svg（按设计稿配色预着色）；
+ * 光晕用预烘焙的径向渐隐 PNG（uvue 没有 blur 滤镜，App 端也不支持 radial-gradient）。
+ */
+
+
+type 筛选项 = { 键 : string; 标签 : string }
+type 昵称项 = { 编号 : string; 昵称 : string }
+type 坐标 = { 经度 : number; 纬度 : number }
+type 委托卡 = {
+	键 : string
+	编号 : string
+	分类 : string
+	标签 : string
+	标签色 : string
+	紧急 : boolean
+	主推 : boolean
+	标题 : string
+	积分 : string
+	头像 : string
+	委托人 : string
+	副标题 : string
+	右上主 : string
+	右上副 : string
+	右上样式 : string
+	距离 : string
+	截止 : string
+}
+
+// 窗口信息在 setup 期间同步取值，保证首帧顶部/底部占位就位
+const 系统信息 : any = uni.getSystemInfoSync()
+const 状态栏高 = ref(系统信息.statusBarHeight ?? 0)
+const 窗口底高 = ref(系统信息.windowBottom ?? 0)
+
+// 胶囊顺序固定按设计稿，不跟分类规则的匹配优先级走
+const 分类筛选项 : 筛选项[] = [
+	{ 键: '全部', 标签: '全部' },
+	{ 键: '技能开发', 标签: '💻 技能开发' },
+	{ 键: '视觉设计', 标签: '🎨 视觉设计' },
+	{ 键: '跑腿代办', 标签: '🏃 跑腿代办' },
+	{ 键: '学习互助', 标签: '📚 学习互助' },
+	{ 键: '资料调研', 标签: '🔍 资料调研' },
+]
+
+const 排序项 : string[] = ['最新发布', '积分最高', '距离最近', '即将截止']
+
+// 后端没有每日配额字段，上限沿用设计稿的 5 次
+const 配额上限 = 5
+
+const 当前用户 = ref<用户 | null>(null)
+const 积分 = ref<积分账户 | null>(null)
+const 委托列表 = ref<任务[]>([])
+const 昵称表 = ref<昵称项[]>([])
+const 我的位置 = ref<坐标 | null>(null)
+const 正在加载 = ref(false)
+const 错误信息 = ref('')
+const 搜索词 = ref('')
+const 分类 = ref('全部')
+const 排序 = ref('最新发布')
+
+/* ---------------- 小工具 ---------------- */
+
+function 时间戳(值 : string | null) : number {
+	if (值 == null || 值 == '') return 0
+	const 数值 = new Date(值).getTime()
+	if (Number.isNaN(数值)) return 0
+	return 数值
+}
+
+function 两位数(值 : number) : string {
+	return 值 < 10 ? '0' + 值 : '' + 值
+}
+
+/** 2450 -> 2,450：设计稿的积分是大字展示，必须带千分位 */
+function 格式化数量(值 : number) : string {
+	const 原样 = '' + Math.round(值)
+	let 结果 = ''
+	let 计数 = 0
+	for (let i = 原样.length - 1; i >= 0; i--) {
+		结果 = 原样.slice(i, i + 1) + 结果
+		计数++
+		if (计数 % 3 == 0 && i > 0) 结果 = ',' + 结果
+	}
+	return 结果
+}
+
+/** 发布者编号做稳定散列，保证同一个人每次都是同一张头像 */
+function 发布文案(时间 : string) : string {
+	const 数值 = 时间戳(时间)
+	if (数值 == 0) return '刚刚发布'
+	const 差 = Date.now() - 数值
+	if (差 < 60 * 1000) return '刚刚发布'
+	if (差 < 3600 * 1000) return Math.floor(差 / 60000) + ' 分钟前发布'
+	if (差 < 24 * 3600 * 1000) return Math.floor(差 / 3600000) + ' 小时前发布'
+	return Math.floor(差 / 86400000) + ' 天前发布'
+}
+
+/** 卡片右上第一行：优先投标截止时间，没有就退回任务截止时间 */
+function 剩余文案(委托 : 任务) : string {
+	const 数值 = 时间戳(委托.投标截止时间) > 0 ? 时间戳(委托.投标截止时间) : 时间戳(委托.截止时间)
+	if (数值 == 0) return '不限时'
+	const 差 = 数值 - Date.now()
+	if (差 <= 0) return '已截止'
+	const 分钟 = Math.floor(差 / 60000)
+	if (分钟 < 60) return '剩余 ' + (分钟 < 1 ? 1 : 分钟) + ' 分钟'
+	const 小时 = Math.floor(分钟 / 60)
+	if (小时 < 24) return '剩余 ' + 小时 + ' 小时'
+	return '剩余 ' + Math.floor(小时 / 24) + ' 天'
+}
+
+/** 卡片右下截止时间：今天显示「今日 18:00 前」，其余显示「11-08 18:00 前」 */
+function 截止文案(委托 : 任务) : string {
+	const 数值 = 时间戳(委托.截止时间) > 0 ? 时间戳(委托.截止时间) : 时间戳(委托.投标截止时间)
+	if (数值 == 0) return '不限截止'
+	const 日 = new Date(数值)
+	const 现在 = new Date()
+	const 时刻 = 两位数(日.getHours()) + ':' + 两位数(日.getMinutes())
+	const 同一天 = 日.getFullYear() == 现在.getFullYear()
+		&& 日.getMonth() == 现在.getMonth()
+		&& 日.getDate() == 现在.getDate()
+	if (同一天) return '今日 ' + 时刻 + ' 前'
+	return 两位数(日.getMonth() + 1) + '-' + 两位数(日.getDate()) + ' ' + 时刻 + ' 前'
+}
+
+/** 委托地点：没有坐标就是线上委托 */
+function 位置短文案(委托 : 任务) : string {
+	const 位置 = 委托.位置
+	if (位置 == null) return '线上委托'
+	const 地址 = 位置.地址
+	if (地址 != null && 地址 != '') return 地址
+	const 片段 : string[] = []
+	if (位置.市 != null && 位置.市 != '') 片段.push(位置.市)
+	if (位置.县 != null && 位置.县 != '') 片段.push(位置.县)
+	if (片段.length == 0) return '线上委托'
+	return 片段.join(' · ')
+}
+
+/** 球面距离（公里）：只在拿到用户位置后用于「距离最近」排序与卡片上的距离文案 */
+function 球面距离(经一 : number, 纬一 : number, 经二 : number, 纬二 : number) : number {
+	const 弧度 = Math.PI / 180
+	const 纬差 = (纬二 - 纬一) * 弧度
+	const 经差 = (经二 - 经一) * 弧度
+	const 甲 = Math.sin(纬差 / 2) * Math.sin(纬差 / 2)
+		+ Math.cos(纬一 * 弧度) * Math.cos(纬二 * 弧度) * Math.sin(经差 / 2) * Math.sin(经差 / 2)
+	return 6371 * 2 * Math.atan2(Math.sqrt(甲), Math.sqrt(1 - 甲))
+}
+
+function 委托距离(委托 : 任务) : number {
+	const 位置 = 我的位置.value
+	if (位置 == null || 委托.位置 == null) return -1
+	return 球面距离(位置.经度, 位置.纬度, 委托.位置.经度, 委托.位置.纬度)
+}
+
+function 距离文案(委托 : 任务) : string {
+	const 公里 = 委托距离(委托)
+	if (公里 < 0) return 位置短文案(委托)
+	if (公里 < 1) return '距离 ' + Math.round(公里 * 1000) + 'm'
+	return '距离 ' + 公里.toFixed(1) + 'km'
+}
+
+/* ---------------- 分类推断 ---------------- */
+
+function 取昵称(编号 : string) : string {
+	for (let i = 0; i < 昵称表.value.length; i++) {
+		if (昵称表.value[i].编号 == 编号) return 昵称表.value[i].昵称
+	}
+	return ''
+}
+
+/* ---------------- 委托列表 → 设计稿卡片 ---------------- */
+
+function 转卡片(委托 : 任务) : 委托卡 {
+	const 规则 = 推断分类(委托.标题, 委托.描述)
+	const 分类名 = 规则 == null ? '综合' : 规则.名称
+	const 剩余毫秒 = 时间戳(委托.投标截止时间) - Date.now()
+	const 紧急 = 剩余毫秒 > 0 && 剩余毫秒 <= 6 * 3600 * 1000
+	const 昵称 = 取昵称(委托.发布者编号)
+	const 编号 = 委托.发布者编号
+	const 报酬 = 委托.报酬积分
+
+	// 右上角三种样式对应设计稿三种卡片：技能卡看剩余时间、设计卡看报名状态、跑腿卡看截止时间
+	let 右上样式 = '状态'
+	let 右上主 = 委托.任务状态
+	let 右上副 = ''
+	if (分类名 == '技能开发') {
+		右上样式 = '剩余'
+		右上主 = 剩余文案(委托)
+		右上副 = 截止文案(委托)
+	} else if (分类名 == '跑腿代办') {
+		右上样式 = '截止'
+	} else if (分类名 == '学习互助') {
+		右上样式 = '按钮'
+	}
+
+	return {
+		键: 委托.任务编号,
+		编号: 委托.任务编号,
+		分类: 分类名,
+		标签: 规则 == null ? '📌 综合委托' : 规则.标签,
+		标签色: 规则 == null ? 'zi' : 规则.色,
+		紧急: 紧急,
+		主推: 紧急,
+		标题: 委托.标题,
+		积分: 报酬 == null ? '待定' : '+' + 格式化数量(报酬) + ' 积分',
+		头像: 取头像(编号),
+		委托人: 昵称 != '' ? 昵称 : '委托方 ' + 编号.slice(0, 6),
+		副标题: 分类名 == '跑腿代办' ? 位置短文案(委托) : 发布文案(委托.创建时间),
+		右上主: 右上主,
+		右上副: 右上副,
+		右上样式: 右上样式,
+		距离: 距离文案(委托),
+		截止: 截止文案(委托),
+	}
+}
+
+function 截止权重(委托 : 任务) : number {
+	const 数值 = 时间戳(委托.投标截止时间) > 0 ? 时间戳(委托.投标截止时间) : 时间戳(委托.截止时间)
+	if (数值 == 0) return 9999999999999
+	return 数值
+}
+
+function 排序委托(列表 : 任务[]) {
+	if (排序.value == '积分最高') {
+		列表.sort((甲 : 任务, 乙 : 任务) : number => (乙.报酬积分 ?? 0) - (甲.报酬积分 ?? 0))
+		return
+	}
+	if (排序.value == '即将截止') {
+		列表.sort((甲 : 任务, 乙 : 任务) : number => 截止权重(甲) - 截止权重(乙))
+		return
+	}
+	if (排序.value == '距离最近' && 我的位置.value != null) {
+		列表.sort((甲 : 任务, 乙 : 任务) : number => {
+			const 甲距 = 委托距离(甲)
+			const 乙距 = 委托距离(乙)
+			const 甲值 = 甲距 < 0 ? 99999999 : 甲距
+			const 乙值 = 乙距 < 0 ? 99999999 : 乙距
+			return 甲值 - 乙值
+		})
+		return
+	}
+	// 默认排序，以及「距离最近」还没拿到定位时的兜底：按最新发布
+	列表.sort((甲 : 任务, 乙 : 任务) : number => 时间戳(乙.创建时间) - 时间戳(甲.创建时间))
+}
+
+/* ---------------- 计算属性 ---------------- */
+
+const 卡片列表 = computed(() : 委托卡[] => {
+	const 词 = 搜索词.value.trim().toLowerCase()
+	const 筛选后 : 任务[] = []
+	for (let i = 0; i < 委托列表.value.length; i++) {
+		const 委托 = 委托列表.value[i]
+		if (分类.value != '全部' && 推断分类名(委托.标题, 委托.描述) != 分类.value) continue
+		if (词 != '') {
+			const 文本 = (委托.标题 + ' ' + 委托.描述 + ' ' + 位置短文案(委托)).toLowerCase()
+			if (!文本.includes(词)) continue
+		}
+		筛选后.push(委托)
+	}
+	排序委托(筛选后)
+	const 结果 : 委托卡[] = []
+	for (let i = 0; i < 筛选后.length; i++) 结果.push(转卡片(筛选后[i]))
+	return 结果
+})
+
+const 积分文案 = computed(() : string => {
+	const 账户 = 积分.value
+	if (账户 == null) return '—'
+	return 格式化数量(账户.可用积分)
+})
+
+// 「今日已领」= 当前列表里被我接下的条数
+const 今日已领 = computed(() : number => {
+	const 我 = 当前用户.value
+	if (我 == null) return 0
+	let 数 = 0
+	for (let i = 0; i < 委托列表.value.length; i++) {
+		if (委托列表.value[i].接单者编号 == 我.用户编号) 数++
+	}
+	return 数
+})
+
+const 剩余次数 = computed(() : number => {
+	const 剩 = 配额上限 - 今日已领.value
+	return 剩 > 0 ? 剩 : 0
+})
+
+const 进度宽 = computed(() : number => Math.round(今日已领.value * 100 / 配额上限))
+
+const 列表为空 = computed(() : boolean => 卡片列表.value.length == 0)
+
+/* ---------------- 接口 ---------------- */
+
+async function 刷新委托() {
+	正在加载.value = true
+	错误信息.value = ''
+	try {
+		const 列表 = await 发送请求<任务[]>('/tasks')
+		// 任务里只有发布者编号，先补昵称再一次性赋值渲染：
+		// 先把列表画出来再异步回填昵称，卡片不会跟着重绘（实测停在「委托方 编号」）
+		await 补充昵称(列表)
+		委托列表.value = 列表
+	} catch (原因) {
+		错误信息.value = 原因 instanceof Error ? 原因.message : '加载委托失败'
+	} finally {
+		正在加载.value = false
+	}
+}
+
+async function 刷新积分() {
+	当前用户.value = 读取当前用户()
+	if (当前用户.value == null) {
+		积分.value = null
+		return
+	}
+	try {
+		积分.value = await 发送请求<积分账户>('/my/points')
+	} catch {
+		// 积分只是顶部展示，失败不影响列表
+		积分.value = null
+	}
+}
+
+// 任务接口只给发布者编号：逐条补昵称，最多补 12 条，查不到就继续用编号兜底。
+// 已经查过的编号记在 昵称表 里，切换标签再回来不会重复请求。
+async function 补充昵称(列表 : 任务[]) {
+	const 待查 : string[] = []
+	const 我 = 当前用户.value
+	for (let i = 0; i < 列表.length && 待查.length < 12; i++) {
+		const 编号 = 列表[i].发布者编号
+		if (编号 == '') continue
+		if (我 != null && 编号 == 我.用户编号) continue
+		if (取昵称(编号) != '' || 待查.includes(编号)) continue
+		待查.push(编号)
+	}
+	if (待查.length == 0) return
+
+	const 新昵称 : 昵称项[] = []
+	for (let i = 0; i < 待查.length; i++) {
+		try {
+			const 资料 = await 发送请求<用户详细信息>('/users/' + encodeURIComponent(待查[i]))
+			新昵称.push({ 编号: 待查[i], 昵称: 资料.昵称 })
+		} catch {
+			// 查不到就保留编号，不影响列表
+		}
+	}
+	if (新昵称.length == 0) return
+	昵称表.value = 昵称表.value.concat(新昵称)
+}
+
+/* ---------------- 交互 ---------------- */
+
+function 切换分类(事件 : { currentTarget : { dataset : Record<string, unknown> } }) {
+	const 键 = 事件.currentTarget.dataset['key']
+	if (typeof 键 != 'string') return
+	分类.value = 键
+}
+
+function 切换排序(事件 : { currentTarget : { dataset : Record<string, unknown> } }) {
+	const 键 = 事件.currentTarget.dataset['key']
+	if (typeof 键 != 'string') return
+	排序.value = 键
+	// 只在用户点「距离最近」时请求定位：不主动弹权限，失败退回最新发布
+	if (键 == '距离最近' && 我的位置.value == null) 获取我的位置()
+}
+
+function 获取我的位置() {
+	uni.getLocation({
+		type: 'gcj02',
+		success: (结果) => {
+			我的位置.value = { 经度: 结果.longitude, 纬度: 结果.latitude }
+		},
+		fail: () => {
+			uni.showToast({ title: '未获取到当前位置，已按最新发布排序', icon: 'none' })
+			排序.value = '最新发布'
+		},
+	})
+}
+
+// 卡片与按钮统一进详情页：投标 / 撤回 / 选人都在详情里，列表不再重复实现一套
+function 打开委托(事件 : { currentTarget : { dataset : Record<string, unknown> } }) {
+	const 编号 = 事件.currentTarget.dataset['id']
+	if (typeof 编号 != 'string' || 编号 == '') return
+	uni.navigateTo({ url: '/pages/weituo/weituo?id=' + encodeURIComponent(编号) })
+}
+
+/** 独立页面内回首页标签：reLaunch 带 tab 参数，首页 onLoad 会据此定位标签 */
+function 看积分攻略() {
+	uni.reLaunch({ url: '/pages/shou_ye/shou_ye?tab=我的' })
+}
+
+function 去发布() {
+	uni.navigateTo({ url: '/pages/fabuweituo/fa_bu_w_t' })
+}
+
+function 提示(文字 : string) {
+	uni.showToast({ title: 文字, icon: 'none' })
+}
+
+// onShow 覆盖「从详情页返回」，onMounted 覆盖页面首次载入
+// （本页现在是独立页面，两个生命周期都会触发），再用 400ms 节流避免首帧双跑
+let 上次初始化 = 0
+function 初始化页面() {
+	const 现在 = Date.now()
+	if (现在 - 上次初始化 < 400) return
+	上次初始化 = 现在
+	const 信息 : any = uni.getSystemInfoSync()
+	状态栏高.value = 信息.statusBarHeight ?? 0
+	窗口底高.value = 信息.windowBottom ?? 0
+	当前用户.value = 读取当前用户()
+	void 刷新委托()
+	void 刷新积分()
+}
+onShow(初始化页面)
+onMounted(初始化页面)
+</script>
+
+<template>
+	<view class="gc_ye">
+		<view
+			class="gc_nei_rong"
+			:style="{ paddingTop: (68 + 状态栏高) + 'px', paddingBottom: (82 + 窗口底高) + 'px' }"
+		>
+			<!-- 1. 积分钱包 + 今日配额 -->
+			<view class="gc_ji_fen_ka">
+				<image class="gc_guang_zi" src="/static/guang/zi_08.png" mode="scaleToFill"></image>
+				<image class="gc_guang_lv" src="/static/guang/lv_10.png" mode="scaleToFill"></image>
+
+				<view class="gc_ji_fen_nei">
+					<view class="gc_ji_fen_hang">
+						<view class="gc_ji_fen_zuo">
+							<view class="gc_ji_fen_biao">
+								<image class="gc_tu_16" src="/static/wei_tuo/guang_chang/icons/toll.svg" mode="aspectFit"></image>
+								<text class="gc_ji_fen_biao_zi">我的可用积分</text>
+							</view>
+							<view class="gc_ji_fen_shu_hang">
+								<text class="gc_ji_fen_shu">{{ 积分文案 }}</text>
+								<text class="gc_ji_fen_dan">PTS</text>
+							</view>
+						</view>
+						<view class="gc_gong_lue" @click="看积分攻略">
+							<image class="gc_tu_16" src="/static/wei_tuo/guang_chang/icons/lightbulb.svg" mode="aspectFit"></image>
+							<text class="gc_gong_lue_zi">赚积分攻略</text>
+						</view>
+					</view>
+
+					<view class="gc_pei_e_hang">
+						<view class="gc_pei_e_zuo">
+							<view class="gc_pei_e_wen">
+								<text class="gc_pei_e_biao">今日已领任务配额</text>
+								<text class="gc_pei_e_shu">{{ 今日已领 }} / {{ 配额上限 }}</text>
+							</view>
+							<view class="gc_jin_du_cao">
+								<view class="gc_jin_du_tiao" :style="{ width: 进度宽 + '%' }"></view>
+							</view>
+						</view>
+						<view class="gc_sheng_yu">
+							<view class="gc_sheng_yu_dian"></view>
+							<text class="gc_sheng_yu_zi">今日剩余 {{ 剩余次数 }} 次机会</text>
+						</view>
+					</view>
+				</view>
+			</view>
+
+			<!-- 2. 搜索框 + 分类胶囊 -->
+			<view class="gc_sou_suo_qu">
+				<view class="gc_sou_suo">
+					<image class="gc_sou_suo_zuo" src="/static/wei_tuo/guang_chang/icons/search.svg" mode="aspectFit"></image>
+					<input
+						class="gc_sou_suo_kuang"
+						v-model="搜索词"
+						placeholder="搜索任务关键词、技能、地点..."
+						placeholder-class="gc_zhan_wei"
+					/>
+					<view class="gc_sou_suo_you" @click="提示('筛选条件即将上线')">
+						<image class="gc_tu_18" src="/static/wei_tuo/guang_chang/icons/tune.svg" mode="aspectFit"></image>
+					</view>
+				</view>
+
+				<scroll-view class="gc_shai_tiao" direction="horizontal" :show-scrollbar="false">
+					<view class="gc_shai_hang">
+						<view
+							v-for="项 in 分类筛选项"
+							:key="项.键"
+							class="gc_shai_an"
+							:class="分类 == 项.键 ? 'gc_shai_an_ji' : ''"
+							:data-key="项.键"
+							@click="切换分类"
+						>
+							<text class="gc_shai_zi" :class="分类 == 项.键 ? 'gc_shai_zi_ji' : ''">{{ 项.标签 }}</text>
+						</view>
+					</view>
+				</scroll-view>
+			</view>
+
+			<!-- 3. 排序条 -->
+			<view class="gc_pai_xu">
+				<view class="gc_pai_xu_zuo">
+					<view v-for="项 in 排序项" :key="项" class="gc_pai_xu_an" :data-key="项" @click="切换排序">
+						<text class="gc_pai_xu_zi" :class="排序 == 项 ? 'gc_pai_xu_zi_ji' : ''">{{ 项 }}</text>
+						<image
+							v-if="排序 == 项"
+							class="gc_tu_14"
+							src="/static/wei_tuo/guang_chang/icons/arrow_drop_down.svg"
+							mode="aspectFit"
+						></image>
+					</view>
+				</view>
+				<view class="gc_shi_tu" @click="提示('切换视图')">
+					<image class="gc_tu_18" src="/static/wei_tuo/guang_chang/icons/view_agenda.svg" mode="aspectFit"></image>
+				</view>
+			</view>
+
+			<!-- 4. 委托卡流 -->
+			<view class="gc_ka_liu">
+				<view v-if="正在加载 && 列表为空" class="gc_kong_ka">
+					<text class="gc_kong_biao_ti">正在加载委托…</text>
+				</view>
+
+				<view v-else-if="错误信息 != '' && 列表为空" class="gc_kong_ka">
+					<text class="gc_kong_biao_ti">委托加载失败</text>
+					<text class="gc_kong_fu">{{ 错误信息 }}</text>
+					<view class="gc_kong_an" @click="刷新委托">
+						<text class="gc_kong_an_zi">重新加载</text>
+					</view>
+				</view>
+
+				<view v-else-if="列表为空" class="gc_kong_ka">
+					<text class="gc_kong_biao_ti">{{ 委托列表.length == 0 ? '暂时没有进行中的委托' : '没有匹配的委托' }}</text>
+					<text class="gc_kong_fu">发布一条委托，或者换个关键词再找找。</text>
+					<view class="gc_kong_an" @click="去发布">
+						<text class="gc_kong_an_zi">去发布委托</text>
+					</view>
+				</view>
+
+				<view
+					v-for="卡 in 卡片列表"
+					:key="卡.键"
+					class="gc_ka"
+					:class="卡.主推 ? 'gc_ka_zhu' : ''"
+					:data-id="卡.编号"
+					@click="打开委托"
+				>
+					<image
+						v-if="卡.主推"
+						class="gc_re_guang"
+						src="/static/wei_tuo/guang_chang/hong_20.png"
+						mode="scaleToFill"
+					></image>
+
+					<!-- 卡头：分类标签 / HOT / 距离 + 积分数 -->
+					<view class="gc_ka_tou">
+						<view class="gc_ka_tou_zuo">
+							<view class="gc_biao_qian">
+								<text class="gc_biao_qian_zi" :class="卡.标签色 == 'lv' ? 'gc_biao_qian_zi_lv' : ''">{{ 卡.标签 }}</text>
+								<text v-if="卡.紧急" class="gc_biao_qian_ji"> · 紧急</text>
+							</view>
+							<view v-if="卡.主推" class="gc_hot">
+								<text class="gc_hot_zi">HOT</text>
+							</view>
+							<view v-if="卡.分类 == '跑腿代办'" class="gc_ju_li">
+								<image class="gc_tu_13" src="/static/wei_tuo/guang_chang/icons/location_on.svg" mode="aspectFit"></image>
+								<text class="gc_ju_li_zi">{{ 卡.距离 }}</text>
+							</view>
+						</view>
+						<view class="gc_ji_fen">
+							<image class="gc_tu_16" src="/static/wei_tuo/guang_chang/icons/mint.svg" mode="aspectFit"></image>
+							<text class="gc_ji_fen_zi">{{ 卡.积分 }}</text>
+						</view>
+					</view>
+
+					<text class="gc_ka_biao_ti">{{ 卡.标题 }}</text>
+
+					<!-- 委托人 + 右侧信息 -->
+					<view class="gc_ka_fu">
+						<view class="gc_tou_xiang_qu">
+							<image class="gc_tou_xiang" :src="卡.头像" mode="aspectFill"></image>
+							<view class="gc_tou_wen">
+								<text class="gc_tou_ming">{{ 卡.委托人 }}</text>
+								<text class="gc_tou_fu">{{ 卡.副标题 }}</text>
+							</view>
+						</view>
+
+						<view v-if="卡.右上样式 == '剩余'" class="gc_ka_you">
+							<view class="gc_sheng_yu_hang">
+								<image class="gc_tu_14" src="/static/wei_tuo/guang_chang/icons/timer.svg" mode="aspectFit"></image>
+								<text class="gc_sheng_yu_hang_zi">{{ 卡.右上主 }}</text>
+							</view>
+							<text class="gc_jie_biao">{{ 卡.右上副 }}</text>
+						</view>
+
+						<view v-else-if="卡.右上样式 == '截止'" class="gc_jie_zhi">
+							<image class="gc_tu_14" src="/static/wei_tuo/guang_chang/icons/schedule.svg" mode="aspectFit"></image>
+							<text class="gc_jie_zhi_zi">{{ 卡.截止 }}</text>
+						</view>
+
+						<view v-else-if="卡.右上样式 == '按钮'" class="gc_dui_lian">
+							<text class="gc_dui_lian_zi">参与对练</text>
+						</view>
+
+						<view v-else class="gc_zhuang_tai">
+							<view class="gc_zhuang_tai_dian"></view>
+							<text class="gc_zhuang_tai_zi">{{ 卡.右上主 }}</text>
+						</view>
+					</view>
+
+					<!-- 操作区：按分类给不同主按钮，和设计稿四张卡一致（学习互助只保留右上那枚按钮） -->
+					<view v-if="卡.分类 != '学习互助'" class="gc_ka_an">
+						<view v-if="卡.分类 == '技能开发'" class="gc_liao_an">
+							<image class="gc_tu_20" src="/static/wei_tuo/guang_chang/icons/chat.svg" mode="aspectFit"></image>
+						</view>
+						<view v-if="卡.分类 == '技能开发'" class="gc_zhu_an">
+							<image class="gc_tu_18" src="/static/wei_tuo/guang_chang/icons/bolt.svg" mode="aspectFit"></image>
+							<text class="gc_zhu_an_zi">立即抢单</text>
+						</view>
+
+						<view v-if="卡.分类 == '跑腿代办'" class="gc_dai_an">
+							<image class="gc_tu_18" src="/static/wei_tuo/guang_chang/icons/walk.svg" mode="aspectFit"></image>
+							<text class="gc_dai_an_zi">帮他代取</text>
+						</view>
+
+						<view v-if="卡.分类 != '技能开发' && 卡.分类 != '跑腿代办'" class="gc_ci_an">
+							<text class="gc_ci_an_zi">查看详情</text>
+						</view>
+						<view v-if="卡.分类 != '技能开发' && 卡.分类 != '跑腿代办'" class="gc_ci_an_qiang">
+							<text class="gc_ci_an_qiang_zi">申请接单</text>
+						</view>
+					</view>
+				</view>
+
+				<!-- 已有数据时的刷新失败：单独一条，不淹没列表 -->
+				<view v-if="错误信息 != '' && !列表为空" class="gc_cuo_wu_tiao" @click="刷新委托">
+					<text class="gc_cuo_wu_zi">{{ 错误信息 }}（点击重试）</text>
+				</view>
+			</view>
+		</view>
+	</view>
+</template>
+
+<style>
+	/* 设计稿字体：Plus Jakarta Sans（标题/正文）、Space Grotesk（标签/按钮）。
+	   按字重落地为本地 ttf，web 与 App 都不依赖 Google Fonts 外链。 */
+@font-face { font-family: 'PJS400'; src: url('/static/hui_hua/fonts/PlusJakartaSans-400.ttf'); }
+@font-face { font-family: 'PJS600'; src: url('/static/hui_hua/fonts/PlusJakartaSans-600.ttf'); }
+@font-face { font-family: 'PJS700'; src: url('/static/hui_hua/fonts/PlusJakartaSans-700.ttf'); }
+@font-face { font-family: 'PJS800'; src: url('/static/hui_hua/fonts/PlusJakartaSans-800.ttf'); }
+@font-face { font-family: 'SG600'; src: url('/static/hui_hua/fonts/SpaceGrotesk-600.ttf'); }
+@font-face { font-family: 'SG700'; src: url('/static/hui_hua/fonts/SpaceGrotesk-700.ttf'); }
+
+	/* uni-app x 的 text 不继承父 view 字体，每类文字单独指定 */
+	.gc_ka_biao_ti, .gc_tou_ming, .gc_kong_biao_ti {
+		font-family: 'PJS700';
+	}
+	.gc_tou_fu, .gc_sou_suo_kuang, .gc_zhan_wei, .gc_kong_fu, .gc_cuo_wu_zi {
+		font-family: 'PJS400';
+	}
+	.gc_ji_fen_shu {
+		font-family: 'PJS800';
+	}
+	.gc_ji_fen_biao_zi, .gc_gong_lue_zi, .gc_pei_e_biao, .gc_pei_e_shu, .gc_sheng_yu_zi,
+	.gc_shai_zi, .gc_shai_zi_ji, .gc_pai_xu_zi, .gc_pai_xu_zi_ji, .gc_biao_qian_zi,
+	.gc_biao_qian_ji, .gc_hot_zi, .gc_ji_fen_zi, .gc_ju_li_zi, .gc_sheng_yu_hang_zi,
+	.gc_jie_biao, .gc_jie_zhi_zi, .gc_zhuang_tai_zi, .gc_dui_lian_zi, .gc_zhu_an_zi,
+	.gc_ci_an_zi, .gc_ci_an_qiang_zi, .gc_dai_an_zi, .gc_kong_an_zi, .gc_ji_fen_dan,
+	.gc_biao_qian_zi_lv {
+		font-family: 'SG600';
+	}
+
+	/* ---------- 页面骨架（页面级滚动，不锁死高度） ---------- */
+	.gc_ye {
+		display: flex;
+		flex-direction: column;
+		width: 100%;
+		background-color: #0b1326;
+	}
+	.gc_nei_rong {
+		display: flex;
+		flex-direction: column;
+		width: 100%;
+		padding-left: 16px;
+		padding-right: 16px;
+		/* 上下留白由模板绑定：顶部让出 64 顶栏 + 状态栏 + 4，底部让出 24 + 58 底栏 */
+	}
+
+	/* ---------- 1. 积分钱包卡 ---------- */
+	.gc_ji_fen_ka {
+		position: relative;
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+		padding: 16px;
+		margin-bottom: 16px;
+		border-radius: 12px;
+		background-color: #222a3d;
+		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+	}
+	/* 设计稿是 bg-primary/10 与 bg-secondary/10 + blur，用预烘焙径向渐隐 PNG 等价实现 */
+	.gc_guang_zi {
+		position: absolute;
+		top: -32px;
+		right: -32px;
+		width: 176px;
+		height: 176px;
+	}
+	.gc_guang_lv {
+		position: absolute;
+		right: 48px;
+		bottom: 0px;
+		width: 112px;
+		height: 112px;
+	}
+	.gc_ji_fen_nei {
+		position: relative;
+		z-index: 1;
+		display: flex;
+		flex-direction: column;
+		width: 100%;
+	}
+	.gc_ji_fen_hang {
+		display: flex;
+		flex-direction: row;
+		align-items: flex-start;
+		justify-content: space-between;
+	}
+	.gc_ji_fen_zuo {
+		display: flex;
+		flex-direction: column;
+	}
+	.gc_ji_fen_biao {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+	}
+	.gc_ji_fen_biao_zi {
+		margin-left: 4px;
+		color: #c7c4d7;
+		font-size: 12px;
+		line-height: 16px;
+		letter-spacing: 0.36px;
+	}
+	.gc_ji_fen_shu_hang {
+		display: flex;
+		flex-direction: row;
+		align-items: flex-end;
+		margin-top: 2px;
+	}
+	.gc_ji_fen_shu {
+		color: #dae2fd;
+		font-size: 30px;
+		line-height: 36px;
+		letter-spacing: -0.75px;
+	}
+	.gc_ji_fen_dan {
+		margin-left: 4px;
+		margin-bottom: 5px;
+		color: #4edea3;
+		font-size: 12px;
+		line-height: 16px;
+		font-weight: 700;
+		letter-spacing: 0.36px;
+	}
+	.gc_gong_lue {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		padding: 6px 12px;
+		border-radius: 9999px;
+		background-color: #2d3449;
+	}
+	.gc_gong_lue_zi {
+		margin-left: 4px;
+		color: #c0c1ff;
+		font-size: 12px;
+		line-height: 16px;
+		letter-spacing: 0.36px;
+	}
+	.gc_pei_e_hang {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+		margin-top: 20px;
+	}
+	.gc_pei_e_zuo {
+		display: flex;
+		flex-direction: column;
+		width: 210px;
+	}
+	.gc_pei_e_wen {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+	}
+	.gc_pei_e_biao {
+		color: #c7c4d7;
+		font-size: 10px;
+		line-height: 14px;
+		letter-spacing: 0.5px;
+	}
+	.gc_pei_e_shu {
+		color: #dae2fd;
+		font-size: 10px;
+		line-height: 14px;
+		font-weight: 700;
+		letter-spacing: 0.5px;
+	}
+	.gc_jin_du_cao {
+		width: 100%;
+		height: 8px;
+		margin-top: 4px;
+		border-radius: 9999px;
+		background-color: #060e20;
+		overflow: hidden;
+	}
+	.gc_jin_du_tiao {
+		height: 8px;
+		border-radius: 9999px;
+		/* 设计稿 from-primary to-secondary；App 端支持 linear-gradient */
+		background-image: linear-gradient(to right, #c0c1ff, #4edea3);
+		background-color: #c0c1ff;
+	}
+	.gc_sheng_yu {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		padding: 4px 10px;
+		border-radius: 9999px;
+		background-color: #060e20;
+	}
+	.gc_sheng_yu_dian {
+		width: 6px;
+		height: 6px;
+		margin-right: 6px;
+		border-radius: 3px;
+		background-color: #4edea3;
+	}
+	.gc_sheng_yu_zi {
+		color: #6ffbbe;
+		font-size: 10px;
+		line-height: 14px;
+		letter-spacing: 0.5px;
+	}
+
+	/* ---------- 2. 搜索 + 分类胶囊 ---------- */
+	.gc_sou_suo_qu {
+		display: flex;
+		flex-direction: column;
+		width: 100%;
+		margin-bottom: 16px;
+	}
+	.gc_sou_suo {
+		position: relative;
+		display: flex;
+		flex-direction: column;
+		width: 100%;
+	}
+	.gc_sou_suo_zuo {
+		position: absolute;
+		top: 10px;
+		left: 14px;
+		width: 20px;
+		height: 20px;
+		z-index: 2;
+	}
+	.gc_sou_suo_you {
+		position: absolute;
+		top: 11px;
+		right: 14px;
+		z-index: 2;
+	}
+	.gc_sou_suo_kuang {
+		width: 100%;
+		height: 40px;
+		padding-left: 40px;
+		padding-right: 40px;
+		border-radius: 12px;
+		background-color: #131b2e;
+		color: #dae2fd;
+		font-size: 14px;
+		line-height: 20px;
+	}
+	.gc_zhan_wei {
+		color: #908fa0;
+		font-size: 14px;
+		line-height: 20px;
+	}
+	.gc_shai_tiao {
+		width: 100%;
+		margin-top: 8px;
+	}
+	.gc_shai_hang {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		padding-top: 4px;
+		padding-bottom: 4px;
+	}
+	.gc_shai_an {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: center;
+		padding: 6px 14px;
+		margin-right: 4px;
+		border-radius: 9999px;
+		background-color: #222a3d;
+	}
+	.gc_shai_an_ji {
+		background-color: #c0c1ff;
+		box-shadow: 0 4px 12px rgba(192, 193, 255, 0.2);
+	}
+	.gc_shai_zi {
+		color: #dae2fd;
+		font-size: 12px;
+		line-height: 16px;
+		letter-spacing: 0.36px;
+	}
+	.gc_shai_zi_ji {
+		color: #1000a9;
+		font-weight: 700;
+	}
+
+	/* ---------- 3. 排序条 ---------- */
+	.gc_pai_xu {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+		padding-top: 2px;
+		margin-bottom: 16px;
+	}
+	.gc_pai_xu_zuo {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+	}
+	.gc_pai_xu_an {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		margin-right: 8px;
+	}
+	.gc_pai_xu_zi {
+		color: #c7c4d7;
+		font-size: 12px;
+		line-height: 16px;
+		letter-spacing: 0.36px;
+	}
+	.gc_pai_xu_zi_ji {
+		color: #c0c1ff;
+		font-weight: 700;
+	}
+	.gc_shi_tu {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	/* ---------- 4. 委托卡 ---------- */
+	.gc_ka_liu {
+		display: flex;
+		flex-direction: column;
+		width: 100%;
+	}
+	.gc_ka {
+		position: relative;
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+		padding: 16px;
+		margin-bottom: 16px;
+		border-radius: 12px;
+		background-color: #222a3d;
+		box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+	}
+	.gc_ka_zhu {
+		box-shadow: 0 14px 32px rgba(0, 0, 0, 0.45);
+	}
+	/* 主推卡右上角的红色环境光（设计稿 -top-6 -right-6 64px + blur-xl） */
+	.gc_re_guang {
+		position: absolute;
+		top: -24px;
+		right: -24px;
+		width: 96px;
+		height: 96px;
+	}
+	.gc_ka_tou {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+	}
+	.gc_ka_tou_zuo {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		flex: 1;
+	}
+	.gc_biao_qian {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		padding: 4px 10px;
+		border-radius: 9999px;
+		background-color: #2d3449;
+	}
+	.gc_biao_qian_zi {
+		color: #c0c1ff;
+		font-size: 10px;
+		line-height: 14px;
+		font-weight: 700;
+		letter-spacing: 0.5px;
+	}
+	.gc_biao_qian_zi_lv {
+		color: #6ffbbe;
+	}
+	.gc_biao_qian_ji {
+		color: #ffb4ab;
+		font-size: 10px;
+		line-height: 14px;
+		font-weight: 700;
+		letter-spacing: 0.5px;
+	}
+	.gc_hot {
+		margin-left: 6px;
+		padding: 2px 8px;
+		border-radius: 9999px;
+		background-color: #93000a;
+	}
+	.gc_hot_zi {
+		color: #ffdad6;
+		font-size: 10px;
+		line-height: 14px;
+		font-weight: 700;
+		letter-spacing: 0.5px;
+	}
+	.gc_ju_li {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		margin-left: 6px;
+		flex-shrink: 1;
+	}
+	.gc_ju_li_zi {
+		margin-left: 2px;
+		color: #c7c4d7;
+		font-size: 10px;
+		line-height: 14px;
+		letter-spacing: 0.5px;
+	}
+	.gc_ji_fen {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		padding: 4px 12px;
+		border-radius: 9999px;
+		background-color: rgba(78, 222, 163, 0.15);
+	}
+	.gc_ji_fen_zi {
+		margin-left: 4px;
+		color: #4edea3;
+		font-size: 12px;
+		line-height: 16px;
+		font-weight: 700;
+		letter-spacing: 0.36px;
+	}
+	.gc_ka_biao_ti {
+		margin-top: 8px;
+		color: #dae2fd;
+		font-size: 18px;
+		line-height: 24px;
+		font-weight: 700;
+		letter-spacing: -0.18px;
+	}
+	.gc_ka_fu {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+		margin-top: 10px;
+	}
+	.gc_tou_xiang_qu {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		flex: 1;
+	}
+	.gc_tou_xiang {
+		width: 32px;
+		height: 32px;
+		margin-right: 8px;
+		border-radius: 16px;
+	}
+	.gc_tou_wen {
+		display: flex;
+		flex-direction: column;
+		flex: 1;
+	}
+	.gc_tou_ming {
+		color: #dae2fd;
+		font-size: 12px;
+		line-height: 16px;
+		font-weight: 700;
+		letter-spacing: 0.36px;
+	}
+	.gc_tou_fu {
+		margin-top: 2px;
+		color: #c7c4d7;
+		font-size: 12px;
+		line-height: 16px;
+		letter-spacing: 0.12px;
+	}
+	.gc_ka_you {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-end;
+	}
+	.gc_sheng_yu_hang {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+	}
+	.gc_sheng_yu_hang_zi {
+		margin-left: 2px;
+		color: #ffb4ab;
+		font-size: 10px;
+		line-height: 14px;
+		font-weight: 700;
+		letter-spacing: 0.5px;
+	}
+	.gc_jie_biao {
+		margin-top: 2px;
+		color: #c7c4d7;
+		font-size: 12px;
+		line-height: 16px;
+		letter-spacing: 0.12px;
+	}
+	.gc_jie_zhi {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+	}
+	.gc_jie_zhi_zi {
+		margin-left: 2px;
+		color: #ffb95f;
+		font-size: 10px;
+		line-height: 14px;
+		font-weight: 700;
+		letter-spacing: 0.5px;
+	}
+	.gc_zhuang_tai {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		padding: 4px 10px;
+		border-radius: 9999px;
+		background-color: #171f33;
+	}
+	.gc_zhuang_tai_dian {
+		width: 6px;
+		height: 6px;
+		margin-right: 6px;
+		border-radius: 3px;
+		background-color: #ffb95f;
+	}
+	.gc_zhuang_tai_zi {
+		color: #ffb95f;
+		font-size: 10px;
+		line-height: 14px;
+		letter-spacing: 0.5px;
+	}
+	.gc_dui_lian {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: center;
+		padding: 8px 16px;
+		border-radius: 12px;
+		background-color: #c0c1ff;
+	}
+	.gc_dui_lian_zi {
+		color: #1000a9;
+		font-size: 12px;
+		line-height: 16px;
+		font-weight: 700;
+		letter-spacing: 0.36px;
+	}
+	.gc_ka_an {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		margin-top: 12px;
+	}
+	.gc_liao_an {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 44px;
+		height: 44px;
+		margin-right: 8px;
+		border-radius: 12px;
+		background-color: #2d3449;
+	}
+	.gc_zhu_an {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: center;
+		flex: 1;
+		padding-top: 10px;
+		padding-bottom: 10px;
+		border-radius: 12px;
+		background-color: #c0c1ff;
+		box-shadow: 0 8px 20px rgba(192, 193, 255, 0.25);
+	}
+	.gc_zhu_an_zi {
+		margin-left: 4px;
+		color: #1000a9;
+		font-size: 14px;
+		line-height: 18px;
+		font-weight: 700;
+		letter-spacing: 0.28px;
+	}
+	.gc_dai_an {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: center;
+		flex: 1;
+		height: 38px;
+		border-radius: 12px;
+		background-color: #2d3449;
+	}
+	.gc_dai_an_zi {
+		margin-left: 4px;
+		color: #dae2fd;
+		font-size: 12px;
+		line-height: 16px;
+		font-weight: 700;
+		letter-spacing: 0.36px;
+	}
+	.gc_ci_an {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex: 1;
+		height: 32px;
+		margin-right: 8px;
+		border-radius: 12px;
+		background-color: #2d3449;
+	}
+	.gc_ci_an_zi {
+		color: #dae2fd;
+		font-size: 12px;
+		line-height: 16px;
+		font-weight: 700;
+		letter-spacing: 0.36px;
+	}
+	.gc_ci_an_qiang {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex: 1;
+		height: 32px;
+		border-radius: 12px;
+		background-color: #8083ff;
+	}
+	.gc_ci_an_qiang_zi {
+		color: #0d0096;
+		font-size: 12px;
+		line-height: 16px;
+		font-weight: 700;
+		letter-spacing: 0.36px;
+	}
+
+	/* ---------- 空 / 加载 / 错误 ---------- */
+	.gc_kong_ka {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		padding: 32px 24px;
+		margin-bottom: 16px;
+		border-radius: 12px;
+		background-color: #222a3d;
+	}
+	.gc_kong_biao_ti {
+		color: #dae2fd;
+		font-size: 14px;
+		line-height: 20px;
+	}
+	.gc_kong_fu {
+		margin-top: 6px;
+		color: #c7c4d7;
+		font-size: 12px;
+		line-height: 16px;
+		text-align: center;
+	}
+	.gc_kong_an {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		margin-top: 14px;
+		padding: 8px 18px;
+		border-radius: 9999px;
+		background-color: #c0c1ff;
+	}
+	.gc_kong_an_zi {
+		color: #1000a9;
+		font-size: 12px;
+		line-height: 16px;
+		font-weight: 700;
+		letter-spacing: 0.36px;
+	}
+	.gc_cuo_wu_tiao {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: center;
+		padding: 10px 14px;
+		border-radius: 10px;
+		background-color: rgba(147, 0, 10, 0.35);
+	}
+	.gc_cuo_wu_zi {
+		color: #ffdad6;
+		font-size: 12px;
+		line-height: 16px;
+	}
+
+	/* ---------- 图标尺寸 ---------- */
+	.gc_tu_13 { width: 13px; height: 13px; }
+	.gc_tu_14 { width: 14px; height: 14px; }
+	.gc_tu_16 { width: 16px; height: 16px; }
+	.gc_tu_18 { width: 18px; height: 18px; }
+	.gc_tu_20 { width: 20px; height: 20px; }
+</style>

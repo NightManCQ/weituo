@@ -1,0 +1,179 @@
+<script setup lang="ts">
+/**
+ * 聊天消息里的「文件附件卡」。
+ * 对应设计稿 对话.html 中 class="w-full bg-surface-container-low rounded-xl p-space-md shadow-sm" 那一块：
+ * 左侧 ZIP 图标 + 文件名 + 大小/安全扫描说明，底部「快速预览 / 原文件下载」两个按钮。
+ * 只负责展示与上报点击，真正的下载/预览逻辑交给页面。
+ */
+const 属性 = defineProps({
+	文件名: { type: String, default: 'Blender_Final_Render_v2.zip' },
+	文件大小: { type: String, default: '42.5 MB' },
+	安全说明: { type: String, default: '已完成安全扫描' },
+	预览文字: { type: String, default: '快速预览' },
+	下载文字: { type: String, default: '原文件下载' },
+})
+
+const 发出 = defineEmits(['预览', '下载'])
+</script>
+
+<template>
+	<view class="wjk">
+		<view class="wjk_hang">
+			<view class="wjk_tu_kuang">
+				<image class="wjk_tu" src="/static/liaotian/icons/folder_zip.svg" mode="aspectFit"></image>
+			</view>
+			<view class="wjk_ming_qu">
+				<text class="wjk_ming">{{ 属性.文件名 }}</text>
+				<view class="wjk_xin_xi_hang">
+					<text class="wjk_da_xiao">{{ 属性.文件大小 }}</text>
+					<view class="wjk_dian"></view>
+					<text class="wjk_an_quan">{{ 属性.安全说明 }}</text>
+				</view>
+			</view>
+		</view>
+
+		<view class="wjk_an_niu_hang">
+			<view class="wjk_an_niu wjk_an_niu_hui" @click="发出('预览')">
+				<image class="wjk_an_niu_tu" src="/static/liaotian/icons/visibility_2.svg" mode="aspectFit"></image>
+				<text class="wjk_an_niu_zi_hui">{{ 属性.预览文字 }}</text>
+			</view>
+			<view class="wjk_an_niu wjk_an_niu_zhu" @click="发出('下载')">
+				<image class="wjk_an_niu_tu" src="/static/liaotian/icons/download.svg" mode="aspectFit"></image>
+				<text class="wjk_an_niu_zi_zhu">{{ 属性.下载文字 }}</text>
+			</view>
+		</view>
+	</view>
+</template>
+
+<style>
+/* 组件内也有 text，uni-app x 不继承父 view 字体，字体得在组件内再注册一次 */
+@font-face { font-family: 'PJS400'; src: url('/static/hui_hua/fonts/PlusJakartaSans-400.ttf'); }
+@font-face { font-family: 'PJS500'; src: url('/static/hui_hua/fonts/PlusJakartaSans-500.ttf'); }
+@font-face { font-family: 'PJS600'; src: url('/static/hui_hua/fonts/PlusJakartaSans-600.ttf'); }
+@font-face { font-family: 'SG600'; src: url('/static/hui_hua/fonts/SpaceGrotesk-600.ttf'); }
+@font-face { font-family: 'SG700'; src: url('/static/hui_hua/fonts/SpaceGrotesk-700.ttf'); }
+
+/* ---------- 卡片外框：w-full bg-surface-container-low rounded-xl p-space-md shadow-sm ---------- */
+.wjk {
+	width: 100%;
+	padding: 16px;
+	border-radius: 12px;
+	background-color: #131b2e;
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
+}
+
+/* ---------- 头部：图标 + 文件名 / 说明 ---------- */
+.wjk_hang {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+}
+
+.wjk_tu_kuang {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 48px;
+	height: 48px;
+	flex-shrink: 0;
+	border-radius: 8px;
+	background-color: #2d3449;
+}
+.wjk_tu { width: 28px; height: 28px; }
+
+.wjk_ming_qu {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-width: 0;
+	margin-left: 8px;
+	overflow: hidden;
+}
+
+.wjk_ming {
+	font-family: 'PJS400';
+	font-size: 18px;
+	line-height: 24px;
+	font-weight: 600;
+	letter-spacing: -0.18px;
+	color: #dae2fd;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.wjk_xin_xi_hang {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	margin-top: 2px;
+}
+.wjk_da_xiao {
+	font-family: 'PJS400';
+	font-size: 12px;
+	line-height: 16px;
+	letter-spacing: 0.12px;
+	color: #908fa0;
+}
+.wjk_dian {
+	width: 4px;
+	height: 4px;
+	margin: 0 8px;
+	border-radius: 2px;
+	background-color: #908fa0;
+}
+.wjk_an_quan {
+	font-family: 'SG600';
+	font-size: 10px;
+	line-height: 14px;
+	font-weight: 700;
+	letter-spacing: 0.5px;
+	color: #4edea3;
+}
+
+/* ---------- 底部两个操作按钮 ---------- */
+.wjk_an_niu_hang {
+	display: flex;
+	flex-direction: row;
+	margin-top: 12px;
+	padding-top: 8px;
+}
+.wjk_an_niu {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+	flex: 1;
+	padding-top: 6px;
+	padding-bottom: 6px;
+	border-radius: 8px;
+}
+.wjk_an_niu_hui { background-color: #222a3d; }
+.wjk_an_niu_zhu {
+	margin-left: 8px;
+	background-color: #8083ff;
+}
+.wjk_an_niu_tu { width: 16px; height: 16px; }
+.wjk_an_niu_zi_hui {
+	margin-left: 4px;
+	font-family: 'SG600';
+	font-size: 12px;
+	line-height: 16px;
+	font-weight: 600;
+	letter-spacing: 0.36px;
+	color: #dae2fd;
+}
+.wjk_an_niu_zi_zhu {
+	margin-left: 4px;
+	font-family: 'SG600';
+	font-size: 12px;
+	line-height: 16px;
+	font-weight: 600;
+	letter-spacing: 0.36px;
+	color: #0d0096;
+}
+
+	/* 按字重指向对应 ttf：uni-app x 的自定义字体规则不支持字重属性，Android 单字重字体也不响应数值字重 */
+	.wjk_ming { font-family: 'PJS600'; }
+	.wjk_an_quan { font-family: 'SG700'; }
+</style>

@@ -190,7 +190,7 @@ onLoad(() => {
         <input v-model="关键词" class="sou_suo_shu_ru" placeholder="搜索附近需求" @input="搜索输入" />
       </view>
       <!-- 分类 -->
-      <scroll-view scroll-x class="fen_lei_tiao" :show-scrollbar="false">
+      <scroll-view direction="horizontal" class="fen_lei_tiao" :show-scrollbar="false">
         <view class="fen_lei_hang">
           <text
             v-for="分类 in 分类列表"
@@ -300,6 +300,7 @@ onLoad(() => {
 
 /* 分类条 */
 .fen_lei_tiao {
+  flex-direction: row;
   margin-top: 8px;
   height: 36px;
   white-space: nowrap;

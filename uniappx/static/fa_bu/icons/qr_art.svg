@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 100 100">
+<rect fill="#dae2fd" height="25" rx="4" width="25" x="10" y="10"></rect>
+<rect fill="#060e20" height="15" rx="2" width="15" x="15" y="15"></rect>
+<rect fill="#dae2fd" height="9" rx="1" width="9" x="18" y="18"></rect>
+<rect fill="#dae2fd" height="25" rx="4" width="25" x="65" y="10"></rect>
+<rect fill="#060e20" height="15" rx="2" width="15" x="70" y="15"></rect>
+<rect fill="#dae2fd" height="9" rx="1" width="9" x="73" y="18"></rect>
+<rect fill="#dae2fd" height="25" rx="4" width="25" x="10" y="65"></rect>
+<rect fill="#060e20" height="15" rx="2" width="15" x="15" y="70"></rect>
+<rect fill="#dae2fd" height="9" rx="1" width="9" x="18" y="73"></rect>
+<circle cx="50" cy="50" fill="#4edea3" r="8"></circle>
+<rect fill="#dae2fd" height="20" rx="2" width="10" x="45" y="15"></rect>
+<rect fill="#dae2fd" height="20" rx="2" width="10" x="45" y="65"></rect>
+<rect fill="#dae2fd" height="10" rx="2" width="20" x="15" y="45"></rect>
+<rect fill="#dae2fd" height="10" rx="2" width="20" x="65" y="45"></rect>
+<circle cx="75" cy="75" fill="#dae2fd" r="5"></circle>
+<circle cx="85" cy="85" fill="#dae2fd" r="4"></circle>
+</svg>

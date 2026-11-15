@@ -1,130 +1,235 @@
 {
-	"pages": [{
-			"path": "pages/xiaoxi/xiaoxi",
-			"style": {
-				"navigationBarTitleText": "消息"
-			}
-		},
+  "pages": [
+    {
+      "path": "pages/shou_ye/shou_ye",
+      "style": {
+        "backgroundColorContent": "#F4F6F5",
+        "navigationStyle": "custom",
+        "backgroundColor": "#F4F6F5"
+      }
+    },
+    {
+      "path": "pages/xiaoxi/hui_hua_lie_biao",
+      "style": {
+        "backgroundColorContent": "#0b1326",
+        "navigationStyle": "custom",
+        "backgroundColor": "#0b1326"
+      }
+    },
+    // {
+    //   "path": "pages/xiaoxi/xiaoxi",
+    //   "style": {
+    //     "backgroundColorContent": "#F4F6F5",
+    //     "navigationBarTitleText": "消息"
+    //   }
+    // },
+
+    // {
+    //   "path": "pages/zhuye/zhuye",
+    //   "style": {
+    //     "backgroundColorContent": "#F4F6F5",
+    //     "navigationBarTitleText": "委托广场"
+    //   }
+    // },
+    // {
+    //   "path": "pages/lianxiren/lianxiren",
+    //   "style": {
+    //     "backgroundColorContent": "#F4F6F5",
+    //     "navigationBarTitleText": "联系人"
+    //   }
+    // },
+    {
+      "path": "pages/lianxiren/tong_xu_lu",
+      "style": {
+        "backgroundColorContent": "#0b1326",
+        "navigationStyle": "custom",
+        "backgroundColor": "#0b1326"
+      }
+    },
+    {
+      "path": "pages/shijie/shijie",
+      "style": {
+        "backgroundColorContent": "#0b1326",
+        "navigationStyle": "custom",
+        "backgroundColor": "#0b1326"
+      }
+    },
+    // {
+		// 	"path": "pages/wode/wode",
+		// 	"style": {
+		// 		"backgroundColorContent": "#F4F6F5",
+		// 		"navigationBarTitleText": "个人中心"
+		// 	}
+		// },
 		{
-			"path": "pages/zhuye/zhuye",
+			"path": "pages/wode/yong_hu",
 			"style": {
-				"navigationBarTitleText": "委托广场"
-			}
-		},
-		{
-			"path": "pages/lianxiren/lianxiren",
-			"style": {
-				"navigationBarTitleText": "联系人"
-			}
-		},
-		{
-			"path": "pages/shijie/shijie",
-			"style": {
-				"navigationBarTitleText": "世界"
-			}
-		},
-		{
-			"path": "pages/wode/wode",
-			"style": {
-				"navigationBarTitleText": "个人中心"
-			}
-		},
-		{
-			"path": "pages/woderenwu/woderenwu",
-			"style": {
-				"navigationBarTitleText": "我的委托"
-			}
-		},
-		{
-			"path": "pages/fabuweituo/fabuweituo",
-			"style": {
-				"navigationBarTitleText": "发布委托"
-			}
-		},
-		{
-			"path": "pages/weituo/weituo",
-			"style": {
-				"navigationBarTitleText": "委托详情"
-			}
-		},
-		{
-			"path": "pages/weituo/di_tu",
-			"style": {
-				"navigationStyle": "custom"
-			}
-		},
-		{
-			"path": "pages/rong_he_di_tu/rong_he_di_tu",
-			"style": {
+				"backgroundColorContent": "#0b1326",
 				"navigationStyle": "custom",
-				"backgroundColor": "#070814"
+				"backgroundColor": "#0b1326"
 			}
 		},
 		{
-			"path": "pages/liaotian/liaotian",
+			"path": "pages/deng_lu/deng_lu",
 			"style": {
-				"navigationStyle": "custom"
+				"backgroundColorContent": "#0b1326",
+				"navigationStyle": "custom",
+				"backgroundColor": "#0b1326"
 			}
 		},
-		{
-			"path": "pages/lianxiren/hao_you",
-			"style": {
-				"navigationBarTitleText": "联系人详情"
-			}
-		},
-		{
-			"path": "pages/lianxiren/qun_liao",
-			"style": {
-				"navigationBarTitleText": "群聊详情"
-			}
-		},
-		{
-			"path": "pages/chuanjianqun/chuanjianqun",
-			"style": {
-				"navigationBarTitleText": "创建群聊"
-			}
-		},
-		{
-			"path": "pages/tianjiahaoyou/tianjiahaoyou",
-			"style": {
-				"navigationBarTitleText": "添加好友"
-			}
-		},
-		{
-			"path": "pages/xuanzedizhi/xuanzedizhi",
-			"style": {
-				"navigationBarTitleText": "选择地址"
-			}
-		}
-	],
-	"globalStyle": {
-		"navigationBarTextStyle": "black",
-		"navigationBarTitleText": "委托协作",
-		"navigationBarBackgroundColor": "#F4F6F5",
-		"backgroundColor": "#F4F6F5"
-	},
-	"tabBar": {
-		"color": "#7C8986",
-		"selectedColor": "#087E67",
-		"backgroundColor": "#FFFFFF",
-		"borderStyle": "white",
-		"list": [{
-				"pagePath": "pages/xiaoxi/xiaoxi",
-				"text": "消息"
-			},
-			{
-				"pagePath": "pages/lianxiren/lianxiren",
-				"text": "联系人"
-			},
-			{
-				"pagePath": "pages/shijie/shijie",
-				"text": "世界"
-			},
-			{
-				"pagePath": "pages/wode/wode",
-				"text": "我"
-			}
-		]
-	},
-	"uniIdRouter": {}
+    {
+      "path": "pages/woderenwu/woderenwu",
+      "style": {
+        "backgroundColorContent": "#0b1326",
+        "navigationStyle": "custom",
+        "backgroundColor": "#0b1326"
+      }
+    },
+    // {
+    //   "path": "pages/fabuweituo/fabuweituo",
+    //   "style": {
+    //     "backgroundColorContent": "#F4F6F5",
+    //     "navigationBarTitleText": "发布委托"
+    //   }
+    // },
+    {
+      "path": "pages/fabuweituo/tian_jia_lxr",
+      "style": {
+        "backgroundColorContent": "#0b1326",
+        "navigationStyle": "custom",
+        "backgroundColor": "#0b1326"
+      }
+    },
+    {
+      "path": "pages/weituo/wei_tuo_guang_chang",
+      "style": {
+        "backgroundColorContent": "#0b1326",
+        "navigationStyle": "custom",
+        "backgroundColor": "#0b1326",
+        "navigationBarTitleText": "委托广场"
+      }
+    },
+    {
+      "path": "pages/fabuweituo/fa_bu_w_t",
+      "style": {
+        "backgroundColorContent": "#0b1326",
+        "navigationStyle": "custom",
+        "backgroundColor": "#0b1326",
+        "navigationBarTitleText": "发布委托"
+      }
+    },
+    {
+      "path": "pages/weituo/weituo",
+      "style": {
+        "backgroundColorContent": "#F4F6F5",
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "委托详情"
+      }
+    },
+    // {
+    //   "path": "pages/weituo/wei_tuo",
+    //   "style": {
+    //     "backgroundColorContent": "#0b1326",
+    //     "navigationStyle": "custom",
+    //     "backgroundColor": "#0b1326"
+    //   }
+    // },
+    {
+      "path": "pages/weituo/di_tu",
+      "style": {
+        "backgroundColorContent": "#F4F6F5",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/rong_he_di_tu/rong_he_di_tu",
+      "style": {
+        "backgroundColorContent": "#070814",
+        "navigationStyle": "custom",
+        "backgroundColor": "#070814"
+      }
+    },
+    {
+      "path": "pages/liaotian/liaotian",
+      "style": {
+        "backgroundColorContent": "#F4F6F5",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/liaotian/dui_hua",
+      "style": {
+        "backgroundColorContent": "#0b1326",
+        "navigationStyle": "custom",
+        "backgroundColor": "#0b1326"
+      }
+    },
+    {
+      "path": "pages/lianxiren/hao_you",
+      "style": {
+        "backgroundColorContent": "#F4F6F5",
+        "navigationBarTitleText": "联系人详情"
+      }
+    },
+    {
+      "path": "pages/lianxiren/qun_liao",
+      "style": {
+        "backgroundColorContent": "#F4F6F5",
+        "navigationBarTitleText": "群聊详情"
+      }
+    },
+    {
+      "path": "pages/chuanjianqun/chuanjianqun",
+      "style": {
+        "backgroundColorContent": "#F4F6F5",
+        "navigationBarTitleText": "创建群聊"
+      }
+    },
+    {
+      "path": "pages/tianjiahaoyou/tianjiahaoyou",
+      "style": {
+        "backgroundColorContent": "#F4F6F5",
+        "navigationBarTitleText": "添加好友"
+      }
+    },
+    {
+      "path": "pages/xuanzedizhi/xuanzedizhi",
+      "style": {
+        "backgroundColorContent": "#F4F6F5",
+        "navigationBarTitleText": "选择地址"
+      }
+    }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "委托协作",
+    "navigationBarBackgroundColor": "#F4F6F5",
+    "backgroundColor": "#F4F6F5",
+    "backgroundColorContent": "#F4F6F5"
+  },
+  "tabBar": {
+    "color": "#7C8986",
+    "selectedColor": "#087E67",
+    "backgroundColor": "#FFFFFF",
+    "borderStyle": "white"
+    // "list": [
+    //   {
+    //     "pagePath": "pages/xiaoxi/hui_hua_lie_biao",
+    //     "text": "消息"
+    //   },
+    //   {
+    //     "pagePath": "pages/lianxiren/lianxiren",
+    //     "text": "联系人"
+    //   },
+    //   {
+    //     "pagePath": "pages/shijie/shijie",
+    //     "text": "世界"
+    //   },
+    //   {
+    //     "pagePath": "pages/wode/wode",
+    //     "text": "我"
+    //   }
+    // ]
+  },
+  "uniIdRouter": {}
 }

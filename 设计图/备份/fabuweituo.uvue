@@ -1,0 +1,325 @@
+<script setup lang="ts">
+import { onShow } from '@dcloudio/uni-app'
+import { onMounted, ref } from 'vue'
+import type { 积分账户, 任务位置, 用户 } from '../../common/leixing'
+
+// 本页由首页用 v-if 当组件挂载，发布成功后抛 change-tab 回到「委托广场」标签。
+const 事件 = defineEmits(['change-tab'])
+
+import { 发布委托, 发送请求, 读取当前用户, 读取委托位置 } from '../../common/wangluo'
+import { 移除委托位置 } from '../../common/本地存储'
+
+const 当前用户 = ref<用户 | null>(null)
+const 标题 = ref('')
+const 描述 = ref('')
+const 截止日期 = ref('')
+const 截止时分 = ref('18:00')
+const 投标截止日期 = ref('')
+const 投标截止时分 = ref('18:00')
+const 报酬积分 = ref(0)
+const 位置 = ref<任务位置 | null>(null)
+const 积分 = ref<积分账户 | null>(null)
+const 积分错误 = ref('')
+const 正在提交 = ref(false)
+
+async function 加载积分() {
+  积分错误.value = ''
+  try {
+    积分.value = await 发送请求<积分账户>('/my/points')
+  } catch (原因) {
+    积分错误.value = 原因 instanceof Error ? 原因.message : '积分账户加载失败'
+    console.error('积分账户加载失败', 原因)
+  }
+}
+
+async function 提交() {
+  const 清理标题 = 标题.value.trim()
+  const 积分数 = Number(报酬积分.value)
+  if (!清理标题 || 正在提交.value) return
+  if (!投标截止日期.value) {
+    uni.showToast({ title: '请选择投标截止时间', icon: 'none' })
+    return
+  }
+  const 截止时间 = 截止日期.value
+    ? `${截止日期.value}T${截止时分.value || '18:00'}:00`
+    : ''
+  const 投标截止时间 = `${投标截止日期.value}T${投标截止时分.value || '18:00'}:00`
+  if (new Date(投标截止时间).getTime() <= Date.now()) {
+    uni.showToast({ title: '投标截止时间必须晚于当前时间', icon: 'none' })
+    return
+  }
+  if (截止时间 && new Date(投标截止时间).getTime() >= new Date(截止时间).getTime()) {
+    uni.showToast({ title: '投标截止时间必须早于委托截止时间', icon: 'none' })
+    return
+  }
+  if (!Number.isInteger(积分数) || 积分数 < 0 || 积分数 > 1000000000) {
+    uni.showToast({ title: '积分必须是 0 到 10 亿之间的整数', icon: 'none' })
+    return
+  }
+  正在提交.value = true
+  try {
+    await 发布委托(清理标题, 描述.value.trim(), 截止时间, 投标截止时间, 积分数, 位置.value)
+    uni.showToast({ title: '委托已发布', icon: 'success' })
+    标题.value = ''
+    描述.value = ''
+    截止日期.value = ''
+    截止时分.value = '18:00'
+    投标截止日期.value = ''
+    投标截止时分.value = '18:00'
+    报酬积分.value = 0
+    位置.value = null
+    // 发布成功切回首页的「委托广场」标签
+    事件('change-tab', '委托广场')
+  } catch (原因) {
+    uni.showToast({ title: 原因 instanceof Error ? 原因.message : '发布失败', icon: 'none' })
+  } finally {
+    正在提交.value = false
+  }
+}
+
+function 选位置() {
+  uni.navigateTo({ url: '/pages/xuanzedizhi/xuanzedizhi' })
+}
+
+function 设置截止日期(事件: { detail: { value: string } }) {
+  截止日期.value = 事件.detail.value
+}
+
+function 设置截止时分(事件: { detail: { value: string } }) {
+  截止时分.value = 事件.detail.value
+}
+
+function 设置投标截止日期(事件: { detail: { value: string } }) {
+  投标截止日期.value = 事件.detail.value
+}
+
+function 设置投标截止时分(事件: { detail: { value: string } }) {
+  投标截止时分.value = 事件.detail.value
+}
+
+// onShow 覆盖「选完地址返回」，onMounted 覆盖首页 v-if 切到本标签时组件重新挂载。
+let 上次初始化 = 0
+function 初始化页面() {
+  const 现在 = Date.now()
+  if (现在 - 上次初始化 < 400) return
+  上次初始化 = 现在
+  当前用户.value = 读取当前用户()
+  const 结果 = 读取委托位置()
+  if (结果 != null) {
+    位置.value = 结果
+    移除委托位置()
+  }
+  if (当前用户.value != null) void 加载积分()
+  else {
+    积分.value = null
+    积分错误.value = ''
+  }
+}
+onShow(初始化页面)
+onMounted(初始化页面)
+
+// 本页在首页里是 v-if 挂载的组件，背景是首页那层深色 .sy_ye，
+// 所以自己铺浅色底，顶部让出状态栏（本页无顶栏，标题自带）、底部让出底栏（58 + 窗口底高）。
+const 首页系统信息 = uni.getSystemInfoSync()
+const 顶栏占位 = (首页系统信息.statusBarHeight ?? 0) + 12
+const 底栏占位 = (首页系统信息.windowBottom ?? 0) + 58
+</script>
+
+<template>
+  <view class="ye_mian" :style="{ paddingTop: 顶栏占位 + 'px', paddingBottom: 底栏占位 + 'px' }">
+    <view class="ye_mian_biao_ti"><text class="fu_biao_ti">发布委托</text><text class="biao_ti">发布一个委托</text></view>
+    <view v-if="当前用户 == null" class="kong_zhuang_tai">
+      <text>登录后发布委托</text>
+      <button class="zhu_yao_an_niu" @click="uni.switchTab({ url: '/pages/wode/wode' })">前往登录</button>
+    </view>
+    <view v-else class="ka_pian">
+      <text class="biao_qian">委托标题</text>
+      <input v-model="标题" class="shu_ru_kuang" placeholder="例如：帮忙整理一份活动方案" maxlength="120" />
+      <text class="biao_qian">委托说明</text>
+      <textarea v-model="描述" class="shu_ru_kuang duo_xing_shu_ru_kuang" placeholder="补充背景、交付内容或其他要求…" maxlength="10000" />
+      <text class="biao_qian">截止时间（可选）</text>
+      <picker mode="date" :value="截止日期" @change="设置截止日期">
+        <view class="lie_biao_hang ke_dian_ji"><text class="zhan_kai">{{ 截止日期 || '选择截止日期' }}</text><text class="jian_tou">›</text></view>
+      </picker>
+      <picker mode="time" :value="截止时分" @change="设置截止时分">
+        <view class="lie_biao_hang ke_dian_ji"><text class="zhan_kai">{{ 截止时分 }}</text><text class="jian_tou">›</text></view>
+      </picker>
+      <button v-if="截止日期" class="wen_ben_an_niu ju_zuo" @click="截止日期 = ''">清除截止时间</button>
+      <text class="biao_qian">投标截止时间</text>
+      <picker mode="date" :value="投标截止日期" @change="设置投标截止日期">
+        <view class="lie_biao_hang ke_dian_ji"><text class="zhan_kai">{{ 投标截止日期 || '选择投标截止日期' }}</text><text class="jian_tou">›</text></view>
+      </picker>
+      <picker mode="time" :value="投标截止时分" @change="设置投标截止时分">
+        <view class="lie_biao_hang ke_dian_ji"><text class="zhan_kai">{{ 投标截止时分 }}</text><text class="jian_tou">›</text></view>
+      </picker>
+      <text class="biao_qian">委托报酬（积分）</text>
+      <input v-model="报酬积分" class="shu_ru_kuang" type="number" placeholder="0 表示无积分报酬" />
+      <text v-if="积分错误" class="ti_shi_xin_xi cuo_wu">{{ 积分错误 }}</text>
+      <text class="fu_zhu_wen_ben">可用 {{ 积分?.可用积分 ?? '—' }} 积分。报酬在发布后托管，验收完成后发放。</text>
+      <view class="di_zhi_xin_xi">
+        <text class="biao_qian">委托地址（可选）</text>
+        <text v-if="位置 != null" class="zheng_wen">{{ 位置.地址 || [位置.省, 位置.市, 位置.县].filter(Boolean).join(' · ') }} ({{ 位置.经度.toFixed(5) }}, {{ 位置.纬度.toFixed(5) }})</text>
+        <button class="ci_yao_an_niu" @click="选位置">{{ 位置 == null ? '选择地址' : '更改地址' }}</button>
+        <button v-if="位置 != null" class="wen_ben_an_niu" @click="位置 = null">清除地址</button>
+      </view>
+      <button class="zhu_yao_an_niu" :disabled="正在提交 || 标题.trim().length == 0 || 投标截止日期.length == 0 || !Number.isInteger(Number(报酬积分)) || Number(报酬积分) < 0 || Number(报酬积分) > 1000000000" @click="提交">{{ 正在提交 ? '正在发布…' : '发布委托' }}</button>
+    </view>
+  </view>
+</template>
+
+<style>
+  /* 本页作为首页组件挂载，样式不再依赖 App.uvue 的全局类，自己带一份，避免浅色文字压深色底 */
+  .ye_mian {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    /* 首页根容器是深色的，这里铺满浅色底，避免露出深色 */
+    min-height: 1200px;
+    padding-left: 16px;
+    padding-right: 16px;
+    background-color: #f4f6f5;
+  }
+  .ye_mian_biao_ti {
+    display: flex;
+    flex-direction: column;
+    margin: 4px 0 16px;
+  }
+  .fu_biao_ti {
+    color: #0f9b7e;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+  }
+  .biao_ti {
+    margin-top: 2px;
+    color: #1b2427;
+    font-size: 25px;
+    font-weight: 700;
+  }
+  .ka_pian {
+    display: flex;
+    flex-direction: column;
+    margin: 6px 0 10px;
+    padding: 16px;
+    border: 1px solid #e8edeb;
+    border-radius: 16px;
+    background-color: #ffffff;
+  }
+  .biao_qian {
+    display: flex;
+    margin-top: 12px;
+    margin-bottom: 2px;
+    color: #566460;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .shu_ru_kuang {
+    width: 100%;
+    min-height: 44px;
+    margin: 6px 0;
+    padding: 10px 12px;
+    border: 1px solid #e3e9e6;
+    border-radius: 10px;
+    background-color: #ffffff;
+    color: #1b2427;
+    font-size: 14px;
+  }
+  .duo_xing_shu_ru_kuang {
+    min-height: 110px;
+  }
+  .lie_biao_hang {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 48px;
+    margin: 6px 0;
+    padding: 0 12px;
+    border: 1px solid #e3e9e6;
+    border-radius: 10px;
+    background-color: #ffffff;
+  }
+  .ke_dian_ji {
+    /* 仅语义标记，点击由外层 picker 处理 */
+    opacity: 1;
+  }
+  .zhan_kai {
+    flex: 1;
+    color: #1b2427;
+    font-size: 14px;
+    line-height: 20px;
+  }
+  .jian_tou {
+    color: #7c8986;
+    font-size: 22px;
+  }
+  .di_zhi_xin_xi {
+    display: flex;
+    flex-direction: column;
+    margin: 12px 0;
+    padding: 12px;
+    border: 1px solid #e8edeb;
+    border-radius: 12px;
+    background-color: #fafbfa;
+  }
+  .ti_shi_xin_xi {
+    margin: 10px 0;
+    padding: 11px 13px;
+    border-radius: 10px;
+    font-size: 13px;
+    line-height: 19px;
+  }
+  .cuo_wu {
+    background-color: #fff0ec;
+    color: #a84229;
+  }
+  .zheng_wen {
+    margin: 6px 0;
+    color: #34423d;
+    font-size: 14px;
+    line-height: 22px;
+  }
+  .fu_zhu_wen_ben {
+    margin: 6px 0;
+    color: #7c8986;
+    font-size: 12px;
+    line-height: 18px;
+  }
+  .kong_zhuang_tai {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 12px;
+    color: #7c8986;
+    font-size: 13px;
+  }
+  .zhu_yao_an_niu,
+  .ci_yao_an_niu {
+    min-height: 42px;
+    margin: 8px 0 0;
+    padding: 0 16px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .zhu_yao_an_niu {
+    border: 0;
+    background-color: #0f9b7e;
+    color: #ffffff;
+  }
+  .ci_yao_an_niu {
+    border: 1px solid #c9e0d7;
+    background-color: #ffffff;
+    color: #0f9b7e;
+  }
+  .wen_ben_an_niu {
+    margin: 6px 0 0;
+    border: 0;
+    background-color: transparent;
+    color: #0f9b7e;
+    font-size: 13px;
+  }
+  .ju_zuo {
+    align-self: flex-start;
+  }
+</style>
